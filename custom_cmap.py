@@ -1,6 +1,12 @@
 import matplotlib.colors as colors
 import numpy as np
-    
+
+# TODO
+
+#Make it scale properly
+#How does matplotlib
+#scaling work
+
 def custom_cmap(colormaps, lower, upper, log = 0):
     '''
     colormaps : a list of N matplotlib colormap classes
@@ -8,7 +14,6 @@ def custom_cmap(colormaps, lower, upper, log = 0):
     upper : the upper limits for each colormap: array or tuple
     log   : Do you want to plot logscale. This will create 
             a color map that is usable with LogNorm()
-    John Lewis 2015
     '''
     
     if log == 1:
