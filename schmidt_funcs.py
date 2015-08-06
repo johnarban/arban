@@ -16,6 +16,11 @@ import pdb
 
 
 def comp(arr):
+    '''
+    returns the compressed version
+    of the input array if it is a
+    numpy MaskedArray
+    '''
     try:
         return arr.compressed()
     except:
@@ -23,8 +28,8 @@ def comp(arr):
 
 def mavg(arr, n = 2):
     '''
-    returned array is shortend by (n-1)
-    from the front
+    returns the moving average of an array.
+    returned array is shorter by (n-1)
     '''
     if len(arr) > 400:
         return signal.fftconvolve(arr, [1./float(n)] * n, mode = 'valid')
@@ -43,7 +48,7 @@ def mgeo(arr, n = 2):
         a.append(stats.gmean(arr[i:n+i]))
 
     ## Original method##
-    ## written by me ... ~100x faster for short arrays
+    ## written by me ... ~10x faster for short arrays
     b = np.array([np.roll(np.pad(arr,(0,n),mode='constant',constant_values=1),i)
               for i in xrange(n)])
     return np.product(b,axis=0)[n-1:-n]**(1./float(n))
@@ -55,6 +60,11 @@ def mgeo(arr, n = 2):
     return np.array(a)
 
 def llspace(mx, mn, n, log=False):
+    '''
+    get values evenly spaced in linear or log spaced
+    mx, mn = max and min values
+    n = number of values
+    '''
     if log:
         return np.logspace(np.log10(mx),np.log10(mn),n)
     else:
@@ -63,7 +73,7 @@ def llspace(mx, mn, n, log=False):
 def nametoradec(name):
     '''
     Get names formatted as
-    hhmmss+ddmmss to Decimal Degree
+    hhmmss.ss+ddmmss to Decimal Degree
     '''
     if 'string' not in str(type(name)):
         rightascen = []
@@ -84,6 +94,10 @@ def nametoradec(name):
         return np.array(coord.ra.value),np.array(coord.dec.value)
 
 def get_ext(extmap, errmap, extwcs, ra, de):
+    '''
+    Get the extinction (errors) for a particular position or
+    list of positions
+    '''
     try:
         xp, yp = extwcs.all_world2pix(np.array([ra]).flatten(),np.array([de]).flatten(),0)
     except:
@@ -105,7 +119,7 @@ def cdf(extmap,bins):
     '''
     (statistical) cumulative distribution function
     Integral on [-inf, b] is fraction below b.
-    CDF is invariante to binning
+    CDF is invariant to binning
 
     Returns array of size len(bins)-1
     Plot versus bins[:-1]
@@ -113,7 +127,7 @@ def cdf(extmap,bins):
     extmap = comp(extmap)
     c = np.cumsum(pdf(extmap,bins) * np.diff(bins))
 
-    return  np.append(num_above(extmap,bins[-1]),c)
+    return c
 
 def cdf2(extmap,bins):
     '''
@@ -125,9 +139,10 @@ def cdf2(extmap,bins):
     Plot versus bins[:-1]
     '''
     extmap = comp(extmap)
-    c = np.cumsum(pdf2(extmap,bins)  * np.diff(bins) )
-    print
-    return  np.append(num_above(extmap,bins[-1]), c)
+    c = np.cumsum(np.histogram(extmap,bins=bins,density = False)[0])
+    return c
+    #return  np.append(num_above(extmap,bins[-1]),c)
+
 
 def area_function(extmap,bins):
     '''
@@ -135,7 +150,7 @@ def area_function(extmap,bins):
     Value at b is total amount above b.
     '''
     c = cdf2(extmap,bins)
-    return c.max() - c
+    return np.append(c.max(),c.max() - c)
 
 def pdf(extmap,bins):
     '''
@@ -197,6 +212,10 @@ def num_above(extmap,level):
     extmap = comp(extmap)
     return np.sum((extmap >= level) & np.isfinite(extmap),dtype=np.float)
 
+def num_below(extmap,level):
+    extmap = comp(extmap)
+    return np.sum((extmap < level) & np.isfinite(extmap),dtype=np.float)
+
 def yso_bins(yso_ext, bins,extend=False):
     '''
     bin_edge[:-1] is treated as max.
@@ -215,16 +234,16 @@ def yso_above(yso_ext, bins):
 
     return np.append(0, np.sum(pdf) - np.cumsum(pdf))
 
-def yso_surfd(yso_ext, extmap, aks, yso_err = False, errmap = False, scale = 1.):
+def yso_surfd(yso_ext, extmap, aks, yso_err = None, errmap = None, scale = 1.):
 
     extmap = comp(extmap)
     errmap = comp(errmap)
-    if yso_err is not False:
-        n = yso_bins(bootstrap(yso_ext, yso_err), aks)
+    if yso_err is not None:
+        n = hist(bootstrap(yso_ext, yso_err), aks)
     else:
-        n = yso_bins(yso_ext,aks)
+        n = hist(yso_ext,aks)
 
-    if errmap is not False:
+    if errmap is not None:
         s = hist(bootstrap(extmap, errmap), aks) * scale
     else:
         s = hist(extmap, aks) * scale
