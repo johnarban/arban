@@ -184,6 +184,10 @@ def pdf2(extmap,bins):
     pdf = pdf/np.diff(bins)
     return pdf
 
+def alpha(y,x):
+    a = np.array(list(set(np.nonzero(y)[0]) & set(np.nonzero(x)[0])))
+    al = np.diff(np.log(y[a]))/np.diff(np.log(x[a]))
+    return np.mean(al[np.isfinite(al)])
 
 def diff_area_function(extmap,bins):
     '''
@@ -385,7 +389,7 @@ def fit(bins, samp, samperr, maps, mapserr,
     y = yso_surfd(samp,maps,bins, scale = scale)
 
     pyerr = 1./np.sqrt(hist(samp,bins))
-    yerr = np.sqrt((y * np.sqrt(pyerr**2.))**2 + nyerr**2)
+    yerr = np.sqrt((y * np.sqrt(pyerr**2.))**2)# + nyerr**2)
 
 
     uni = np.isfinite(y) & np.isfinite(1./y) & np.isfinite(yerr) & np.isfinite(1./yerr)
@@ -419,7 +423,7 @@ def fit(bins, samp, samperr, maps, mapserr,
         ax.set_title(title)
 
     #pdb.set_trace()
-    return sampler, x, y, yerr, ax
+    return sampler, x, y, yerr, ax, t
 
 
 
