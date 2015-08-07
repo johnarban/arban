@@ -1,5 +1,5 @@
 import numpy as np
-from scipy import interpolate,ndimage,stats,signal,integrate
+from scipy import interpolate,ndimage,stats,signal,integrate,misc
 from astropy.io import ascii,fits
 from astropy.wcs import WCS
 from astropy.coordinates import SkyCoord
@@ -13,6 +13,22 @@ from astropy.modeling.fitting import LevMarLSQFitter,SimplexLSQFitter
 import emcee
 import triangle
 import pdb
+
+######################
+### make iPython print immediately
+import sys
+oldsysstdout = sys.stdout
+class flushfile():
+    def __init__(self, f):
+        self.f = f
+    def __getattr__(self,name):
+        return object.__getattribute__(self.f, name)
+    def write(self, x):
+        self.f.write(x)
+        self.f.flush()
+    def flush(self):
+        self.f.flush()
+sys.stdout = flushfile(sys.stdout)
 
 
 def comp(arr):
@@ -115,7 +131,7 @@ def get_ext(extmap, errmap, extwcs, ra, de):
 
 
 
-def cdf(extmap,bins):
+def cdf(values,bins):
     '''
     (statistical) cumulative distribution function
     Integral on [-inf, b] is fraction below b.
@@ -124,12 +140,11 @@ def cdf(extmap,bins):
     Returns array of size len(bins)-1
     Plot versus bins[:-1]
     '''
-    extmap = comp(extmap)
-    c = np.cumsum(pdf(extmap,bins) * np.diff(bins))
+    c = np.cumsum(pdf(values,bins) * np.diff(bins))
 
     return c
 
-def cdf2(extmap,bins):
+def cdf(values,bins):
     '''
     (statistical) cumulative distribution function
     Value at b is total amount below b.
@@ -138,10 +153,8 @@ def cdf2(extmap,bins):
     Returns array of size len(bins)-1
     Plot versus bins[:-1]
     '''
-    extmap = comp(extmap)
-    c = np.cumsum(np.histogram(extmap,bins=bins,density = False)[0])
-    return c
-    #return  np.append(num_above(extmap,bins[-1]),c)
+    c = np.cumsum(np.histogram(values,bins=bins,density = False)[0])
+    return np.append(0, c)
 
 
 def area_function(extmap,bins):
@@ -150,7 +163,7 @@ def area_function(extmap,bins):
     Value at b is total amount above b.
     '''
     c = cdf2(extmap,bins)
-    return np.append(c.max(),c.max() - c)
+    return c.max() - c
 
 def pdf(extmap,bins):
     '''
@@ -184,11 +197,6 @@ def pdf2(extmap,bins):
     pdf = pdf/np.diff(bins)
     return pdf
 
-def alpha(y,x):
-    a = np.array(list(set(np.nonzero(y)[0]) & set(np.nonzero(x)[0])))
-    al = np.diff(np.log(y[a]))/np.diff(np.log(x[a]))
-    return np.mean(al[np.isfinite(al)])
-
 def diff_area_function(extmap,bins):
     '''
     See pdf2
@@ -200,8 +208,8 @@ def diff_area_function(extmap,bins):
 
 def hist(extmap,bins):
     '''
-    bin_edge[:-1] is treated as max.
-    extend [False]: True if there are values above bin_edges[:-1]
+    bins[:-1] is treated as max.
+    extend [False]: True if there are values above bins[:-1]
     '''
     extmap = comp(extmap)
     hist,x = np.histogram(extmap,bins=bins,density = False)
@@ -220,46 +228,36 @@ def num_below(extmap,level):
     extmap = comp(extmap)
     return np.sum((extmap < level) & np.isfinite(extmap),dtype=np.float)
 
-def yso_bins(yso_ext, bins,extend=False):
+def surfd(object_vals, valuemap, bins, object_val_err = None, valuerr = None, scale = 1.):
     '''
-    bin_edge[:-1] is treated as max.
-    extend [False]: True if there are values above bin_edges[:-1]
+    call: surfd(object_vals, valuemap, bins,
+                    object_val_err = None, valuerr = None, scale = 1.)
     '''
-    pdf, x = np.histogram(yso_ext, bins=bins, density=False)
-
-    return pdf
-
-def yso_above(yso_ext, bins):
-    '''
-    bin_edge[:-1] is treated as max.
-    extend [False]: True if there are values above bin_edges[:-1]
-    '''
-    pdf, x = np.histogram(yso_ext, bins=bins, density=False)
-
-    return np.append(0, np.sum(pdf) - np.cumsum(pdf))
-
-def yso_surfd(yso_ext, extmap, aks, yso_err = None, errmap = None, scale = 1.):
-
-    extmap = comp(extmap)
-    errmap = comp(errmap)
+    valmap = comp(valmap)
+    valuerr = comp(valuerr)
     if yso_err is not None:
-        n = hist(bootstrap(yso_ext, yso_err), aks)
+        n = hist(bootstrap(object_vals, object_val_err), bins)
     else:
-        n = hist(yso_ext,aks)
+        n = hist(object_vals,bins)
 
     if errmap is not None:
-        s = hist(bootstrap(extmap, errmap), aks) * scale
+        s = hist(bootstrap(valuemap, valuerr), bins) * scale
     else:
-        s = hist(extmap, aks) * scale
+        s = hist(valuemap, bins) * scale
 
 
     return n/s
+
+def alpha(y,x):
+    a = np.array(list(set(np.nonzero(y)[0]) & set(np.nonzero(x)[0])))
+    al = np.diff(np.log(y[a]))/np.diff(np.log(x[a]))
+    return np.mean(al[np.isfinite(al)])
 
 def Heaviside(x):
     return 0.5 * (np.sign(x) + 1.)
 
 def schmidt_law(Ak, theta):
-    Ak0,beta,kappa = theta
+    beta,kappa = theta
     return kappa * (Ak ** beta)
 
 def fit_lmfit_schmidt(x, y, yerr, init = None):
@@ -273,25 +271,29 @@ def fit_lmfit_schmidt(x, y, yerr, init = None):
 
     return m
 
-def emcee_schmidt(x , y, yerr, pos = None, pose = None, nwalkers = None, nsteps = 1000 ):
+def emcee_schmidt(x , y, yerr, pos = [2.,1.], pose = [2.,1.], nwalkers = None, nsteps = None ):
     def model(x , theta):
         '''
         theta = (Ak0, beta, kappa)
         '''
-        return np.log10(schmidt_law(x, theta))
+        return np.log(schmidt_law(x, theta))
 
 
     def lnlike(theta, x, y, yerr):
         mod = model(x,theta)
-        inv_sigma2 = 1/yerr**2
-        return -0.5*(np.sum((y-mod)**2 * inv_sigma2))
+        #inv_sigma2 = 1/yerr**2
+        mu = yerr**2
+        x = np.abs(y-mod)
+        logL = np.sum(x * np.log(mu)) - np.sum(mu) - np.sum(misc.factorial(x))
+        return logL
+        #return -0.5*(np.sum((y-mod)**2 * inv_sigma2))
 
     def lnprior(theta):
-        Ak0, beta, kappa = theta
-        c1 = beta >= 0
-        c2 = kappa > 0
-        c3 = 0. <= Ak0 <= 1.
-        if c1 and c2 and  c3:
+        beta, kappa = theta
+        c1 = 0 <= beta
+        c2 = 0 < kappa
+        #c3 = 0. <= Ak0 <= 1.
+        if c1 and c2:# and  c3:
             return 0.0
         return -np.inf
 
@@ -301,21 +303,35 @@ def emcee_schmidt(x , y, yerr, pos = None, pose = None, nwalkers = None, nsteps 
             return -np.inf
         return lp + lnlike(theta, x, y, yerr)
 
-    ndim, nwalkers = len(pos), 8
+    ndim, nwalkers = len(pos), nwalkers
 
-    if pose is None:
-        pose = [.3,1.,1.]
-    else:
-        pose = pose
     pos = [np.array(pos) + np.array(pose) * 2 * (0.5-np.random.rand(ndim))  for i in range(nwalkers)]
 
-    sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, args=(x, y , yerr))
+    sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, args=(x, np.log(y) , yerr/y))
 
     sampler.run_mcmc(pos, nsteps)
 
+    ### Get input values
+    #x, y, yerr = sampler.args
+    samples = sampler.chain[:,burnin:, :].reshape((-1, sampler.dim))
+
+    ## Print out final values ##
+    theta_mcmc = np.percentile(samples, [16, 50, 84],axis=0).T
+
     print sampler.acor
 
-    return sampler, np.median(sampler.flatchain,axis=0), np.std(sampler.flatchain,axis=0) * 2
+    for i,item in enumerate(theta_mcmc):
+        #j=[r'A_{K,0}',  r'\beta', r'\kappa']
+        j = [r'\beta',r'\kappa']
+        display(Math(j[i]+' = ' +
+                     r'{:.2f}'.format(item[1]) +
+                     r'~~(+{:.2f}'.format(item[2]-item[1]) +
+                     r', ' +
+                     r'-{:.2f})'.format(item[1]-item[0])))
+
+
+
+    return sampler, np.median(samples,axis = 0), np.std(samples, axis = 0)
 
 def schmidt_results_plots(sampler, model, x, y, yerr, burnin = 200, akmap = None, bins = None, scale = None, triangle_plot = True):
     import matplotlib.pyplot as plt
@@ -332,7 +348,8 @@ def schmidt_results_plots(sampler, model, x, y, yerr, burnin = 200, akmap = None
     theta_mcmc = np.percentile(samples, [16, 50, 84],axis=0).T
 
     for i,item in enumerate(theta_mcmc):
-        j=[r'A_{K,0}',  r'\beta', r'\kappa']
+        #j=[r'A_{K,0}',  r'\beta', r'\kappa']
+        j = [r'\beta',r'\kappa']
         display(Math(j[i]+' = ' +
                      r'{:.2f}'.format(item[1]) +
                      r'~~(+{:.2f}'.format(item[2]-item[1]) +
@@ -341,7 +358,7 @@ def schmidt_results_plots(sampler, model, x, y, yerr, burnin = 200, akmap = None
 
     ### Plot corner plot
     if triangle_plot is True:
-        fig = triangle.corner(samples,labels=['Ak_0','beta','kappa'],truths=theta_mcmc[:,1],quantiles=[.16,.84],verbose=False)
+        fig = triangle.corner(samples,labels=['beta','kappa'],truths=theta_mcmc[:,1],quantiles=[.16,.84],verbose=False)
 
     randsamp = samples[np.random.randint(len(samples), size=100)]
 
@@ -388,8 +405,10 @@ def fit(bins, samp, samperr, maps, mapserr,
     nyerr = np.array(nyerr)
     y = yso_surfd(samp,maps,bins, scale = scale)
 
-    pyerr = 1./np.sqrt(hist(samp,bins))
-    yerr = np.sqrt((y * np.sqrt(pyerr**2.))**2)# + nyerr**2)
+    pyerr = np.sqrt(hist(samp,bins))
+
+    yerr = y/pyerr
+    #yerr = np.sqrt((y * np.sqrt(pyerr**2.))**2)# + nyerr**2)
 
 
     uni = np.isfinite(y) & np.isfinite(1./y) & np.isfinite(yerr) & np.isfinite(1./yerr)
@@ -399,17 +418,22 @@ def fit(bins, samp, samperr, maps, mapserr,
     yerr = np.array(yerr)[uni]
 
     if pos is None:
-        pos = [.5,2,1]
+        pos = [2,1]
     if pose is None:
-        pose = [.3,1.,1.]
+        pose = [1.,1.]
 
     if sampler is None:
-        print 'Sampler autocorrelation times'
-        sampler, t, et = emcee_schmidt(x , np.log10(y), yerr/y,
+        print 'Sampler autocorrelation times . . .'
+        sampler, t, et = emcee_schmidt(x , y, yerr,
                                           pos = pos, pose = pose,
                                           nwalkers = nwalkers, nsteps = nsteps)
     else:
-        print 'Just plotting your results...'
+        print 'Next time don\'t give me a '+str(type(sampler))+'.'
+
+
+
+    '''
+    ## Don't plot at the same time
     if not no_plot:
         ax = schmidt_results_plots(sampler, schmidt_law,x,y,yerr,
                                  burnin = 2000, akmap = maps,
@@ -417,13 +441,18 @@ def fit(bins, samp, samperr, maps, mapserr,
     else:
         print 'No plots for you!'
 
+
     if title is None:
         None
     else:
         ax.set_title(title)
+    '''
 
     #pdb.set_trace()
-    return sampler, x, y, yerr, ax, t
+    try:
+        return sampler, x, y, yerr, ax, t
+    except:
+        return sampler, x, y, yerr
 
 
 
