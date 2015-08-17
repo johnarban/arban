@@ -89,7 +89,7 @@ def avg(arr, n=2):
     return bin centers (lin and log)
     '''
 
-    if np.sum(np.diff(np.float16(np.diff(arr))) is 0:
+    if np.sum(np.diff(np.float16(np.diff(arr)))) is 0:
         return mavg(arr, n=n)
     else:
         return mgeo(arr, n=n)
