@@ -6,12 +6,11 @@ from astropy.coordinates import SkyCoord
 import astropy.units as u
 import astropy.constants as c
 from IPython.display import display, Math, Markdown
-import corner #formerly dfm/triangle
+import corner as triangle#formerly dfm/triangle
 from astropy.modeling import models, fitting
 from astropy.modeling.models import custom_model
 from astropy.modeling.fitting import LevMarLSQFitter, SimplexLSQFitter
 import emcee
-import triangle
 import pdb
 
 ######################
