@@ -261,17 +261,17 @@ def surfd(object_vals, valuemap, bins,
     call: surfd(object_vals, valuemap, bins,
                     object_val_err = None, valuerr = None, scale = 1.)
     '''
-    valmap = comp(valmap)
+    valuemap = comp(valuemap)
     valuerr = comp(valuerr)
-    if yso_err is not None:
-        n = hist(bootstrap(object_vals, object_val_err), bins)
+    if object_val_err is not None:
+        n = hist(bootstrap(object_vals, object_val_err), bins)[0]
     else:
-        n = hist(object_vals, bins)
+        n = hist(object_vals, bins)[0]
 
-    if errmap is not None:
-        s = hist(bootstrap(valuemap, valuerr), bins) * scale
+    if valuerr is not None:
+        s = hist(bootstrap(valuemap, valuerr), bins)[0] * scale
     else:
-        s = hist(valuemap, bins) * scale
+        s = hist(valuemap, bins)[0] * scale
 
     return n / s
 
@@ -316,7 +316,7 @@ def emcee_schmidt(x, y, yerr, pos=[2., 1.], pose=[
         #inv_sigma2 = 1/yerr**2
         mu = yerr**2
         x = np.abs(y - mod)
-        logL = np.sum(x * np.log(mu)) - np.sum(mu) - np.sum(misc.factorial(x))
+        logL = np.sum(x * np.log(mu)) - np.sum(mu)# - np.sum(misc.factorial(x))
         return logL
         # return -0.5*(np.sum((y-mod)**2 * inv_sigma2))
 
@@ -347,7 +347,7 @@ def emcee_schmidt(x, y, yerr, pos=[2., 1.], pose=[
 
     # Get input values
     #x, y, yerr = sampler.args
-    samples = sampler.chain[:, burnin:, :].reshape((-1, sampler.dim))
+    samples = sampler.chain[:, 200:, :].reshape((-1, sampler.dim))
 
     ## Print out final values ##
     theta_mcmc = np.percentile(samples, [16, 50, 84], axis=0).T
@@ -427,9 +427,9 @@ def fit(bins, samp, samperr, maps, mapserr, scale=1., pos=None, pose=None, title
     print 'Fitting your sources'
     x = bins[:-1]
 
-    yp = np.array([yso_surfd(samp, maps, bins,
-                             yso_err=samperr,
-                             errmap=mapserr,
+    yp = np.array([surfd(samp, maps, bins,
+                             object_val_err=samperr,
+                             valuerr=mapserr,
                              scale=scale) for i in xrange(100)])
 
     nyerr = []
@@ -437,9 +437,9 @@ def fit(bins, samp, samperr, maps, mapserr, scale=1., pos=None, pose=None, title
             ~np.isfinite(yp) & ~np.isfinite(1 / yp))).T:
         nyerr.append(np.std(np.array(i)[np.nonzero(i)]))
     nyerr = np.array(nyerr)
-    y = yso_surfd(samp, maps, bins, scale=scale)
+    y = surfd(samp, maps, bins, scale=scale)
 
-    pyerr = np.sqrt(hist(samp, bins))
+    pyerr = np.sqrt(hist(samp, bins)[0])
 
     yerr = y / pyerr
     # yerr = np.sqrt((y * np.sqrt(pyerr**2.))**2)# + nyerr**2)
