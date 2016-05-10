@@ -188,7 +188,7 @@ def area_function(extmap, bins):
     Complimentary CDF for cdf2 (not normalized to 1)
     Value at b is total amount above b.
     '''
-    c = cdf2(extmap, bins)
+    c, bins = cdf2(extmap, bins)
     return c.max() - c, bins
 
 
