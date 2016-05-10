@@ -169,7 +169,7 @@ def cdf(values, bins):
     return np.append(0,c), bins
 
 
-def cdf(values, bins):
+def cdf2(values, bins):
     '''
     (statistical) cumulative distribution function
     Value at b is total amount below b.
@@ -177,6 +177,7 @@ def cdf(values, bins):
 
     Returns array of size len(bins)-1
     Plot versus bins[:-1]
+    Not normalized to 1
     '''
     c = np.cumsum(np.histogram(values, bins=bins, density=False)[0])
     return np.append(0, c), bins
@@ -184,7 +185,7 @@ def cdf(values, bins):
 
 def area_function(extmap, bins):
     '''
-    Complimentary CDF for cdf2
+    Complimentary CDF for cdf2 (not normalized to 1)
     Value at b is total amount above b.
     '''
     c = cdf2(extmap, bins)
