@@ -280,6 +280,16 @@ def alpha(y, x):
     a = np.array(list(set(np.nonzero(y)[0]) & set(np.nonzero(x)[0])))
     al = np.diff(np.log(y[a])) / np.diff(np.log(x[a]))
     return np.mean(al[np.isfinite(al)])
+    
+def alpha_fit(y, x, err = None):
+    a = np.array(list(set(np.nonzero(y)[0]) & set(np.nonzero(x)[0])))
+    y = np.log(y[a])
+    x = np.log(x[y])
+    if err is None:
+        m,b = np.polyfit(x,y,1)
+    else:
+        m,b = np.polyfit(x,y,1,w=err)
+    return m
 
 
 def Heaviside(x):
