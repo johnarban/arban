@@ -228,7 +228,7 @@ def diff_area_function(extmap, bins):
     '''
     See pdf2
     '''
-    s = area_function(extmap, bins)
+    s = area_function(extmap, bins)[0]
     dsdx = -np.diff(s) / np.diff(bins)
 
     return dsdx , avg(bins)
@@ -242,7 +242,7 @@ def hist(values, bins):
 
     return hist.astype(np.float), avg(bins)
 
-
+# this isn't 'true' bootstrapping. It is just varying data
 def bootstrap(ext, err):
     return ext + err * np.random.randn()
 
