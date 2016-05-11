@@ -34,7 +34,7 @@ class flushfile():
     def flush(self):
         self.f.flush()
 sys.stdout = flushfile(sys.stdout)
-
+sys.stdout = oldsysstdout
 
 def comp(arr):
     '''
@@ -276,20 +276,27 @@ def surfd(object_vals, valuemap, bins,
     return n / s
 
 
-def alpha(y, x):
+def alpha_fit(y, x):
     a = np.array(list(set(np.nonzero(y)[0]) & set(np.nonzero(x)[0])))
     al = np.diff(np.log(y[a])) / np.diff(np.log(x[a]))
     return np.mean(al[np.isfinite(al)])
-    
-def alpha_fit(y, x, err = None):
+
+
+def alpha(y, x, err = None, return_kappa = False):
+    '''
+    this returns -1*alpha, and optionally kappa
+    '''
     a = np.array(list(set(np.nonzero(y)[0]) & set(np.nonzero(x)[0])))
     y = np.log(y[a])
-    x = np.log(x[y])
+    x = np.log(x[a])
     if err is None:
         m,b = np.polyfit(x,y,1)
     else:
         m,b = np.polyfit(x,y,1,w=err)
-    return m
+    if return_kappa:
+        return m,np.exp(b)
+    else:
+        return m
 
 
 def Heaviside(x):
