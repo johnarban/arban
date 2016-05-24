@@ -1,15 +1,17 @@
 import numpy as np
+from PIL import Image, ImageDraw
 from scipy import interpolate, ndimage, stats, signal, integrate, misc
 from astropy.io import ascii, fits
 from astropy.wcs import WCS
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 import astropy.constants as c
-from IPython.display import display, Math, Markdown
 import corner as triangle#formerly dfm/triangle
 from astropy.modeling import models, fitting
 from astropy.modeling.models import custom_model
 from astropy.modeling.fitting import LevMarLSQFitter, SimplexLSQFitter
+import matplotlib.pyplot as plt
+import matplotlib as mpl
 import emcee
 import pdb
 
@@ -33,8 +35,62 @@ class flushfile():
 
     def flush(self):
         self.f.flush()
-sys.stdout = flushfile(sys.stdout)
-sys.stdout = oldsysstdout
+#sys.stdout = flushfile(sys.stdout)
+#sys.stdout = oldsysstdout
+
+def rot_matrix(theta):
+    '''
+    rot_matrix(theta)
+    2D rotation matrix for theta in radians
+    returns numpy matrix
+    '''
+    c, s = np.cos(theta),np.sin(theta)
+    return np.matrix([[c,-s],[s,c]])
+
+def rectangle(c,w,h,angle=0,center=True):
+    '''
+    create rotated rectangle
+    for input into PIL ImageDraw.polygon
+    to make a rectangle polygon mask
+    
+    Rectagle is created and rotated with center 
+    at zero, and then translated to center position
+    
+    accepters centers
+    Default : center
+    tl, tr, bl, br
+    '''
+    cx,cy=c
+    #define initial polygon irrespective of center
+    x = -w/2., +w/2., +w/2., -w/2.
+    y = +h/2., +h/2., -h/2., -h/2.
+    #correct center if starting from corner
+    if center is not True:
+        if center[0]=='b':
+            #y = tuple([i + h/2. for i in y])
+            cy = cy + h/2.
+        else:
+            #y = tuple([i - h/2. for i in y])
+            cy = cy - h/2.
+        if center[1]=='l':
+            #x = tuple([i + w/2 for i in x])
+            cx = cx + w/2.
+        else:
+            #x = tuple([i - w/2 for i in x])
+            cx = cx - w/2.
+
+    R = rot_matrix(angle*np.pi/180.)
+    c = []
+    
+    for i in xrange(4):
+        xr,yr = np.dot(R,np.asarray([x[i],y[i]])).A.ravel()
+        # coord switch to match ordering of FITs dimensions
+        c.append((cx+xr,cy+yr))
+    #print (cx,cy)
+    return c
+    
+
+
 
 def comp(arr):
     '''
@@ -80,37 +136,68 @@ def mgeo(arr, n=2):
     for i in xrange(len(arr) - (n - 1)):
         a.append(stats.gmean(arr[i:n + i]))
 
-    return np.array(a)
+    return np.asarray(a)
 
 def avg(arr, n=2):
     '''
     NOT a general averaging function
     return bin centers (lin and log)
     '''
-
-    if np.sum(np.diff(np.float16(np.diff(arr)))) is 0:
+    diff = np.diff(arr)
+    # 2nd derivative of linear bin is 0
+    if np.allclose(diff,diff[::-1]):
         return mavg(arr, n=n)
     else:
-        return mgeo(arr, n=n)
+        return np.exp( mavg(np.log(arr),n=n) )
+        #return mgeo(arr, n=n) #equivalent methods, only easier
 
-def llspace(mx, mn, n, log=False, dex = None):
+def llspace(xmin, xmax, n = None, log = False, dx = None, dex = None):
     '''
+    llspace(xmin, xmax, n = None, log = False, dx = None, dex = None)
     get values evenly spaced in linear or log spaced
-    mx, mn = max and min values
-    n = number of values
+    n [10] -- Optional -- number of steps
+    log [false] : switch for log spacing
+    dx : spacing for linear bins
+    dex : spacing for log bins (in base 10)
+    dx and dex override n
     '''
-    if log or (dex is not None):
-        if dex is not None:
-            n = int((np.log10(mx) - np.log10(mn))/dex)
-        return np.logspace(np.log10(mx), np.log10(mn), n)
+    xmin,xmax = float(xmin),float(xmax)
+    nisNone = n is None
+    dxisNone = dx is None
+    dexisNone = dex is None
+    if nisNone & dxisNone & dexisNone:
+        print 'Error: Defaulting to 10 linears steps'
+        n = 10.
+        nisNone = False
+        
+    #either user specifies log or gives dex and not dx
+    log = log or  (dxisNone and (not dexisNone)) 
+    if log:
+        if xmin == 0:
+            print "log(0) is -inf. xmin must be > 0 for log spacing"
+        xmin,xmax = np.log10(xmin),np.log10(xmax)
+    #print nisNone, dxisNone, dexisNone, log #   for debugging logic
+    if not nisNone: #this will make dex or dx if they are not specified
+        if log and dexisNone: # if want log but dex not given
+            dex = (xmax - xmin)/n
+            #print dex
+        elif (not log) and dxisNone: # else if want lin but dx not given
+            dx = (xmax - xmin)/n # takes floor
+            print dx
+    
+    if log:
+        return np.power(10,np.arange(xmin,xmax+dex,dex))
     else:
-        return np.linspace(mx, mn, n)
+        return np.arange(xmin,xmax+dx,dx)
+    
 
 
 def nametoradec(name):
     '''
     Get names formatted as
     hhmmss.ss+ddmmss to Decimal Degree
+    only works for dec > 0 (splits on +, not -)
+    Will fix this eventually...
     '''
     if 'string' not in str(type(name)):
         rightascen = []
@@ -136,6 +223,8 @@ def get_ext(extmap, errmap, extwcs, ra, de):
     '''
     Get the extinction (errors) for a particular position or
     list of positions
+    More generally get the value (error) for a particular 
+    position given a wcs and world coordinates
     '''
     try:
         xp, yp = extwcs.all_world2pix(
@@ -155,43 +244,6 @@ def get_ext(extmap, errmap, extwcs, ra, de):
     return np.array(ext), np.array(err)
 
 
-def cdf(values, bins):
-    '''
-    (statistical) cumulative distribution function
-    Integral on [-inf, b] is the fraction below b.
-    CDF is invariant to binning.
-    This assumes you are using the entire range in the binning.
-    Returns array of size len(bins)-1
-    Plot versus bins[:-1]
-    '''
-    c = np.cumsum(pdf(values, bins) * np.diff(bins))
-
-    return np.append(0,c), bins
-
-
-def cdf2(values, bins):
-    '''
-    (statistical) cumulative distribution function
-    Value at b is total amount below b.
-    CDF is invariante to binning
-
-    Returns array of size len(bins)-1
-    Plot versus bins[:-1]
-    Not normalized to 1
-    '''
-    c = np.cumsum(np.histogram(values, bins=bins, density=False)[0])
-    return np.append(0, c), bins
-
-
-def area_function(extmap, bins):
-    '''
-    Complimentary CDF for cdf2 (not normalized to 1)
-    Value at b is total amount above b.
-    '''
-    c, bins = cdf2(extmap, bins)
-    return c.max() - c, bins
-
-
 def pdf(values, bins):
     '''
     (statistical) probability denisty function
@@ -204,9 +256,8 @@ def pdf(values, bins):
     Plot versus bins[:-1]
     '''
     pdf, x = np.histogram(values, bins=bins, density=False)
-    pdf = pdf / (np.sum(pdf) * np.diff(bins))
-    return pdf, avg(bins)
-
+    pdf = pdf / (np.sum(pdf,dtype=float) * np.diff(bins))
+    return pdf, avg(x)
 
 def pdf2(values, bins):
     '''
@@ -220,83 +271,173 @@ def pdf2(values, bins):
     Plot versus bins[:-1]
     '''
     pdf, x = np.histogram(values, bins=bins, density=False)
-    pdf = pdf / np.diff(bins)
+    pdf = pdf.astype(float) / np.diff(bins)
     return pdf, avg(bins)
+    
+def edf(data,pdf=False):
+    y = np.arange(len(data),dtype=float)
+    x = np.sort(data).astype(float)
+    return y,x
+    
+def cdf(values, bins):
+    '''
+    (statistical) cumulative distribution function
+    Integral on [-inf, b] is the fraction below b.
+    CDF is invariant to binning.
+    This assumes you are using the entire range in the binning.
+    Returns array of size len(bins)
+    Plot versus bins[:-1]
+    '''
+    h, bins = np.histogram(values, bins=bins, density=False) #returns int
+    c = np.cumsum(h/np.sum(h,dtype=float)) # cumulative fraction below bin_k
+    # append 0 to beginning because P( X < min(x)) = 0
+    return np.append(0,c), bins
+
+
+def cdf2(values, bins):
+    '''
+    (statistical) cumulative distribution function
+    Value at b is total amount below b.
+    CDF is invariante to binning
+
+    Plot versus bins[:-1]
+    Not normalized to 1
+    '''
+    h, bins = np.histogram(values, bins=bins, density=False)
+    c = np.cumsum(h).astype(float)
+    return np.append(0., c), bins
+
+
+def area_function(extmap, bins):
+    '''
+    Complimentary CDF for cdf2 (not normalized to 1)
+    Value at b is total amount above b.
+    '''
+    c, bins = cdf2(extmap, bins)
+    return c.max() - c, bins
 
 
 def diff_area_function(extmap, bins):
     '''
     See pdf2
     '''
-    s = area_function(extmap, bins)[0]
+    s, bins = area_function(extmap, bins)
     dsdx = -np.diff(s) / np.diff(bins)
-
     return dsdx , avg(bins)
 
 
-def hist(values, bins):
+def hist(values, bins, err = False,density=False,**kwargs):
     '''
     really just a wrapper for numpy.histogram
     '''
-    hist, x = np.histogram(values, bins=bins, density=False)
+    hist, x = np.histogram(values, bins=bins, density=density, **kwargs)
+    if (err is None) or (err is False):
+        return hist.astype(np.float), avg(x)
+    else:
+        #hist_err = np.sqrt(np.histogram(values, bins=bins, weights = err**2., \
+        #                    density=density, **kwargs)[0])
+        hist_err = np.sqrt(hist)
+        return hist.astype(np.float),avg(x),hist_err
 
-    return hist.astype(np.float), avg(bins)
 
-# this isn't 'true' bootstrapping. It is just varying data
-def bootstrap(ext, err):
-    return ext + err * np.random.randn()
-
+def bootstrap(X, X_err = None, n=None, smooth=False):
+    '''
+    (smooth) bootstrap
+    bootstrap(X,Xerr,n,smooth=True)
+    X : array to be resampled
+    X_err [optional]: errors to perturb data for smooth bootstrap
+                      only provide is doing smooth bootstrapping
+    n : number of samples. Default - len(X)
+    smooth: optionally use smooth bootstrapping. 
+            will be set to False if no X_err is provided
+    '''
+    
+    if smooth or (X_err is None):
+        smooth = False
+    
+    if n is None: #default n
+        n = len(X)
+    
+    resample_i = np.floor(np.random.rand(n)*len(X)).astype(int)
+    X_resample = np.asarray(X)[resample_i]
+    
+    if smooth:
+        X_resample = X_resample + np.random.rand(n) * \
+         np.asarray(X_err)[resample_i]
+    
+    return X_resample
 
 def num_above(values, level):
     return np.sum((values >= level) & np.isfinite(values), dtype=np.float)
 
-
 def num_below(values, level):
     return np.sum((values < level) & np.isfinite(values), dtype=np.float)
 
+def alpha_ML(data,data_min):
+    '''
+    uses maximum likelihood to estimation
+    to determine power-law and error
+    From Clauset et al. 2010
+    '''
+    data = data[np.isfinite(data)]
+    data = data[data>data_min]
+    alpha = 1 + len(data) * (np.sum(np.log(data/data_min))**(-1))
+    #error = (alpha -1 )/np.sqrt(len(data))
+    return alpha #, error
 
-def surfd(object_vals, valuemap, bins,
-          object_val_err=None, valuerr=None, scale=1.):
+def surfd( X, Xmap, bins, boot=False, scale=1., return_err=False):
     '''
-    call: surfd(object_vals, valuemap, bins,
-                    object_val_err = None, valuerr = None, scale = 1.)
+    call: surfd(X, map, bins,
+                    xerr = None, merr = None, scale = 1.)
+    calculates H(X)/H(M) = Nx pdf(x) dx / Nm pdf(m) dm ; dm = dx
+          so it is independent of whether dx or dlog(x)
     '''
-    valuemap = comp(valuemap)
-    valuerr = comp(valuerr)
-    if object_val_err is not None:
-        n = hist(bootstrap(object_vals, object_val_err), bins)[0]
+    # get dn/dx
+    if boot:
+        n = hist(bootstrap(X), bins)[0]
+        s = hist(bootstrap(Xmap), bins)[0] * scale
     else:
-        n = hist(object_vals, bins)[0]
-
-    if valuerr is not None:
-        s = hist(bootstrap(valuemap, valuerr), bins)[0] * scale
+        n = hist(X, bins)[0]
+        s = hist(Xmap, bins)[0] * scale
+    
+    
+    if not return_err:
+        return n / s
     else:
-        s = hist(valuemap, bins)[0] * scale
-
-    return n / s
+        return n / s , n/s * np.sqrt(1/n - scale/s)
 
 
-def alpha_fit(y, x):
-    a = np.array(list(set(np.nonzero(y)[0]) & set(np.nonzero(x)[0])))
-    al = np.diff(np.log(y[a])) / np.diff(np.log(x[a]))
-    return np.mean(al[np.isfinite(al)])
-
-
-def alpha(y, x, err = None, return_kappa = False):
+def alpha(y, x, err = None, return_kappa = False,cov=False):
     '''
-    this returns -1*alpha, and optionally kappa
+    this returns -1*alpha, and optionally kappa and errors
     '''
-    a = np.array(list(set(np.nonzero(y)[0]) & set(np.nonzero(x)[0])))
+    a1 = set(np.nonzero(np.multiply(x,y))[0])
+    a2 = set(np.where(np.isfinite(np.add(x,y,err)))[0])
+    a = np.asarray(list(a1 & a2))
     y = np.log(y[a])
     x = np.log(x[a])
     if err is None:
-        m,b = np.polyfit(x,y,1)
+        p,covar = np.polyfit(x,y,1,cov=True)
+        m,b=p
+        me,be=np.sqrt(np.sum(covar*[[1,0],[0,1]],axis=1))
+        me,be
     else:
-        m,b = np.polyfit(x,y,1,w=err)
+        err = err[a]
+        err = err/y
+        p,covar = np.polyfit(x,y,1,w=1./err**2,cov=True)
+        m,b=p
+        me,be=np.sqrt(np.sum(covar*[[1,0],[0,1]],axis=1))
+        me,be
     if return_kappa:
-        return m,np.exp(b)
+        if cov:
+            return m,np.exp(b),me,be
+        else:
+            return m,np.exp(b)
     else:
-        return m
+        if cov:
+            return m,me
+        else:
+            return m
 
 
 def Heaviside(x):
@@ -304,38 +445,63 @@ def Heaviside(x):
 
 
 def schmidt_law(Ak, theta):
-    beta, kappa = theta
-    return kappa * (Ak ** beta)
+    '''
+    schmidt_law(Ak,(beta,kappa))
+    beta is the power law index (same as alpha)
+    '''
+    if len(theta) == 2:
+        beta, kappa = theta
+        return kappa * (Ak ** beta)
+    else:
+        Ak0, beta, kappa = theta
+        return Heaviside(x-Ak0) * kappa * (Ak ** beta)
 
 
 def fit_lmfit_schmidt(x, y, yerr, init=None):
     @custom_model
-    def model(x, Ak0=init[0], beta=init[1], kappa=init[2]):
-        return np.log10(schmidt_law(x, (Ak0, beta, kappa)))
-
+    def model(x, beta=init[0], kappa=init[1]):
+        return np.log(schmidt_law(x, (beta, kappa)))
+    keep = np.isfinite(1./y) & np.isfinite(1./yerr)
     m_init = model()
     fit = LevMarLSQFitter()
-    m = fit(m_init, x, np.log10(y), weights=1. / (yerr / y)**2, maxiter=1000)
+    m = fit(m_init, x[keep], np.log(y[keep]), weights=(yerr / y)[keep]**(-2.), maxiter=1000000)
 
-    return m
+    return m.parameters
 
+def lmfit_powerlaw(x, y, yerr, xmin=-np.inf,xmax=np.inf, init=None):
+    @custom_model
+    def model(x, beta=init[0], kappa=init[1]):
+        return np.log(kappa * (x ** beta))
+    keep = np.isfinite(1./y) & np.isfinite(1./yerr) & (x>=xmin) & (x<=xmax)
+    m_init = model()
+    fit = LevMarLSQFitter()
+    weights=(yerr / y)[keep]**(-2.)
+    m = fit(m_init, x[keep], np.log(y[keep]), maxiter=1000000)
+
+    return m,fit
 
 def emcee_schmidt(x, y, yerr, pos=[2., 1.], pose=[
-                  2., 1.], nwalkers=None, nsteps=None):
+                  2., 1.], nwalkers=None, nsteps=None,burnin=200):
     def model(x, theta):
         '''
-        theta = (Ak0, beta, kappa)
+        theta = (beta, kappa)
         '''
         return np.log(schmidt_law(x, theta))
 
     def lnlike(theta, x, y, yerr):
+        ## Chisq statistic
         mod = model(x, theta)
-        #inv_sigma2 = 1/yerr**2
-        mu = yerr**2
-        x = np.abs(y - mod)
-        logL = np.sum(x * np.log(mu)) - np.sum(mu)# - np.sum(misc.factorial(x))
-        return logL
-        # return -0.5*(np.sum((y-mod)**2 * inv_sigma2))
+        inv_sigma2 = 1/yerr**2
+        # Poisson statistics
+        #mu = (yerr)**2  # often called lambda = poisson variance for bin x_i
+        #x = np.abs(y - mod) # where w calculate the poisson probability
+        #logL = np.sum(x * np.log(mu) - mu)# - np.sum(np.log(misc.factorial(x)))
+        #return -logL
+        # Binomial statistics
+        # Todo -- requires rewrite of some previous code. Need to get
+        # area function and scale to compute p for
+        # yerr = sqrt(Np(1-p)) = sqrt(1/pN - 1/N), where pN is schmidt law
+        return -0.5*(np.sum((y-mod)**2 * inv_sigma2))
 
     def lnprior(theta):
         beta, kappa = theta
@@ -358,13 +524,13 @@ def emcee_schmidt(x, y, yerr, pos=[2., 1.], pose=[
            (0.5 - np.random.rand(ndim)) for i in range(nwalkers)]
 
     sampler = emcee.EnsembleSampler(
-        nwalkers, ndim, lnprob, args=(x, np.log(y), yerr / y))
+        nwalkers, ndim, lnprob, args=(x, y, yerr))
 
     sampler.run_mcmc(pos, nsteps)
 
     # Get input values
     #x, y, yerr = sampler.args
-    samples = sampler.chain[:, 200:, :].reshape((-1, sampler.dim))
+    samples = sampler.chain[:, burnin:, :].reshape((-1, sampler.dim))
 
     ## Print out final values ##
     theta_mcmc = np.percentile(samples, [16, 50, 84], axis=0).T
@@ -373,20 +539,18 @@ def emcee_schmidt(x, y, yerr, pos=[2., 1.], pose=[
 
     for i, item in enumerate(theta_mcmc):
         #j=[r'A_{K,0}',  r'\beta', r'\kappa']
-        j = [r'\beta', r'\kappa']
-        display(Math(j[i] + ' = ' +
-                     r'{:.2f}'.format(item[1]) +
-                     r'~~(+{:.2f}'.format(item[2] - item[1]) +
-                     r', ' +
-                     r'-{:.2f})'.format(item[1] - item[0])))
+        j = ['beta', 'kappa']
+        inserts = (j[i],item[1],item[2] - item[1],item[1] - item[0])
+        print '%s = %0.2f (+%0.2f,-%0.2f)'%inserts
 
     return sampler, np.median(samples, axis=0), np.std(samples, axis=0)
 
 
 def schmidt_results_plots(sampler, model, x, y, yerr, burnin=200,
-                          akmap=None, bins=None, scale=None, triangle_plot=True):
-    import matplotlib.pyplot as plt
-    import matplotlib as mpl
+                         akmap=None, bins=None, scale=None, triangle_plot=True):
+    '''
+    model: should pass schmidt_law()
+    '''
     try:
         mpl.style.use('john')
     except:
@@ -396,112 +560,126 @@ def schmidt_results_plots(sampler, model, x, y, yerr, burnin=200,
     samples = sampler.chain[:, burnin:, :].reshape((-1, sampler.dim))
 
     ## Print out final values ##
-    theta_mcmc = np.percentile(samples, [16, 50, 84], axis=0).T
+    theta_mcmc = np.percentile(samples, [16, 50,84], axis=0).T #Get percentiles for each parameter
 
     for i, item in enumerate(theta_mcmc):
         #j=[r'A_{K,0}',  r'\beta', r'\kappa']
-        j = [r'\beta', r'\kappa']
-        display(Math(j[i] + ' = ' +
-                     r'{:.2f}'.format(item[1]) +
-                     r'~~(+{:.2f}'.format(item[2] - item[1]) +
-                     r', ' +
-                     r'-{:.2f})'.format(item[1] - item[0])))
-
+        j = ['beta', 'kappa']
+        inserts = (j[i],item[1],item[2] - item[1],item[1] - item[0])
+        print '%s = %0.2f (+%0.2f,-%0.2f)'%inserts
+        
+        
     # Plot corner plot
-    if triangle_plot is True:
+    if triangle_plot:
         fig = triangle.corner(samples, labels=['beta', 'kappa'],
                               truths=theta_mcmc[:, 1], quantiles=[.16, .84],
                               verbose=False)
 
-    randsamp = samples[np.random.randint(len(samples), size=100)]
-
+    # generate schmidt laws from parameter samples
+    smlaw_samps = np.asarray([schmidt_law(x,samp) for samp in samples])
+    # get percentile bands
+    percent = lambda x : np.nanpercentile(smlaw_samps,x,interpolation='linear',axis=0)
+    
     # Plot fits
     fig = plt.figure()
-
-    if (akmap is not None) & (bins is not None):
-        plt.plot(bins[:-1], 1. / (diff_area_function(akmap, bins)
-                                  * scale), 'o', mec='none', alpha=0.75)
-
+    #Plot data with errorbars
+    plt.plot(x, percent(50),'k') #3 sigma band
+    #yperr = np.abs(np.exp(np.log(y)+yerr/y) - y)
+    #ynerr = np.abs(np.exp(np.log(y)-yerr/y) - y)
     plt.errorbar(x, y, yerr, fmt='rs', alpha=0.7, mec='none')
-    plt.legend(['Inv. Diff, Area function', 'Data'],
+    plt.legend(['Median','Data'],
                loc='upper left', fontsize=12)
+    
+    #draw 1,2,3 sigma bands
+    plt.fill_between(x, percent(1),percent(99),color='0.9') #1 sigma band
+    plt.fill_between(x, percent(2),percent(98),color='0.75') #2 sigma band
+    plt.fill_between(x, percent(16),percent(84),color='0.5') #3 sigma band
+    
+    
 
-    for samp in randsamp:
-        plt.plot(bins[:-1], schmidt_law(bins[:-1], samp), 'k', alpha=0.1)
-
-    if True:
-        plt.semilogx()
-        # ax2.semilogx()
-    if True:
-        plt.semilogy()
+    plt.loglog(nonposy='clip')
 
     return plt.gca()
 
 
-def fit(bins, samp, samperr, maps, mapserr, scale=1., pos=None, pose=None, title=None,
-        sampler=None, no_plot=False, triangle_plot=True, nwalkers=100, nsteps=1e4):
+def fit(bins, samp, samperr, maps, mapserr, scale=1., sampler=None, \
+        pos=None, pose=None, nwalkers=100, nsteps=1e4, boot=1000, burnin=200):
+    '''
+    ### A Schmidt Law fitting Function using EMCEE by D.F.M.
+    fit(bins, samp, samperr, maps, mapserr, scale=1.,
+            pos=None, pose=None, nwalkers=100, nsteps=1e4)
+    bins: bin edges for binning data (I know it's bad to bin)
+    samp : values for your sample
+    samperr : errors on values for you sample
+    maps: map of values from which you drew your sample
+    mapserr: error on maps...
+    pos : initial location of ball of walkers
+    pose : initial spread of walkers
+    '''
+    
+    print 'Hi!. I am fitting your sources. Listen to some Michael Buble...'
+    
+    
+    #x values are bin midpoints
+    x = avg(bins)
+    #x = bins[:-1]
+    #y = np.asarray([surfd(samp,maps,bins,boot=True,scale=scale) for i in xrange(boot)])
+    #yerr = np.nanstd(y,axis=0)
+    y,yerr = surfd(samp,maps,bins,scale=scale,return_err=True)
+    
+    nonzero = np.isfinite(1./y) & np.isfinite(yerr)
+    
+    y = y[nonzero]
+    yerr = yerr[nonzero]
+    x = x[nonzero]
 
-    print 'Fitting your sources'
-    x = bins[:-1]
 
-    yp = np.array([surfd(samp, maps, bins,
-                             object_val_err=samperr,
-                             valuerr=mapserr,
-                             scale=scale) for i in xrange(100)])
-
-    nyerr = []
-    for i in np.ma.MaskedArray(yp, mask=(
-            ~np.isfinite(yp) & ~np.isfinite(1 / yp))).T:
-        nyerr.append(np.std(np.array(i)[np.nonzero(i)]))
-    nyerr = np.array(nyerr)
-    y = surfd(samp, maps, bins, scale=scale)
-
-    pyerr = np.sqrt(hist(samp, bins)[0])
-
-    yerr = y / pyerr
-    # yerr = np.sqrt((y * np.sqrt(pyerr**2.))**2)# + nyerr**2)
-
-    uni = np.isfinite(y) & np.isfinite(
-        1. / y) & np.isfinite(yerr) & np.isfinite(1. / yerr)
-
-    x = x[uni]
-    y = np.array(y)[uni]
-    yerr = np.array(yerr)[uni]
-
+    # initialize walker positions and walker bundle size
+    init = alpha(y,x,return_kappa=True,cov=True)
     if pos is None:
-        pos = [2, 1]
+        pos = init[:2]
     if pose is None:
-        pose = [1., 1.]
-
+        if np.isnan(init[2]+init[3]):
+            pose = (1,1)
+        else:
+            pose = (init[2],init[3])
+    print pos
+    print pose
+    
+    # This function only fits sources, it doesn't plot, so don't pass
+    # and emcee sampler type. it will spit it back out
+    ####### RUN EMCEE #######
+    #pdb.set_trace()
     if sampler is None:
         print 'Sampler autocorrelation times . . .'
-        sampler, t, et = emcee_schmidt(x, y, yerr,
-                                       pos=pos, pose=pose,
-                                       nwalkers=nwalkers, nsteps=nsteps)
+        sampler, theta, theta_std = emcee_schmidt(x, np.log(y), yerr/y,
+                                            pos=pos, pose=pose,
+                                            nwalkers=nwalkers,
+                                             nsteps=nsteps,burnin=burnin)
     else:
         print 'Next time don\'t give me a ' + str(type(sampler)) + '.'
 
-    '''
-    ## Don't plot at the same time
-    if not no_plot:
-        ax = schmidt_results_plots(sampler, schmidt_law,x,y,yerr,
-                                 burnin = 2000, akmap = maps,
-                                 bins = bins, scale = scale, triangle_plot = triangle_plot)
-    else:
-        print 'No plots for you!'
+    
 
-
-    if title is None:
-        None
-    else:
-        ax.set_title(title)
-    '''
-
-    # pdb.set_trace()
+    # 
     try:
-        return sampler, x, y, yerr, ax, t
+        return sampler, x, y, yerr, theta, theta_std
     except:
         return sampler, x, y, yerr
+
+def plot_walkers(sampler):
+    '''
+    sampler :  emcee Sampler class
+    '''
+    ndim = sampler.dim
+    plt.figure(figsize=(8*ndim,6))
+    for walk in sampler.chain[:,:,:]:
+        for p,param in enumerate(walk.T):
+            ax = plt.subplot(ndim,1,p+1)
+            ax.plot(param,'k',alpha=.25,lw=0.5)
+            #ax.set_ylim(param.min()*0.5,param.max()*1.5)
+            #ax.semilogy()            
+    plt.tight_layout()
 
 
 def tester():
