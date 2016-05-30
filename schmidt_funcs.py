@@ -148,7 +148,7 @@ def avg(arr, n=2):
     if np.allclose(diff,diff[::-1]):
         return mavg(arr, n=n)
     else:
-        return np.exp( mavg(np.log(arr),n=n) )
+        return np.power(10., mavg(np.log10(arr),n=n) )
         #return mgeo(arr, n=n) #equivalent methods, only easier
 
 def llspace(xmin, xmax, n = None, log = False, dx = None, dex = None):
@@ -246,6 +246,7 @@ def get_ext(extmap, errmap, extwcs, ra, de):
 
 def pdf(values, bins):
     '''
+    ** Normalized differential area function. **
     (statistical) probability denisty function
     normalized so that the integral is 1
     and. The integral over a range is the
@@ -255,8 +256,11 @@ def pdf(values, bins):
     Returns array of size len(bins)-1
     Plot versus bins[:-1]
     '''
-    pdf, x = np.histogram(values, bins=bins, density=False)
-    pdf = pdf / (np.sum(pdf,dtype=float) * np.diff(bins))
+    h, x = np.histogram(values, bins=bins, density=False)
+    # From the definition of Pr(x) = dF(x)/dx this
+    # is the correct form. It returns the correct 
+    # probabilities when tested
+    pdf = h / (np.sum(h,dtype=float) * np.diff(bins))
     return pdf, avg(x)
 
 def pdf2(values, bins):
@@ -296,6 +300,7 @@ def cdf(values, bins):
 
 def cdf2(values, bins):
     '''
+    ## Exclusively for area_function which needs to be unnormalized
     (statistical) cumulative distribution function
     Value at b is total amount below b.
     CDF is invariante to binning
@@ -465,6 +470,9 @@ def fit_lmfit_schmidt(x, y, yerr, init=None):
     m_init = model()
     fit = LevMarLSQFitter()
     m = fit(m_init, x[keep], np.log(y[keep]), weights=(yerr / y)[keep]**(-2.), maxiter=1000000)
+    var_alpha, var_kappa = fit.fit_info['param_cov'].diagonal()
+    print np.sqrt(var_alpha), np.sqrt(var_kappa)
+    
 
     return m.parameters
 
@@ -602,7 +610,7 @@ def schmidt_results_plots(sampler, model, x, y, yerr, burnin=200,
     return plt.gca()
 
 
-def fit(bins, samp, samperr, maps, mapserr, scale=1., sampler=None, \
+def fit(bins, samp, samperr, maps, mapserr, scale=1., sampler=None, log=False,\
         pos=None, pose=None, nwalkers=100, nsteps=1e4, boot=1000, burnin=200):
     '''
     ### A Schmidt Law fitting Function using EMCEE by D.F.M.
@@ -621,10 +629,14 @@ def fit(bins, samp, samperr, maps, mapserr, scale=1., sampler=None, \
     
     
     #x values are bin midpoints
-    x = avg(bins)
+    x = avg(bins) # assume if log=True, then bins are already log
     #x = bins[:-1]
     #y = np.asarray([surfd(samp,maps,bins,boot=True,scale=scale) for i in xrange(boot)])
     #yerr = np.nanstd(y,axis=0)
+    if log:
+        samp = np.log10(samp)
+        maps = np.log10(maps)
+        bins = np.log10(bins) # because bins doesn't get used again after surfd
     y,yerr = surfd(samp,maps,bins,scale=scale,return_err=True)
     
     nonzero = np.isfinite(1./y) & np.isfinite(yerr)
@@ -684,3 +696,33 @@ def plot_walkers(sampler):
 
 def tester():
     print 'hi yall'
+
+def kdeplot(xp,yp,filled=False,ax=None,grid=None,*args,**kwargs):
+    if ax is None:
+        ax = plt.gca()
+    rvs = np.append(xp.reshape((xp.shape[0],1)),
+                    yp.reshape((yp.shape[0],1)),
+                    axis=1)
+
+    kde = stats.kde.gaussian_kde(rvs.T)
+    kde.covariance_factor = lambda : .3
+    kde._compute_covariance()
+    
+    if grid is None:
+        # Regular grid to evaluate kde upon
+        x_flat = np.r_[rvs[:,0].min():rvs[:,0].max():256j]
+        y_flat = np.r_[rvs[:,1].min():rvs[:,1].max():256j]
+    else:
+        x_flat = np.r_[0:grid[0]:256j]
+        y_flat = np.r_[0:grid[1]:256j]
+    x,y = np.meshgrid(x_flat,y_flat)
+    grid_coords = np.append(x.reshape(-1,1),y.reshape(-1,1),axis=1)
+
+    z = kde(grid_coords.T)
+    z = z.reshape(256,256)
+    if filled:
+        cont = ax.contourf
+    else:
+        cont = ax.contour
+    cs = cont(x_flat,y_flat,z,*args,**kwargs)
+    return cs
