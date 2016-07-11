@@ -7,13 +7,13 @@ from astropy.coordinates import SkyCoord
 import astropy.units as u
 import astropy.constants as c
 import corner as triangle  # formerly dfm/triangle
-from astropy.modeling import models, fitting
+# from astropy.modeling import models, fitting
 from astropy.modeling.models import custom_model
-from astropy.modeling.fitting import LevMarLSQFitter, SimplexLSQFitter
+from astropy.modeling.fitting import LevMarLSQFitter # , SimplexLSQFitter
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import emcee
-import pdb
+# import pdb
 
 # # # # # # # # # # # # # # # # # # # # # #
 # make iPython print immediately
@@ -257,7 +257,7 @@ def pdf(values, bins):
     Returns array of size len(bins)-1
     Plot versus bins[:-1]
     '''
-    h, x = np.histogram(values, bins=bins, density=False)
+    h, x = np.histogram(values, bins=bins, range=(bins.min(),bins.max()), density=False)
     # From the definition of Pr(x) = dF(x)/dx this
     # is the correct form. It returns the correct
     # probabilities when tested
@@ -276,7 +276,7 @@ def pdf2(values, bins):
     Returns array of size len(bins)-1
     Plot versus bins[:-1]
     '''
-    pdf, x = np.histogram(values, bins=bins, density=False)
+    pdf, x = np.histogram(values, bins=bins, range=(bins.min(),bins.max()), density=False)
     pdf = pdf.astype(float) / np.diff(bins)
     return pdf, avg(bins)
 
@@ -296,8 +296,8 @@ def cdf(values, bins):
     Returns array of size len(bins)
     Plot versus bins[:-1]
     '''
-    h, bins = np.histogram(values, bins=bins, density=False)  # returns int
-    c = np.cumsum(h / np.sum(h, dtype=float))  # cumulative fraction below bin_k
+    h, bins = np.histogram(values, bins=bins, range=(bins.min(),bins.max()), density=False)  # returns int
+    c = np.cumsum(h / np.sum(h, dtype=float)) # cumulative fraction below bin_k
     # append 0 to beginning because P( X < min(x)) = 0
     return np.append(0, c), bins
 
@@ -312,7 +312,7 @@ def cdf2(values, bins):
     Plot versus bins[:-1]
     Not normalized to 1
     '''
-    h, bins = np.histogram(values, bins=bins, density=False)
+    h, bins = np.histogram(values, bins=bins, range=(bins.min(),bins.max()), density=False)
     c = np.cumsum(h).astype(float)
     return np.append(0., c), bins
 
@@ -339,12 +339,10 @@ def hist(values, bins, err=False, density=False, **kwargs):
     '''
     really just a wrapper for numpy.histogram
     '''
-    hist, x = np.histogram(values, bins=bins, density=density, **kwargs)
+    hist, x = np.histogram(values, bins=bins, range=(bins.min(),bins.max()), density=density, **kwargs)
     if (err is None) or (err is False):
         return hist.astype(np.float), avg(x)
     else:
-        # hist_err = np.sqrt(np.histogram(values, bins=bins, weights = err**2., \
-        #                  density=density, **kwargs)[0])
         hist_err = np.sqrt(hist)
         return hist.astype(np.float), avg(x), hist_err
 
@@ -466,7 +464,9 @@ def schmidt_law(Ak, theta):
         return kappa * (Ak ** beta)
     else:
         beta, kappa, Ak0 = theta
-        return Heaviside(x - Ak0) * kappa * (Ak ** beta)
+        post = Heaviside(Ak - Ak0) * kappa * (Ak ** beta)
+        post[Ak <= Ak0] = kappa * (Ak0 ** beta)
+        return post
 
 
 def fit_lmfit_schmidt(x, y, yerr, init=None):
@@ -529,11 +529,11 @@ def emcee_schmidt(x, y, yerr, pos=None, pose=None,
         c1 = 0 <= beta
         c2 = 0 < kappa
         if c1 and c2 and c3:
-            return 0.0
-        return -np.inf
+            return 0.0,Ak0
+        return -np.inf,Ak0
 
     def lnprob(theta, x, y, yerr):
-        lp = lnprior(theta)
+        lp,Ak0 = lnprior(theta)
         if not np.isfinite(lp):
             return -np.inf
         return lp + lnlike(theta, x, y, yerr)
@@ -598,14 +598,15 @@ def schmidt_results_plots(sampler, model, x, y, yerr, burnin=200, akmap=None,
                               verbose=False)
 
     # generate schmidt laws from parameter samples
-    smlaw_samps = np.asarray([schmidt_law(x, samp) for samp in samples])
+    xln = np.logspace(np.log10(x.min()*.5),np.log10(x.max()*2.),100)
+    smlaw_samps = np.asarray([schmidt_law(xln, samp) for samp in samples])
     # get percentile bands
     percent = lambda x: np.nanpercentile(smlaw_samps, x, interpolation='linear', axis=0)
 
     # Plot fits
     fig = plt.figure()
     # Plot data with errorbars
-    plt.plot(x, percent(50), 'k')  # 3 sigma band
+    plt.plot(xln, percent(50), 'k')  # 3 sigma band
     # yperr = np.abs(np.exp(np.log(y)+yerr/y) - y)
     # ynerr = np.abs(np.exp(np.log(y)-yerr/y) - y)
     plt.errorbar(x, y, yerr, fmt='rs', alpha=0.7, mec='none')
@@ -613,9 +614,9 @@ def schmidt_results_plots(sampler, model, x, y, yerr, burnin=200, akmap=None,
                loc='upper left', fontsize=12)
 
     # draw 1,2,3 sigma bands
-    plt.fill_between(x, percent(1), percent(99), color='0.9')  # 1 sigma band
-    plt.fill_between(x, percent(2), percent(98), color='0.75')  # 2 sigma band
-    plt.fill_between(x, percent(16), percent(84), color='0.5')  # 3 sigma band
+    plt.fill_between(xln, percent(1), percent(99), color='0.9')  # 1 sigma band
+    plt.fill_between(xln, percent(2), percent(98), color='0.75')  # 2 sigma band
+    plt.fill_between(xln, percent(16), percent(84), color='0.5')  # 3 sigma band
 
     plt.loglog(nonposy='clip')
 
@@ -666,7 +667,7 @@ def fit(bins, samp, samperr, maps, mapserr, scale=1., sampler=None, log=False,
         else:
             pose = (init[2], init[3])
     if threshold:
-        pos = pos + (0.5,)
+        pos = pos + (0.8,)
         pose = pose + (0.2,)
     print pos
     print pose

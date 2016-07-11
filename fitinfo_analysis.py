@@ -120,7 +120,7 @@ def jj_median(arr,weights,w=None):
     return weighted median
     '''
     if w is not None:
-        values = np.array(values)[w]
+        arr = np.array(arr)[w]
         weights = np.array(weights)[w]
     return wmedian(np.asarray(arr),np.asarray(weights))
     #return arr[0]
@@ -130,18 +130,18 @@ def jj_avg_std(values, weights,w=None):
     Return the weighted average and standard deviation.
 
     values, weights -- Numpy ndarrays with the same shape.
-    
-    Currently set to return [50,16,84] percentiles 
-    
+
+    Currently set to return [50,16,84] percentiles
+
     w allows you to select certain elements of list
     """
     if w is not None:
         values = np.array(values)[w]
         weights = np.array(weights)[w]
-    
+
     values = np.asarray(values)
     weights = np.asarray(weights)
-    
+
     median=jj_median(values,weights)
     #mad = jj_median(np.abs(values-median), weights=weights)
     #average = np.average(values, weights=weights)
@@ -171,7 +171,7 @@ def return_av_array(av_file, convert_from_ak=True):
         avs=av_file
         if convert_from_ak:
             avs = avs / .11
-    
+
     return avs
 
 
@@ -186,9 +186,9 @@ def get_stage(t, ratio):
     mdot = t['MDOT']
     mdisk = t['MDISK']
 
-    stageI   =  (mdot / massc >= 1.0e-6) & (menv / massc >= ratio)
-    stageII  =  (mdot / massc < 1.0e-6) & (mdisk / massc > 1e-6)
-    stageIII = ((mdot / massc < 1.0e-6) & (mdisk / massc < 1e-6)) | ~(stageII | stageI)
+    stageI   =  (mdot / massc >= 1.0e-6) & (menv  / massc >= ratio)
+    stageII  =  (mdot / massc  < 1.0e-6) & (mdisk / massc >=  1e-6)
+    stageIII = ((mdot / massc  < 1.0e-6) & (mdisk / massc  < 1e-6)) | ~(stageII | stageI)
 
     if stageI:
         return 'I'
@@ -198,7 +198,7 @@ def get_stage(t, ratio):
         return 'III'
     else:
         return 'Fail'
-    
+
 
 
 def source_classifier(menv, massc, mdot, mdisk, chi2, ratio = 0.05):
@@ -209,10 +209,10 @@ def source_classifier(menv, massc, mdot, mdisk, chi2, ratio = 0.05):
     massc = np.asarray(massc)
     mdot = np.asarray(mdot)
     mdisk = np.asarray(mdisk)
-    
-    stageI   = (jj_median(mdot / massc,1./chi2) >= 1.0e-6) & (jj_median(menv / massc,1./chi2) >= ratio)
-    stageII  = (jj_median(mdot / massc,1./chi2)  < 1.0e-6) & (jj_median(mdisk / massc,1./chi2) > 1e-6)
-    stageIII = (jj_median(mdot / massc,1./chi2)  < 1.0e-6) & (jj_median(mdisk / massc,1./chi2) < 1e-6)
+
+    stageI   = (jj_median(mdot / massc,1./chi2) >= 1.0e-6) & (jj_median(menv / massc,1./chi2)  >= ratio)
+    stageII  = (jj_median(mdot / massc,1./chi2)  < 1.0e-6) & (jj_median(mdisk / massc,1./chi2) >= 1e-6)
+    stageIII = (jj_median(mdot / massc,1./chi2)  < 1.0e-6) & (jj_median(mdisk / massc,1./chi2) <  1e-6)
 
     if stageI:
         return 'P'
@@ -234,7 +234,7 @@ def write_val(*nums):
         nums = nums[0]
     if not hasattr(nums, '__iter__'):
         nums = (nums,)
-    
+
     returns = ()
     for num in nums:
         if num == 0:
@@ -252,11 +252,11 @@ def write_val(*nums):
 def new_results_final(input_fits, verbose=True, output=True,
                 av_file=None, keep=('D', 1), convert_from_ak = True,
                 scale_chi2=True,fname='',prot_only=False, ratio=0.05):
-    
+
     print('----- Analyzing %s ----'%(os.path.basename(input_fits)))
-    
+
     avs = return_av_array(av_file, convert_from_ak = convert_from_ak)
-    
+
     fin = FitInfoFile(input_fits, 'r')
     source=[]
     t = load_parameter_table(fin.meta.model_dir)
@@ -265,7 +265,7 @@ def new_results_final(input_fits, verbose=True, output=True,
     t.sort('MODEL_NAME')
 
     result, source, av, averr, infos, avints, incl, menvs, avlos, lum, mdot, massc, mdisk, stage, tstar, ndata = [], [], [], [], [], [], [], [], [], [], [], [], [], [], [],[]
-    
+
     tkeys = t.colnames[1:]
     maxt = [b+'+1sig' for b in tkeys]
     mint = [b+'-1sig' for b in tkeys]
@@ -273,11 +273,11 @@ def new_results_final(input_fits, verbose=True, output=True,
     keys = ['Source ID', 'class', 'av', 'scale','AVLOS'] + tkeys
     dtypes = [t[n].dtype for n in tkeys]
     [dtypes.insert(0,i) for i in [float,float,float,'|S5','|S5']]
-    
+
     output_table = Table(names = keys, masked=True,dtype=dtypes)
 
     params = {k: [] for k in keys}
-    
+
 
     fname = fname + '%2.2f'%ratio
     if output:
@@ -300,19 +300,19 @@ def new_results_final(input_fits, verbose=True, output=True,
         param = { k: [] for k in keys }
         if not np.isnan(np.nanmean(info.av)):
             source.append(info.source)
-            
+
             minchi=info.chi2.min()
             if (scale_chi2) | (keep[0] == 'J'):
                 info.chi2 = info.chi2/minchi
                 keep=('D',keep[1])
             info.keep(keep[0], keep[1])
-            
-            
+
+
             param['Source ID'] = info.source.name
             param['av'] = np.float32(get_av(info.source.name, avs))
 
             tsorted = info.filter_table(t, additional={})
-            
+
             get_st = lambda tab: get_stage(tab,ratio=ratio)
             stages = map(get_st, tsorted) # get stages of selected fits
             stageI = np.array(stages) == 'I'
@@ -333,12 +333,12 @@ def new_results_final(input_fits, verbose=True, output=True,
             mdisk.append(tsorted['MDISK'].tolist())
             #tstar.append(tsorted['TSTAR'].tolist())
             menvs.append(tsorted['MENV'].tolist())
-            
+
             # determine class based on quantities of interest using classification criteria
             # these classification criteria may be different than what is required for
             # identfying Model stages. Will return a single class
             classification = source_classifier(menvs[-1], massc[-1], mdot[-1], mdisk[-1],info.chi2, ratio=ratio)
-            
+
             result.append(classification)
 
 
@@ -363,7 +363,7 @@ def new_results_final(input_fits, verbose=True, output=True,
                 fout.write(' | ')
                 fout.write('%3i' % np.sum(stageII)) # number of stage II
                 fout.write(' | ')
-                
+
                 #Menv/Massc
                 qavg, qmin, qmax = jj_avg_std(np.array(menvs[-1])/np.array(massc[-1]), 1./info.chi2)
                 power = -2
@@ -373,7 +373,7 @@ def new_results_final(input_fits, verbose=True, output=True,
                 fout.write('(%s $-$ %s)' % (write_val(qmin/factor, qmax/factor)) )
                 #fout.write(' %0.f2 ' % (np.log10(qmin)-np.log10(qavg)) )
                 fout.write(' | ')
-                
+
                 #Mdot/Massc
                 qavg, qmin, qmax = jj_avg_std(np.array(mdot[-1])/np.array(massc[-1]), 1./info.chi2)
                 power = -6
@@ -382,14 +382,14 @@ def new_results_final(input_fits, verbose=True, output=True,
                 fout.write(' | ')
                 fout.write('(%s $-$ %s)' % (write_val(qmin/factor,qmax/factor)) )
                 fout.write(' | ')
-                
+
                 #Massc
                 qavg, qmin, qmax = jj_avg_std(massc[-1], 1./info.chi2)
                 fout.write('%s' % write_val(qavg) )
                 fout.write(' | ')
                 fout.write('(%s $-$ %s)' % (write_val(qmin,qmax)) )
                 fout.write(' | ')
-                
+
                 fout.write('\n')
         # ------------ [END] Print important parameters to file ----------- #
 
@@ -405,8 +405,8 @@ def new_results_final(input_fits, verbose=True, output=True,
                 param[k] = med
                 #param[k+'-1sig'] = q1
                 #param[k+'+1sig'] = q2
- 
-            
+
+
         else:
             param['Source ID'] = info.source.name
             param['av'] = np.float32(get_av(info.source.name, avs))
@@ -419,7 +419,7 @@ def new_results_final(input_fits, verbose=True, output=True,
                 #param[k+'-1sig'] = np.nan
                 param[k] = np.nan
                 #param[k+'+1sig'] = np.nan
-        
+
         output_table.add_row(param)
         for k in tkeys:
                 params[k].append(param[k])
@@ -429,7 +429,7 @@ def new_results_final(input_fits, verbose=True, output=True,
         fout.close()
     #t = Table(params)
     #t = t[keys]
-    
+
     return  output_table,source
 
 
