@@ -13,7 +13,8 @@ from astropy.modeling.fitting import LevMarLSQFitter # , SimplexLSQFitter
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import emcee
-# import pdb
+#import ipdb; 
+import pdb
 
 # # # # # # # # # # # # # # # # # # # # # #
 # make iPython print immediately
@@ -188,8 +189,10 @@ def llspace(xmin, xmax, n=None, log=False, dx=None, dex=None):
             print dx
 
     if log:
+        #return np.power(10, np.linspace(xmin, xmax , (xmax - xmin)/dex + 1))
         return np.power(10, np.arange(xmin, xmax + dex, dex))
     else:
+        #return np.linspace(xmin, xmax, (xmax-xmin)/dx + 1)
         return np.arange(xmin, xmax + dx, dx)
 
 
@@ -257,11 +260,16 @@ def pdf(values, bins):
     Returns array of size len(bins)-1
     Plot versus bins[:-1]
     '''
-    h, x = np.histogram(values, bins=bins, range=(bins.min(),bins.max()), density=False)
+    if hasattr(bins,'__getitem__'):
+        range=(np.nanmin(bins),np.nanmax(bins))
+    else:
+        range = None
+    
+    h, x = np.histogram(values, bins=bins, range=range, density=False)
     # From the definition of Pr(x) = dF(x)/dx this
     # is the correct form. It returns the correct
     # probabilities when tested
-    pdf = h / (np.sum(h, dtype=float) * np.diff(bins))
+    pdf = h / (np.sum(h, dtype=float) * np.diff(x))
     return pdf, avg(x)
 
 
@@ -276,9 +284,14 @@ def pdf2(values, bins):
     Returns array of size len(bins)-1
     Plot versus bins[:-1]
     '''
-    pdf, x = np.histogram(values, bins=bins, range=(bins.min(),bins.max()), density=False)
-    pdf = pdf.astype(float) / np.diff(bins)
-    return pdf, avg(bins)
+    if hasattr(bins,'__getitem__'):
+        range=(np.nanmin(bins),np.nanmax(bins))
+    else:
+        range = None
+    
+    pdf, x = np.histogram(values, bins=bins, range=range, density=False)
+    pdf = pdf.astype(float) / np.diff(x)
+    return pdf, avg(x)
 
 
 def edf(data, pdf=False):
@@ -296,7 +309,13 @@ def cdf(values, bins):
     Returns array of size len(bins)
     Plot versus bins[:-1]
     '''
-    h, bins = np.histogram(values, bins=bins, range=(bins.min(),bins.max()), density=False)  # returns int
+    if hasattr(bins,'__getitem__'):
+        range = (np.nanmin(bins),np.nanmax(bins))
+    else:
+        range = None
+    
+    h, bins = np.histogram(values, bins=bins, range=range, density=False)  # returns int
+
     c = np.cumsum(h / np.sum(h, dtype=float)) # cumulative fraction below bin_k
     # append 0 to beginning because P( X < min(x)) = 0
     return np.append(0, c), bins
@@ -312,7 +331,12 @@ def cdf2(values, bins):
     Plot versus bins[:-1]
     Not normalized to 1
     '''
-    h, bins = np.histogram(values, bins=bins, range=(bins.min(),bins.max()), density=False)
+    if hasattr(bins,'__getitem__'):
+        range=(np.nanmin(bins),np.nanmax(bins))
+    else:
+        range = None
+    
+    h, bins = np.histogram(values, bins=bins, range=range, density=False)
     c = np.cumsum(h).astype(float)
     return np.append(0., c), bins
 
@@ -339,12 +363,16 @@ def hist(values, bins, err=False, density=False, **kwargs):
     '''
     really just a wrapper for numpy.histogram
     '''
-    hist, x = np.histogram(values, bins=bins, range=(bins.min(),bins.max()), density=density, **kwargs)
+    if hasattr(bins,'__getitem__'):
+        range=(np.nanmin(bins),np.nanmax(bins))
+    else:
+        range = None
+    
+    hist, x = np.histogram(values, bins=bins, range=range, density=density, **kwargs)
     if (err is None) or (err is False):
         return hist.astype(np.float), avg(x)
     else:
-        hist_err = np.sqrt(hist)
-        return hist.astype(np.float), avg(x), hist_err
+        return hist.astype(np.float), avg(x), np.sqrt(hist)
 
 
 def bootstrap(X, X_err=None, n=None, smooth=False):
@@ -359,7 +387,7 @@ def bootstrap(X, X_err=None, n=None, smooth=False):
             will be set to False if no X_err is provided
     '''
 
-    if smooth or (X_err is None):
+    if X_err is None:
         smooth = False
 
     if n is None:  # default n
@@ -396,7 +424,7 @@ def alpha_ML(data, data_min):
     return alpha  # , error
 
 
-def surfd(X, Xmap, bins, boot=False, scale=1., return_err=False):
+def surfd(X, Xmap, bins, Xerr = None, Xmaperr = None, boot=False, scale=1., return_err=False, smooth=False):
     '''
     call: surfd(X, map, bins,
                     xerr = None, merr = None, scale = 1.)
@@ -405,16 +433,16 @@ def surfd(X, Xmap, bins, boot=False, scale=1., return_err=False):
     '''
     # get dn/dx
     if boot:
-        n = hist(bootstrap(X), bins)[0]
-        s = hist(bootstrap(Xmap), bins)[0] * scale
+        n = np.histogram(bootstrap(X,Xerr,smooth=True), bins = bins)[0]
+        s = np.histogram(bootstrap(Xmap,Xmaperr,smooth=True), bins = bins)[0] * scale
     else:
-        n = hist(X, bins)[0]
-        s = hist(Xmap, bins)[0] * scale
+        n = np.histogram(X, bins = bins)[0]
+        s = np.histogram(Xmap, bins = bins)[0] * scale
 
     if not return_err:
         return n / s
     else:
-        return n / s, n / s * np.sqrt(1 / n - scale / s)
+        return n / s, n / s * np.sqrt(1. / n - scale / s)
 
 
 def alpha(y, x, err=None, return_kappa=False, cov=False):
@@ -462,23 +490,29 @@ def schmidt_law(Ak, theta):
     if len(theta) == 2:
         beta, kappa = theta
         return kappa * (Ak ** beta)
-    else:
+    elif len(theta) == 3:
         beta, kappa, Ak0 = theta
         post = Heaviside(Ak - Ak0) * kappa * (Ak ** beta)
-        post[Ak <= Ak0] = kappa * (Ak0 ** beta)
+        post[Ak < Ak0] = 0#np.nan # kappa * (Ak0 ** beta)
+        return post
+    elif len(theta) == 4:
+        beta, kappa, Ak0, Akf = theta
+        k = (Ak >= Ak0) & (Ak <= Akf)
+        post = kappa * (Ak ** beta)
+        post[~k] = np.nan
         return post
 
 
 def fit_lmfit_schmidt(x, y, yerr, init=None):
     @custom_model
     def model(x, beta=init[0], kappa=init[1]):
-        return np.log(schmidt_law(x, (beta, kappa)))
+        return np.log(kappa * (x ** beta))
     keep = np.isfinite(1. / y) & np.isfinite(1. / yerr)
     m_init = model()
     fit = LevMarLSQFitter()
     m = fit(m_init, x[keep], np.log(y[keep]), weights=(yerr / y)[keep]**(-2.), maxiter=1000000)
     var_alpha, var_kappa = fit.fit_info['param_cov'].diagonal()
-    print np.sqrt(var_alpha), np.sqrt(var_kappa)
+    #print np.sqrt(var_alpha), np.sqrt(var_kappa)
 
     return m.parameters
 
@@ -508,32 +542,46 @@ def emcee_schmidt(x, y, yerr, pos=None, pose=None,
         # Chisq statistic
         mod = model(x, theta)
         inv_sigma2 = 1 / yerr**2
+        if len(theta) == 4:
+            k = (x >= theta[2]) & (x <= theta[3])
+            if np.sum(k)> 1:
+                mod = mod[k]
+                inv_sigma2 = inv_sigma2[k]
+                y = y[k]
+                x = x[k]
+                yerr = yerr[k]
+            else:
+                return -np.inf
+            #pdb.set_trace()
         # Poisson statistics
-        # mu = (yerr)**2  # often called lambda = poisson variance for bin x_i
-        # x = np.abs(y - mod) # where w calculate the poisson probability
-        # logL = np.sum(x * np.log(mu) - mu)# - np.sum(np.log(misc.factorial(x)))
-        # return -logL
-        # Binomial statistics
-        # Todo -- requires rewrite of some previous code. Need to get
-        # area function and scale to compute p for
-        # yerr = sqrt(Np(1-p)) = sqrt(1/pN - 1/N), where pN is schmidt law
-        return -0.5 * (np.sum((y - mod)**2 * inv_sigma2))
+        mu = (yerr)**2  # often called lambda = poisson variance for bin x_i
+        x = np.abs(y - mod) # where w calculate the poisson probability
+        logL = np.sum(x * np.log(mu) - mu)# - np.sum(np.log(misc.factorial(x)))
+        return 2*logL + len(theta) * np.log(np.sum(k))
+        # Chisqared
+        #return -0.5 * (np.sum((y - mod)**2 * inv_sigma2))#  - 0.5 * 3 * np.log(np.sum(k))
 
     def lnprior(theta):
-        try:
-            beta, kappa, Ak0 = theta
+        if len(theta) == 4:
+            beta, kappa, Ak0, Akf = theta
             c3 = 0. <= Ak0 <= 1
-        except:
+            c4 = 1. <= Akf <= 10.
+        elif len(theta) == 3:
+            beta, kappa, Ak0 = theta
+            c3 = 0. < Ak0 <= 5.
+            c4 = True
+        else:
             beta, kappa = theta
             c3 = True
-        c1 = 0 <= beta
-        c2 = 0 < kappa
-        if c1 and c2 and c3:
-            return 0.0,Ak0
-        return -np.inf,Ak0
+            c4 = True
+        c1 = 0 <= beta <= 6
+        c2 = 0 < kappa < 5
+        if c1 and c2 and c3 and c4:
+            return 0.0
+        return -np.inf
 
     def lnprob(theta, x, y, yerr):
-        lp,Ak0 = lnprior(theta)
+        lp = lnprior(theta)
         if not np.isfinite(lp):
             return -np.inf
         return lp + lnlike(theta, x, y, yerr)
@@ -558,73 +606,17 @@ def emcee_schmidt(x, y, yerr, pos=None, pose=None,
     print sampler.acor
 
     for i, item in enumerate(theta_mcmc):
-        j = ['beta', 'kappa', 'A_{0}']
+        j = ['beta', 'kappa', 'A_{K,0}', 'A_{K,f}']
         inserts = (j[i], item[1], item[2] - item[1], item[1] - item[0])
         print '%s = %0.2f (+%0.2f,-%0.2f)' % inserts
 
     return sampler, np.median(samples, axis=0), np.std(samples, axis=0)
 
 
-def schmidt_results_plots(sampler, model, x, y, yerr, burnin=200, akmap=None,
-                          bins=None, scale=None, triangle_plot=True):
-    '''
-    model: should pass schmidt_law()
-    '''
-    try:
-        mpl.style.use('john')
-    except:
-        None
-    # Get input values
-    # x, y, yerr = sampler.args
-    samples = sampler.chain[:, burnin:, :].reshape((-1, sampler.dim))
-
-    # # Print out final values # #
-    theta_mcmc = np.percentile(samples, [16, 50, 84], axis=0).T  # Get percentiles for each parameter
-    n_params = len(theta_mcmc[:,1])
-
-    for i, item in enumerate(theta_mcmc):
-        j = ['beta', 'kappa', 'A_{K,0}']
-        inserts = (j[i], item[1], item[2] - item[1], item[1] - item[0])
-        print '%s = %0.2f (+%0.2f,-%0.2f)' % inserts
-
-    # Plot corner plot
-    if triangle_plot:
-        if n_params == 3:
-            labels = ['beta', 'kappa', 'A_{K,0}']
-        else:
-            labels = ['beta', 'kappa']
-        fig = triangle.corner(samples, labels=labels,
-                              truths=theta_mcmc[:, 1], quantiles=[.16, .84],
-                              verbose=False)
-
-    # generate schmidt laws from parameter samples
-    xln = np.logspace(np.log10(x.min()*.5),np.log10(x.max()*2.),100)
-    smlaw_samps = np.asarray([schmidt_law(xln, samp) for samp in samples])
-    # get percentile bands
-    percent = lambda x: np.nanpercentile(smlaw_samps, x, interpolation='linear', axis=0)
-
-    # Plot fits
-    fig = plt.figure()
-    # Plot data with errorbars
-    plt.plot(xln, percent(50), 'k')  # 3 sigma band
-    # yperr = np.abs(np.exp(np.log(y)+yerr/y) - y)
-    # ynerr = np.abs(np.exp(np.log(y)-yerr/y) - y)
-    plt.errorbar(x, y, yerr, fmt='rs', alpha=0.7, mec='none')
-    plt.legend(['Median', 'Data'],
-               loc='upper left', fontsize=12)
-
-    # draw 1,2,3 sigma bands
-    plt.fill_between(xln, percent(1), percent(99), color='0.9')  # 1 sigma band
-    plt.fill_between(xln, percent(2), percent(98), color='0.75')  # 2 sigma band
-    plt.fill_between(xln, percent(16), percent(84), color='0.5')  # 3 sigma band
-
-    plt.loglog(nonposy='clip')
-
-    return plt.gca()
-
 
 def fit(bins, samp, samperr, maps, mapserr, scale=1., sampler=None, log=False,
-        pos=None, pose=None, nwalkers=100, nsteps=1e4, boot=1000, burnin=200, threshold=False):
+        pos=None, pose=None, nwalkers=100, nsteps=1e4, boot=1000, burnin=200,
+         threshold=False, threshold2=False):
     '''
     # # # A Schmidt Law fitting Function using EMCEE by D.F.M.
     fit(bins, samp, samperr, maps, mapserr, scale=1.,
@@ -645,10 +637,10 @@ def fit(bins, samp, samperr, maps, mapserr, scale=1., sampler=None, log=False,
     # x = bins[:-1]
     # y = np.asarray([surfd(samp,maps,bins,boot=True,scale=scale) for i in xrange(boot)])
     # yerr = np.nanstd(y,axis=0)
-    if log:
-        samp = np.log10(samp)
-        maps = np.log10(maps)
-        bins = np.log10(bins)  # because bins doesn't get used again after surfd
+    #if log:
+    #    samp = np.log10(samp)
+    #    maps = np.log10(maps)
+    #    bins = np.log10(bins)  # because bins doesn't get used again after surfd
     y, yerr = surfd(samp, maps, bins, scale=scale, return_err=True)
 
     nonzero = np.isfinite(1. / y) & np.isfinite(yerr)
@@ -666,11 +658,14 @@ def fit(bins, samp, samperr, maps, mapserr, scale=1., sampler=None, log=False,
             pose = (1, 1)
         else:
             pose = (init[2], init[3])
-    if threshold:
-        pos = pos + (0.8,)
+    if threshold | threshold2:
+        pos = pos + (0.4,)
         pose = pose + (0.2,)
-    print pos
-    print pose
+    if threshold2:
+        pos = pos + (8.,)
+        pose = pose + (.5,)
+    #print pos
+    #print pose
 
     # This function only fits sources, it doesn't plot, so don't pass
     # and emcee sampler type. it will spit it back out
@@ -691,17 +686,72 @@ def fit(bins, samp, samperr, maps, mapserr, scale=1., sampler=None, log=False,
     except:
         return sampler, x, y, yerr
 
+def schmidt_results_plots(sampler, model, x, y, yerr, burnin=200, akmap=None,
+                          bins=None, scale=None, triangle_plot=True):
+    '''
+    model: should pass schmidt_law()
+    '''
+    try:
+        mpl.style.use('john')
+    except:
+        None
+    # Get input values
+    # x, y, yerr = sampler.args
+    samples = sampler.chain[:, burnin:, :].reshape((-1, sampler.dim))
+    # # Print out final values # #
+    theta_mcmc = np.percentile(samples, [16, 50, 84], axis=0).T  # Get percentiles for each parameter
+    n_params = len(theta_mcmc[:,1])
+    #print n_params
+    for i, item in enumerate(theta_mcmc):
+        j = ['beta', 'kappa', 'A_{K,0}','A_{K,f}']
+        inserts = (j[i], item[1], item[2] - item[1], item[1] - item[0])
+        print '%s = %0.2f (+%0.2f,-%0.2f)' % inserts
+    # Plot corner plot
+    if triangle_plot:
+        if n_params == 3:
+            labels = ['beta', 'kappa', 'A_{K,0}']
+        elif n_params == 4:
+            labels = ['beta', 'kappa', 'A_{K,0}', 'A_{K,f}']
+        else:
+            labels = ['beta', 'kappa']
+        #print labels
+        fig = triangle.corner(samples, labels=labels,
+                              truths=theta_mcmc[:, 1], quantiles=[.16, .84],
+                              verbose=False)
+    # generate schmidt laws from parameter samples
+    xln = np.logspace(np.log10(x.min()*.5),np.log10(x.max()*2.),100)
+    smlaw_samps = np.asarray([schmidt_law(xln, samp) for samp in samples])
+    # get percentile bands
+    percent = lambda x: np.nanpercentile(smlaw_samps, x, interpolation='linear', axis=0)
+    # Plot fits
+    fig = plt.figure()
+    # Plot data with errorbars
+    plt.plot(xln, percent(50), 'k')  # 3 sigma band
+    # yperr = np.abs(np.exp(np.log(y)+yerr/y) - y)
+    # ynerr = np.abs(np.exp(np.log(y)-yerr/y) - y)
+    plt.errorbar(x, y, yerr, fmt='rs', alpha=0.7, mec='none')
+    plt.legend(['Median', 'Data'],
+               loc='upper left', fontsize=12)
+    # draw 1,2,3 sigma bands
+    plt.fill_between(xln, percent(1), percent(99), color='0.9')  # 1 sigma band
+    plt.fill_between(xln, percent(2), percent(98), color='0.75')  # 2 sigma band
+    plt.fill_between(xln, percent(16), percent(84), color='0.5')  # 3 sigma band
+
+    plt.loglog(nonposy='clip')
+
+    return plt.gca()
+
 
 def plot_walkers(sampler):
     '''
     sampler :  emcee Sampler class
     '''
     ndim = sampler.dim
-    plt.figure(figsize=(8 * ndim, 6))
+    plt.figure(figsize=(8 * ndim, 6 * ndim))
     for walk in sampler.chain[:, :, :]:
         for p, param in enumerate(walk.T):
             ax = plt.subplot(ndim, 1, p + 1)
-            ax.plot(param, 'k', alpha=.25, lw=0.5)
+            ax.plot(param[:2000], 'k', alpha=.25, lw=0.5)
             # ax.set_ylim(param.min()*0.5,param.max()*1.5)
             # ax.semilogy()
     plt.tight_layout()
@@ -711,32 +761,3 @@ def tester():
     print 'hi yall'
 
 
-def kdeplot(xp, yp, filled=False, ax=None, grid=None, *args, **kwargs):
-    if ax is None:
-        ax = plt.gca()
-    rvs = np.append(xp.reshape((xp.shape[0], 1)),
-                    yp.reshape((yp.shape[0], 1)),
-                    axis=1)
-
-    kde = stats.kde.gaussian_kde(rvs.T)
-    kde.covariance_factor = lambda: .3
-    kde._compute_covariance()
-
-    if grid is None:
-        # Regular grid to evaluate kde upon
-        x_flat = np.r_[rvs[:, 0].min():rvs[:, 0].max():256j]
-        y_flat = np.r_[rvs[:, 1].min():rvs[:, 1].max():256j]
-    else:
-        x_flat = np.r_[0:grid[0]:256j]
-        y_flat = np.r_[0:grid[1]:256j]
-    x, y = np.meshgrid(x_flat, y_flat)
-    grid_coords = np.append(x.reshape(-1, 1), y.reshape(-1, 1), axis=1)
-
-    z = kde(grid_coords.T)
-    z = z.reshape(256, 256)
-    if filled:
-        cont = ax.contourf
-    else:
-        cont = ax.contour
-    cs = cont(x_flat, y_flat, z, *args, **kwargs)
-    return cs
