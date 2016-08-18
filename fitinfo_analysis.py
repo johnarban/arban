@@ -10,6 +10,7 @@ from scipy import ndimage
 from weighted import median as wmedian
 from weighted import quantile as wquantile
 import weightedstats as wstats
+import copy
 
 
 # In[3]:
@@ -104,7 +105,10 @@ def get_av(name, avs = None):
     return av for a given
     source
     '''
-    return avs[np.where(avs[:, 0] == int(name))[0], 1][0]
+    if len(avs)>1:
+        return avs[np.where(avs[:, 0] == int(name))[0], 1][0]
+    else:
+        return avs[0]
 
 
 # In[5]:
@@ -299,7 +303,7 @@ def new_results_final(input_fits, verbose=True, output=True,
     for info in fin:
         param = { k: [] for k in keys }
         if not np.isnan(np.nanmean(info.av)):
-            source.append(info.source)
+            source.append(copy.copy(info))
 
             minchi=info.chi2.min()
             if (scale_chi2) | (keep[0] == 'J'):
@@ -320,7 +324,7 @@ def new_results_final(input_fits, verbose=True, output=True,
 
             nfits=np.sum(stageI)+np.sum(stageII)
             # create lists that contain source properties of interest
-            source.append(info.source)
+            #source.append(info)
             #infos.append(info)
             ndata.append(info.source.n_data)
             av.append(get_av(info.source.name, avs))
