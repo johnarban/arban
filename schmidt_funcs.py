@@ -554,12 +554,12 @@ def emcee_schmidt(x, y, yerr, pos=None, pose=None,
                 return -np.inf
             #pdb.set_trace()
         # Poisson statistics
-        mu = (yerr)**2  # often called lambda = poisson variance for bin x_i
-        x = np.abs(y - mod) # where w calculate the poisson probability
-        logL = np.sum(x * np.log(mu) - mu)# - np.sum(np.log(misc.factorial(x)))
-        return 2*logL + len(theta) * np.log(np.sum(k))
+        #mu = (yerr)**2  # often called lambda = poisson variance for bin x_i
+        #x = np.abs(y - mod) # where w calculate the poisson probability
+        #logL = np.sum(x * np.log(mu) - mu)# - np.sum(np.log(misc.factorial(x)))
+        #return 2*logL + len(theta) * np.log(np.sum(k))
         # Chisqared
-        #return -0.5 * (np.sum((y - mod)**2 * inv_sigma2))#  - 0.5 * 3 * np.log(np.sum(k))
+        return -0.5 * (np.sum((y - mod)**2 * inv_sigma2))#  - 0.5 * 3 * np.log(np.sum(k))
 
     def lnprior(theta):
         if len(theta) == 4:
