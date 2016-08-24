@@ -532,6 +532,10 @@ def lmfit_powerlaw(x, y, yerr, xmin=-np.inf, xmax=np.inf, init=None, maxiter=100
 
 def emcee_schmidt(x, y, yerr, pos=None, pose=None,
                   nwalkers=None, nsteps=None, burnin=200):
+    '''
+    emcee_schmidt provides a convenient wrapper for fitting the schimdt law
+    to binned x,log(y) data. Generally, it fits a normalization and a slope
+    '''
     def model(x, theta):
         '''
         theta = (beta, kappa)
@@ -539,29 +543,32 @@ def emcee_schmidt(x, y, yerr, pos=None, pose=None,
         return np.log(schmidt_law(x, theta))
 
     def lnlike(theta, x, y, yerr):
-        # Chisq statistic
         mod = model(x, theta)
-        inv_sigma2 = 1 / yerr**2
-        if len(theta) == 4:
-            k = (x >= theta[2]) & (x <= theta[3])
-            if np.sum(k)> 1:
-                mod = mod[k]
-                inv_sigma2 = inv_sigma2[k]
-                y = y[k]
-                x = x[k]
-                yerr = yerr[k]
-            else:
-                return -np.inf
+        inv_sigma2 = 1 / yerr**2 
+        # Delete data points that are out of bound
+#        if len(theta) == 4:
+#            k = (x >= theta[2]) & (x <= theta[3])
+#            if np.sum(k)> 1:
+#                mod = mod[k]
+#                inv_sigma2 = inv_sigma2[k]
+#                y = y[k]
+#                x = x[k]
+#                yerr = yerr[k]
+#            else:
+#                return -np.inf
             #pdb.set_trace()
-        # Poisson statistics
+        # Poisson statistics -- not using this
         #mu = (yerr)**2  # often called lambda = poisson variance for bin x_i
         #x = np.abs(y - mod) # where w calculate the poisson probability
         #logL = np.sum(x * np.log(mu) - mu)# - np.sum(np.log(misc.factorial(x)))
         #return 2*logL + len(theta) * np.log(np.sum(k))
-        # Chisqared
+        #######################################################
+        ########## CHI^2 log-likelihood #######################
         return -0.5 * (np.sum((y - mod)**2 * inv_sigma2))#  - 0.5 * 3 * np.log(np.sum(k))
 
     def lnprior(theta):
+        # different priors for different version of
+        # the schmidt law
         if len(theta) == 4:
             beta, kappa, Ak0, Akf = theta
             c3 = 0. <= Ak0 <= 1
@@ -574,13 +581,14 @@ def emcee_schmidt(x, y, yerr, pos=None, pose=None,
             beta, kappa = theta
             c3 = True
             c4 = True
-        c1 = 0 <= beta <= 6
-        c2 = 0 < kappa < 5
+        c1 = 0 <= beta <= 6 # Never run's into this region
+        c2 = 0 < kappa < 5  # Never run's into this region
         if c1 and c2 and c3 and c4:
             return 0.0
         return -np.inf
 
     def lnprob(theta, x, y, yerr):
+        ## update likelihood
         lp = lnprior(theta)
         if not np.isfinite(lp):
             return -np.inf
