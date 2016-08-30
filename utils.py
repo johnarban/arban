@@ -10,11 +10,12 @@ from scipy import stats, special
 import matplotlib.pyplot as plt
 from weighted import quantile
 import george
+from astropy.io import fits
 
 # In[Plot the KDE for a set of x,y values. No weighting]
 # code modified from 
 # http://stackoverflow.com/questions/30145957/plotting-2d-kernel-density-estimation-with-python
-def kdeplot(xp, yp, filled=False, ax=None, grid=None, *args, **kwargs):
+def kdeplot(xp, yp, filled=False, ax=None, grid=None, bw = None, *args, **kwargs):
     if ax is None:
         ax = plt.gca()
     rvs = np.append(xp.reshape((xp.shape[0], 1)),
@@ -22,21 +23,22 @@ def kdeplot(xp, yp, filled=False, ax=None, grid=None, *args, **kwargs):
                     axis=1)
 
     kde = stats.kde.gaussian_kde(rvs.T)
-    kde.covariance_factor = lambda: .3
-    kde._compute_covariance()
+    #kde.covariance_factor = lambda: 0.3
+    #kde._compute_covariance()
+    kde.set_bandwidth(bw)
 
     if grid is None:
         # Regular grid to evaluate kde upon
         x_flat = np.r_[rvs[:, 0].min():rvs[:, 0].max():256j]
         y_flat = np.r_[rvs[:, 1].min():rvs[:, 1].max():256j]
     else:
-        x_flat = np.r_[0:grid[0]:256j]
-        y_flat = np.r_[0:grid[1]:256j]
+        x_flat = np.r_[0:grid[0]:complex(0,grid[0])]
+        y_flat = np.r_[0:grid[1]:complex(0,grid[1])]
     x, y = np.meshgrid(x_flat, y_flat)
     grid_coords = np.append(x.reshape(-1, 1), y.reshape(-1, 1), axis=1)
 
     z = kde(grid_coords.T)
-    z = z.reshape(256, 256)
+    z = z.reshape(x.shape[0], x.shape[1])
     if filled:
         cont = ax.contourf
     else:
@@ -52,6 +54,53 @@ def table_to_array(table):
 
 def t2a(table):
     return table_to_array(table)
+
+# In[Discrete Colorbar]
+def discrete_cmap(colormap, N_colors):
+    print 'Not doing anything yet'
+    return colormap
+
+# In[WCS axis labels]
+def wcsaxis(wcs, N=6, ax=None):
+    if ax is None:
+        ax = plt.gca()
+    naxis1 = wcs['NAXIS1']
+    naxis2 = wcs['NAXIS2']
+    crpix1 = wcs['CRPIX1']
+    crpix2 = wcs['CRPIX2']
+    crval1 = wcs['CRVAL1']
+    crval2 = wcs['CRVAL2']
+    cdelt1 = wcs['CDELT1']
+    cdelt2 = wcs['CDELT2']
+
+    offset = (naxis1/N)/5
+    x_tick_pix = np.linspace(offset,naxis1-offset,N) #generate 6 values from 0 to naxis1 (150)
+    x_tick_label = (x_tick_pix - crpix1)*cdelt1 + crval1
+
+    y_tick_pix = np.linspace(offset,naxis2-offset,N) #generate 6 values from 0 to naxis2 (100)
+    y_tick_label = (x_tick_pix - crpix2)*cdelt2 + crval2
+    
+    plt.xticks(x_tick_pix, ['%0.2f'%i for i in x_tick_label])
+    plt.yticks(y_tick_pix, ['%0.2f'%i for i in y_tick_label])
+    
+    if wcs['CTYPE1'][0].lower() == 'g':
+        plt.xlabel('Galactic Longitude (l)')
+        plt.ylabel('Galactic Latitude (b)')
+    else:
+        plt.xlabel('Right Ascension (J2000)')
+        plt.ylabel('Declination (J2000)')
+    
+    return ax
+    
+
+# In[ writefits]
+def writefits(filename, data, wcs = None,clobber=True):
+    if wcs is not None:
+        wcs = wcs.to_header()
+    hdu = fits.PrimaryHDU(data,header=wcs)
+    hdu.writeto(filename,clobber=clobber)
+    return hdu
+    
 
 
 # In[ Median SEDs ]

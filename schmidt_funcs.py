@@ -433,11 +433,11 @@ def surfd(X, Xmap, bins, Xerr = None, Xmaperr = None, boot=False, scale=1., retu
     '''
     # get dn/dx
     if boot:
-        n = np.histogram(bootstrap(X,Xerr,smooth=True), bins = bins)[0]
-        s = np.histogram(bootstrap(Xmap,Xmaperr,smooth=True), bins = bins)[0] * scale
+        n = np.histogram(bootstrap(X,Xerr,smooth=True), bins = bins, range=(bins.min(),bins.max()))[0]
+        s = np.histogram(bootstrap(Xmap,Xmaperr,smooth=True), bins = bins, range=(bins.min(),bins.max()))[0] * scale
     else:
-        n = np.histogram(X, bins = bins)[0]
-        s = np.histogram(Xmap, bins = bins)[0] * scale
+        n = np.histogram(X, bins = bins, range=(bins.min(),bins.max()))[0]
+        s = np.histogram(Xmap, bins = bins, range=(bins.min(),bins.max()))[0] * scale
 
     if not return_err:
         return n / s
@@ -511,7 +511,7 @@ def fit_lmfit_schmidt(x, y, yerr, init=None):
     m_init = model()
     fit = LevMarLSQFitter()
     m = fit(m_init, x[keep], np.log(y[keep]), weights=(yerr / y)[keep]**(-2.), maxiter=1000000)
-    var_alpha, var_kappa = fit.fit_info['param_cov'].diagonal()
+    #var_alpha, var_kappa = fit.fit_info['param_cov'].diagonal()
     #print np.sqrt(var_alpha), np.sqrt(var_kappa)
 
     return m.parameters
