@@ -108,7 +108,7 @@ def writefits(filename, data, wcs = None,clobber=True):
 class MedianSED():
 
     # Initilize class
-    def __init__(self, sed, wavelength, error = [None], valid = [None], which = [None]):
+    def __init__(self, sed, wavelength, error = [None], valid = [None], which = [None], nl = [None]):
         
         
         if isinstance(sed, type([]) ):
@@ -123,15 +123,21 @@ class MedianSED():
         if isinstance(valid, type([]) ):
             #print 'Fixed valid type'
             valid = np.asarray(valid)
+        if len(nl) == 1:
+            #print 'Fixed noorm_limits'
+            self.nl = np.asarray([20,25])
+            
+        elif isinstance(nl,type([]) ):
+            self.nl = np.sort(np.asarray(nl))
         
         
-        self.sort = np.delete(np.argsort(wavelength),[0,3]) # data wrangling #rid of W1, W2  
+        self.sort = np.argsort(wavelength) # data wrangling #rid of W1, W2  
         #self.sort = np.argsort(wavelength) 
         self.wavelength = wavelength[self.sort]
         self.wav = self.wavelength # alias
         self.frequency = 2.99792458e-14/self.wavelength
         self.nu = self.frequency
-        
+    
         if error[0] is not None:
             self.error = error[:,self.sort] # sort error
         else:
@@ -157,7 +163,7 @@ class MedianSED():
    
     def normalization_factor(self):
         x = self.wavelength
-        norm_region = np.where((x>20) & (x<25))[0]
+        norm_region = np.where((x>self.nl[0]) & (x<self.nl[1]))[0]
         #print x[norm_region]
         norm = np.nanmean(self.sed[:,norm_region],axis=1) #[7-13) are 22 22 24 24 70 70
         #norm = np.nanmean(self.sed[:,3:4]/self.wav[3:4],axis=1) 
@@ -176,6 +182,7 @@ class MedianSED():
                 try:
                     quantile_sed.append(quantile(vs[keep[:,i],i],self.weights[keep[:,i],i], q))
                 except:
+                    print 'Error:  computing un-weighted quantile'
                     quantile_sed.append(np.nanpercentile(vs[keep[:,i],i],q*100))
             #quantile_sed = np.asarray([quantile(vs[keep[:,i],i],self.weights[keep[:,i],i], q) for i in xrange(len(self.wav))])
             return np.asarray(quantile_sed)
@@ -215,14 +222,15 @@ class MedianSED():
     def GP_median_sed(self,kernel = george.kernels.ExpSquaredKernel(3)):
         x = self.wav
         y = self.median
-        yerr = np.nanmean(np.abs(self.normalized_sed - self.median),axis=0)
-        yerr = np.sqrt(np.nansum(self.normalized_error**2,axis=0))
-        t = np.logspace(np.log10(2),np.log10(200),30)
+        #yerr = np.nanmean(np.abs(self.normalized_sed - self.median),axis=0)
+        #yerr = np.sqrt(np.nansum(self.normalized_error**2,axis=0))
+        yerr = np.nanmedian(np.abs(self.normalized_error),axis=0)
+        t = np.logspace(np.log10(.1),np.log10(200),30)
         gp = george.GP(kernel)
         gp.compute(np.log10(x),yerr/y)
         mu, cov = gp.predict(np.log(y),np.log10(t))
         std = np.sqrt(np.diag(cov))
-        return t, np.exp(mu), np.exp(std), gp
+        return t, np.exp(mu), np.exp(std)
     
     
     def plot_gp(self, ax = None):
