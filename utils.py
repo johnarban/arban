@@ -6,11 +6,12 @@ Created on Tue Jul  5 18:11:33 2016
 """
 
 import numpy as np
-from scipy import stats, special
+from scipy import stats, special, interpolate
 import matplotlib.pyplot as plt
 from weighted import quantile
 import george
 from astropy.io import fits
+import corner #dfm corner.py needed for quantiles
 
 # In[Plot the KDE for a set of x,y values. No weighting]
 # code modified from 
@@ -101,7 +102,36 @@ def writefits(filename, data, wcs = None,clobber=True):
     hdu.writeto(filename,clobber=clobber)
     return hdu
     
+def grid_data(x,y,z,nxy=(512,512), interp='linear', plot = False,\
+             cmap='Greys',levels=None, sigmas = None, filled = False):
+    '''
+    stick x,y,z data on a grid and return
+    XX, YY, ZZ
+    '''
+    xmin,xmax = x.min(),x.max()
+    ymin,ymax = y.min(),y.max()
+    nx,ny = nxy
+    xi = np.linspace(xmin, xmax, nx)
+    yi = np.linspace(ymin, ymax, ny)
+    xi, yi = np.meshgrid(xi, yi)
 
+    zi = interpolate.griddata((x,y), z, (xi, yi),method=interp)
+    
+    if plot:
+        if levels is None:
+            if sigmas is None:
+                sigmas = np.arange(0.5, 3.1, 0.5)
+            else:
+                sigmas = np.atleast_1d(sigmas)
+            levels = (1.0 - np.exp(-0.5 * sigmas ** 2))
+        ax = plt.gca()
+        if filled:
+            cont = ax.contourf
+        else:
+            cont = ax.contour
+        cont(xi,yi,zi/np.max(zi[np.isfinite(zi)]),cmap=cmap,levels=levels)
+    
+    return xi, yi, zi
 
 # In[ Median SEDs ]
 

@@ -492,42 +492,27 @@ def schmidt_law(Ak, theta):
         return kappa * (Ak ** beta)
     elif len(theta) == 3:
         beta, kappa, Ak0 = theta
-        post = Heaviside(Ak - Ak0) * kappa * (Ak ** beta)
-        post[Ak < Ak0] = 0#np.nan # kappa * (Ak0 ** beta)
-        return post
-    elif len(theta) == 4:
-        beta, kappa, Ak0, Akf = theta
-        k = (Ak >= Ak0) & (Ak <= Akf)
-        post = kappa * (Ak ** beta)
-        post[~k] = np.nan
-        return post
+        sfr = Heaviside(Ak - Ak0) * kappa * (Ak ** beta)
+        sfr[Ak < Ak0] = 0#np.nan # kappa * (Ak0 ** beta)
+        return sfr
 
-
-def fit_lmfit_schmidt(x, y, yerr, init=None):
-    @custom_model
-    def model(x, beta=init[0], kappa=init[1]):
-        return np.log(kappa * (x ** beta))
-    keep = np.isfinite(1. / y) & np.isfinite(1. / yerr)
-    m_init = model()
-    fit = LevMarLSQFitter()
-    m = fit(m_init, x[keep], np.log(y[keep]), weights=(yerr / y)[keep]**(-2.), maxiter=1000000)
-    #var_alpha, var_kappa = fit.fit_info['param_cov'].diagonal()
-    #print np.sqrt(var_alpha), np.sqrt(var_kappa)
-
-    return m.parameters
 
 
 def lmfit_powerlaw(x, y, yerr, xmin=-np.inf, xmax=np.inf, init=None, maxiter=1000000):
     @custom_model
     def model(x, beta=init[0], kappa=init[1]):
-        return np.log(kappa * (x ** beta))
+        return np.log(kappa * (np.exp(x) ** beta))
     keep = np.isfinite(1. / y) & np.isfinite(1. / yerr) & (x >= xmin) & (x <= xmax)
     m_init = model()
     fit = LevMarLSQFitter()
     weights = (yerr / y)[keep]**(-2.)
-    m = fit(m_init, x[keep], np.log(y[keep]), maxiter=maxiter)
+    m = fit(m_init, np.log(x[keep]), np.log(y[keep]), maxiter=maxiter)
 
     return m, fit
+
+def fit_lmfit_schmidt(x, y, yerr, init=None):
+    m,fit = lmfit_powerlaw(x,y,yerr,init=init)
+    return m.parameters
 
 
 def emcee_schmidt(x, y, yerr, pos=None, pose=None,
@@ -540,28 +525,15 @@ def emcee_schmidt(x, y, yerr, pos=None, pose=None,
         '''
         theta = (beta, kappa)
         '''
-        return np.log(schmidt_law(x, theta))
+        return np.log(schmidt_law(np.exp(x), theta))
 
     def lnlike(theta, x, y, yerr):
         mod = model(x, theta)
         inv_sigma2 = 1 / yerr**2 
-        # Delete data points that are out of bound
-#        if len(theta) == 4:
-#            k = (x >= theta[2]) & (x <= theta[3])
-#            if np.sum(k)> 1:
-#                mod = mod[k]
-#                inv_sigma2 = inv_sigma2[k]
-#                y = y[k]
-#                x = x[k]
-#                yerr = yerr[k]
-#            else:
-#                return -np.inf
-            #pdb.set_trace()
         # Poisson statistics -- not using this
         #mu = (yerr)**2  # often called lambda = poisson variance for bin x_i
-        #x = np.abs(y - mod) # where w calculate the poisson probability
-        #logL = np.sum(x * np.log(mu) - mu)# - np.sum(np.log(misc.factorial(x)))
-        #return 2*logL + len(theta) * np.log(np.sum(k))
+        #resid = np.abs(y - mod) # where w calculate the poisson probability
+        #return np.sum(resid * np.log(mu) - mu) - np.sum(np.log(misc.factorial(resid)))
         #######################################################
         ########## CHI^2 log-likelihood #######################
         return -0.5 * (np.sum((y - mod)**2 * inv_sigma2))#  - 0.5 * 3 * np.log(np.sum(k))
@@ -569,11 +541,7 @@ def emcee_schmidt(x, y, yerr, pos=None, pose=None,
     def lnprior(theta):
         # different priors for different version of
         # the schmidt law
-        if len(theta) == 4:
-            beta, kappa, Ak0, Akf = theta
-            c3 = 0. <= Ak0 <= 1
-            c4 = 1. <= Akf <= 10.
-        elif len(theta) == 3:
+        if len(theta) == 3:
             beta, kappa, Ak0 = theta
             c3 = 0. < Ak0 <= 5.
             c4 = True
@@ -596,7 +564,7 @@ def emcee_schmidt(x, y, yerr, pos=None, pose=None,
 
     ndim, nwalkers = len(pos), nwalkers
 
-    pos = [np.array(pos) + np.array(pose) * 2 *
+    pos = [np.array(pos) + np.array(pose) * 0.5 *
            (0.5 - np.random.rand(ndim)) for i in range(nwalkers)]
 
     sampler = emcee.EnsembleSampler(
@@ -681,7 +649,7 @@ def fit(bins, samp, samperr, maps, mapserr, scale=1., sampler=None, log=False,
     # pdb.set_trace()
     if sampler is None:
         print 'Sampler autocorrelation times . . .'
-        sampler, theta, theta_std = emcee_schmidt(x, np.log(y), yerr / y,
+        sampler, theta, theta_std = emcee_schmidt(np.log(x), np.log(y), yerr/y,
                                                   pos=pos, pose=pose,
                                                   nwalkers=nwalkers,
                                                   nsteps=nsteps, burnin=burnin)
@@ -705,7 +673,14 @@ def schmidt_results_plots(sampler, model, x, y, yerr, burnin=200, akmap=None,
         None
     # Get input values
     # x, y, yerr = sampler.args
-    samples = sampler.chain[:, burnin:, :].reshape((-1, sampler.dim))
+    if hasattr(sampler,'__getitem__'):
+        chain = sampler
+        dim = chain.shape[-1]
+    else:
+        chain = sampler.chain
+        dim = sampler.dim
+    
+    samples = chain[:, burnin:, :].reshape((-1, dim))
     # # Print out final values # #
     theta_mcmc = np.percentile(samples, [16, 50, 84], axis=0).T  # Get percentiles for each parameter
     n_params = len(theta_mcmc[:,1])
@@ -749,23 +724,52 @@ def schmidt_results_plots(sampler, model, x, y, yerr, burnin=200, akmap=None,
 
     return plt.gca()
 
+def flatchain(chain):
+    return chain.reshape((-1,chain.shape[-1]))
 
-def plot_walkers(sampler):
+def norm_chain(chain, axis=0):
+    std = np.std(flatchain(chain), axis=axis)
+    med = np.median(flatchain(chain), axis=axis)
+    return (chain-med)/std
+
+def plot_walkers(sampler,limits = None, bad = None):
     '''
     sampler :  emcee Sampler class
     '''
-    ndim = sampler.dim
-    plt.figure(figsize=(8 * ndim, 6 * ndim))
-    for walk in sampler.chain[:, :, :]:
+    
+    if hasattr(sampler,'__getitem__'):
+        chain = sampler
+        ndim = chain.shape[-1]
+    else:
+        chain = sampler.chain
+        ndim = sampler.dim
+    
+    fig = plt.figure(figsize=(8 * ndim, 4 * ndim))
+
+    if hasattr(limits,'__getitem__'):
+        limits += [None] * (3-len(limits))
+        slices = slice(limits[0],limits[1],limits[2])  
+    else:
+        slices = slice(None,limits,None)
+        
+    
+    for w,walk in enumerate(chain[:,slices,:]):
+        if bad is None:
+            color = 'k'
+        elif bad[w]:
+            color = 'r'
+        else:
+            color = 'k'
         for p, param in enumerate(walk.T):
             ax = plt.subplot(ndim, 1, p + 1)
-            ax.plot(param[:2000], 'k', alpha=.25, lw=0.5)
+            ax.plot(param[:2000], color, alpha=.25, lw=0.5)
             # ax.set_ylim(param.min()*0.5,param.max()*1.5)
             # ax.semilogy()
     plt.tight_layout()
+    return fig
 
 
 def tester():
-    print 'hi yall'
+    print 'hi ya\'ll'
 
 
