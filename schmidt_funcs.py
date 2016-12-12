@@ -240,12 +240,17 @@ def get_ext(extmap, errmap, extwcs, ra, de):
     err = []
     for i in range(len(np.array(xp))):
         try:
-            ext.append(extmap[yp[i], xp[i]])
-            err.append(errmap[yp[i], xp[i]])
+            ext.append(extmap[yp[int(round(i))], xp[int(round(i))]])
+            if errmap is not None:
+                err.append(errmap[yp[int(round(i))], xp[int(round(i))]])
         except IndexError:
             ext.append(np.nan)
-            err.append(np.nan)
-    return np.array(ext), np.array(err)
+            if errmap is not None:
+                err.append(np.nan)
+    if errmap is not None:
+        return np.array(ext), np.array(err)
+    else:
+        return np.array(ext), None
 
 
 def pdf(values, bins):
@@ -358,6 +363,28 @@ def diff_area_function(extmap, bins):
     dsdx = -np.diff(s) / np.diff(bins)
     return dsdx, avg(bins)
 
+def log_diff_area_function(extmap, bins):
+    '''
+    See pdf2
+    '''
+    s, bins = diff_area_function(extmap, bins)
+    g=s>0
+    dlnsdlnx = np.diff(np.log(s[g])) / np.diff(np.log(bins[g]))
+    return dlnsdlnx, avg(bins[g])
+
+def mass_function(values, bins, scale=1, aktomassd=183):
+    '''
+    M(>Ak), mass weighted complimentary cdf
+    '''
+    if hasattr(bins,'__getitem__'):
+        range=(np.nanmin(bins),np.nanmax(bins))
+    else:
+        range = None
+    
+    h, bins = np.histogram(values, bins=bins, range=range, density=False, weights=values*aktomassd*scale)
+    c = np.cumsum(h).astype(float)
+    return c.max() - c, bins
+    
 
 def hist(values, bins, err=False, density=False, **kwargs):
     '''

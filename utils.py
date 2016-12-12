@@ -62,7 +62,7 @@ def discrete_cmap(colormap, N_colors):
     return colormap
 
 # In[WCS axis labels]
-def wcsaxis(wcs, N=6, ax=None):
+def wcsaxis(wcs, N=6, ax=None,fmt='%0.2f'):
     if ax is None:
         ax = plt.gca()
     naxis1 = wcs['NAXIS1']
@@ -71,8 +71,12 @@ def wcsaxis(wcs, N=6, ax=None):
     crpix2 = wcs['CRPIX2']
     crval1 = wcs['CRVAL1']
     crval2 = wcs['CRVAL2']
-    cdelt1 = wcs['CDELT1']
-    cdelt2 = wcs['CDELT2']
+    try:
+        cdelt1 = wcs['CDELT1']
+        cdelt2 = wcs['CDELT2']
+    except:
+        cdelt1 = wcs['CD1_1']
+        cdelt2 = wcs['CD2_2']
 
     offset = (naxis1/N)/5
     x_tick_pix = np.linspace(offset,naxis1-offset,N) #generate 6 values from 0 to naxis1 (150)
@@ -81,8 +85,8 @@ def wcsaxis(wcs, N=6, ax=None):
     y_tick_pix = np.linspace(offset,naxis2-offset,N) #generate 6 values from 0 to naxis2 (100)
     y_tick_label = (x_tick_pix - crpix2)*cdelt2 + crval2
     
-    plt.xticks(x_tick_pix, ['%0.2f'%i for i in x_tick_label])
-    plt.yticks(y_tick_pix, ['%0.2f'%i for i in y_tick_label])
+    plt.xticks(x_tick_pix, [fmt%i for i in x_tick_label])
+    plt.yticks(y_tick_pix, [fmt%i for i in y_tick_label])
     
     if wcs['CTYPE1'][0].lower() == 'g':
         plt.xlabel('Galactic Longitude (l)')

@@ -436,4 +436,6 @@ def new_results_final(input_fits, verbose=True, output=True,
 
     return  output_table,source
 
-
+def get_sed():
+    # stub
+    return None
