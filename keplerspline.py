@@ -294,30 +294,3 @@ def detrend_iter(k2dataset, delta, k = 4, low = 3, high = 3):
         #plt.plot(x[mask],c_trend[newmask])
     
     return t, c_trend, mask
-    
-    
-        
-    
-    
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
