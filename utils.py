@@ -47,6 +47,10 @@ def kdeplot(xp, yp, filled=False, ax=None, grid=None, bw = None, *args, **kwargs
     cs = cont(x_flat, y_flat, z, *args, **kwargs)
     return cs
 
+def sigconf1d(n):
+    cdf = (1/2.)*(1+special.erf(n/np.sqrt(2)))
+    return (1-cdf)*100,100* cdf,100*special.erf(n/np.sqrt(2))
+
 
 # In[ Convert tables to arrays]
 def table_to_array(table):

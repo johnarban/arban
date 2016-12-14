@@ -153,6 +153,22 @@ def avg(arr, n=2):
         return np.power(10., mavg(np.log10(arr), n=n))
         # return mgeo(arr, n=n) # equivalent methods, only easier
 
+def shift_bins(arr,phase=0,nonneg=False):
+    # assume original bins are nonneg
+    if phase != 0:
+        diff = np.diff(arr)
+        if np.allclose(diff,diff[::-1]):
+            diff = diff[0]
+            arr = arr + phase*diff
+            #pre = arr[0] + phase*diff
+            return arr
+        else:
+            arr = np.log10(arr)
+            diff = np.diff(arr)[0]
+            arr = arr + phase * diff
+            return np.power(10.,arr)
+    else:
+        return arr
 
 def llspace(xmin, xmax, n=None, log=False, dx=None, dex=None):
     '''
@@ -355,13 +371,13 @@ def area_function(extmap, bins):
     return c.max() - c, bins
 
 
-def diff_area_function(extmap, bins):
+def diff_area_function(extmap, bins,scale=1):
     '''
     See pdf2
     '''
     s, bins = area_function(extmap, bins)
     dsdx = -np.diff(s) / np.diff(bins)
-    return dsdx, avg(bins)
+    return dsdx*scale, avg(bins)
 
 def log_diff_area_function(extmap, bins):
     '''
@@ -450,6 +466,11 @@ def alpha_ML(data, data_min):
     # error = (alpha -1 )/np.sqrt(len(data))
     return alpha  # , error
 
+def sigconf1d(n):
+    cdf = (1/2.)*(1+special.erf(n/np.sqrt(2)))
+    return (1-cdf)*100,100* cdf,100*special.erf(n/np.sqrt(2))
+    
+    
 
 def surfd(X, Xmap, bins, Xerr = None, Xmaperr = None, boot=False, scale=1., return_err=False, smooth=False):
     '''
@@ -524,7 +545,6 @@ def schmidt_law(Ak, theta):
         return sfr
 
 
-
 def lmfit_powerlaw(x, y, yerr, xmin=-np.inf, xmax=np.inf, init=None, maxiter=1000000):
     @custom_model
     def model(x, beta=init[0], kappa=init[1]):
@@ -534,8 +554,8 @@ def lmfit_powerlaw(x, y, yerr, xmin=-np.inf, xmax=np.inf, init=None, maxiter=100
     fit = LevMarLSQFitter()
     weights = (yerr / y)[keep]**(-2.)
     m = fit(m_init, np.log(x[keep]), np.log(y[keep]), maxiter=maxiter)
-
     return m, fit
+
 
 def fit_lmfit_schmidt(x, y, yerr, init=None):
     m,fit = lmfit_powerlaw(x,y,yerr,init=init)
@@ -543,7 +563,7 @@ def fit_lmfit_schmidt(x, y, yerr, init=None):
 
 
 def emcee_schmidt(x, y, yerr, pos=None, pose=None,
-                  nwalkers=None, nsteps=None, burnin=200):
+                  nwalkers=None, nsteps=None, burnin=200,verbose=True):
     '''
     emcee_schmidt provides a convenient wrapper for fitting the schimdt law
     to binned x,log(y) data. Generally, it fits a normalization and a slope
@@ -552,10 +572,11 @@ def emcee_schmidt(x, y, yerr, pos=None, pose=None,
         '''
         theta = (beta, kappa)
         '''
-        return np.log(schmidt_law(np.exp(x), theta))
+        return np.log(schmidt_law(x, theta))
 
     def lnlike(theta, x, y, yerr):
         mod = model(x, theta)
+
         inv_sigma2 = 1 / yerr**2 
         # Poisson statistics -- not using this
         #mu = (yerr)**2  # often called lambda = poisson variance for bin x_i
@@ -576,8 +597,8 @@ def emcee_schmidt(x, y, yerr, pos=None, pose=None,
             beta, kappa = theta
             c3 = True
             c4 = True
-        c1 = 0 <= beta <= 6 # Never run's into this region
-        c2 = 0 < kappa < 5  # Never run's into this region
+        c1 = 0 <= beta <= 6# Never run's into this region
+        c2 = 0 <= kappa  # Never run's into this region
         if c1 and c2 and c3 and c4:
             return 0.0
         return -np.inf
@@ -590,10 +611,10 @@ def emcee_schmidt(x, y, yerr, pos=None, pose=None,
         return lp + lnlike(theta, x, y, yerr)
 
     ndim, nwalkers = len(pos), nwalkers
-
+    
     pos = [np.array(pos) + np.array(pose) * 0.5 *
            (0.5 - np.random.rand(ndim)) for i in range(nwalkers)]
-
+    
     sampler = emcee.EnsembleSampler(
         nwalkers, ndim, lnprob, args=(x, y, yerr))
 
@@ -606,12 +627,13 @@ def emcee_schmidt(x, y, yerr, pos=None, pose=None,
     # # Print out final values # #
     theta_mcmc = np.percentile(samples, [16, 50, 84], axis=0).T
 
-    print sampler.acor
+    if verbose: print sampler.acor
 
-    for i, item in enumerate(theta_mcmc):
-        j = ['beta', 'kappa', 'A_{K,0}', 'A_{K,f}']
-        inserts = (j[i], item[1], item[2] - item[1], item[1] - item[0])
-        print '%s = %0.2f (+%0.2f,-%0.2f)' % inserts
+    if verbose:
+        for i, item in enumerate(theta_mcmc):
+            j = ['beta', 'kappa', 'A_{K,0}', 'A_{K,f}']
+            inserts = (j[i], item[1], item[2] - item[1], item[1] - item[0])
+            print '%s = %0.2f (+%0.2f,-%0.2f)' % inserts
 
     return sampler, np.median(samples, axis=0), np.std(samples, axis=0)
 
@@ -619,7 +641,7 @@ def emcee_schmidt(x, y, yerr, pos=None, pose=None,
 
 def fit(bins, samp, samperr, maps, mapserr, scale=1., sampler=None, log=False,
         pos=None, pose=None, nwalkers=100, nsteps=1e4, boot=1000, burnin=200,
-         threshold=False, threshold2=False):
+         threshold=False, threshold2=False,verbose=True):
     '''
     # # # A Schmidt Law fitting Function using EMCEE by D.F.M.
     fit(bins, samp, samperr, maps, mapserr, scale=1.,
@@ -633,7 +655,7 @@ def fit(bins, samp, samperr, maps, mapserr, scale=1., sampler=None, log=False,
     pose : initial spread of walkers
     '''
 
-    print 'Hi!. It\'s hammer time...'
+    #print 'Hi!. It\'s hammer time...'
 
     # x values are bin midpoints
     x = avg(bins)  # assume if log=True, then bins are already log
@@ -645,13 +667,27 @@ def fit(bins, samp, samperr, maps, mapserr, scale=1., sampler=None, log=False,
     #    maps = np.log10(maps)
     #    bins = np.log10(bins)  # because bins doesn't get used again after surfd
     y, yerr = surfd(samp, maps, bins, scale=scale, return_err=True)
-
-    nonzero = np.isfinite(1. / y) & np.isfinite(yerr)
+    ###########################################+
+    ###### ADDED FOR SHIFTING EXPERIMENT ######+
+    ###########################################+
+    
+    bins2 = shift_bins(bins,0.5)
+    bin
+    x2 = avg(bins2)
+    y2, yerr2 = surfd(samp, maps, bins2, scale=scale, return_err=True)
+    concatx = np.concatenate((x,x2))
+    concaty = np.concatenate((y,y2))
+    concatyerr = np.concatenate((yerr,yerr2))
+    srt = np.argsort(concatx)
+    x = concatx[srt]
+    y = concaty[srt]
+    yerr = concatyerr[srt]
+    
+    nonzero = np.isfinite(1. / y) & np.isfinite(yerr) & np.isfinite(1./yerr)
 
     y = y[nonzero]
     yerr = yerr[nonzero]
     x = x[nonzero]
-
     # initialize walker positions and walker bundle size
     init = alpha(y, x, return_kappa=True, cov=True)
     if pos is None:
@@ -669,17 +705,19 @@ def fit(bins, samp, samperr, maps, mapserr, scale=1., sampler=None, log=False,
         pose = pose + (.5,)
     #print pos
     #print pose
+    pos = np.asarray(pos)
+    pose = .1*pos#np.asarray(pose)
 
     # This function only fits sources, it doesn't plot, so don't pass
     # and emcee sampler type. it will spit it back out
     # # # # # # # RUN EMCEE # # # # # # #
     # pdb.set_trace()
     if sampler is None:
-        print 'Sampler autocorrelation times . . .'
-        sampler, theta, theta_std = emcee_schmidt(np.log(x), np.log(y), yerr/y,
+        if verbose: print 'Sampler autocorrelation times . . .'
+        sampler, theta, theta_std = emcee_schmidt(x, np.log(y), yerr/y,
                                                   pos=pos, pose=pose,
                                                   nwalkers=nwalkers,
-                                                  nsteps=nsteps, burnin=burnin)
+                                                  nsteps=nsteps, burnin=burnin,verbose=verbose)
     else:
         print 'Next time don\'t give me a ' + str(type(sampler)) + '.'
 
