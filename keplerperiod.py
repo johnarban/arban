@@ -79,7 +79,7 @@ def scargle_fast(t,c,fmin=None,fmax=None,freq=None,norm='psd'):
     return px,nu
 
 
-def period_analysis(t, f, mask = None, dft = True, scargle = True, scipy = False, phase = False, fmin = None, fmax = None):
+def period_analysis(t, f, mask = None, dft = True, scargle = True, scipy = False, phase = False, fmin = None, fmax = None,lsfreq=None):
     
     if mask is None:
         mask = np.full(t.shape,True,dtype=np.bool)
@@ -97,7 +97,7 @@ def period_analysis(t, f, mask = None, dft = True, scargle = True, scipy = False
             ret = ret + (fft,np.angle(fft),fftfreq)
 
     if scargle:
-        lmscrgl,lmsfreq = scargle_fast(t[mask],f[mask],fmin=fmin,fmax=fmax)
+        lmscrgl,lmsfreq = scargle_fast(t[mask],f[mask],fmin=fmin,fmax=fmax,freq=lsfreq)
         ret = ret + (lmscrgl, lmsfreq)
     
     if scipy:
