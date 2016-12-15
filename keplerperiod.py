@@ -53,7 +53,21 @@ def scargle_slow(t,c):
     period = 1./nu
                 
     return px,period
+ 
+def lsfreq(n0,tmax,fmin=None,fmax=None,freq=None):
+    horne = -6.363 + 1.93*n0 + 0.00098*n0**2
+    nfreq = int(horne)
+    if fmin is None:
+        fmin = 1./tmax
+    if fmax is None:
+        fmax = n0 / (2 * tmax)
     
+    if freq is None:
+        nu = (fmin+(fmax-fmin)*np.arange(nfreq)/(nfreq -1.))
+    else:
+        nu=freq
+   return freq
+   
 def scargle_fast(t,c,fmin=None,fmax=None,freq=None,norm='psd'):
     """
     Lomb-Scargle periodogram using 
