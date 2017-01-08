@@ -252,7 +252,18 @@ def write_val(*nums):
 
 
 # In[9]:
+def open_fitinfo(input_fits):
+    fin = FitInfoFile(input_fits, 'r')
+    t = load_parameter_table(fin.meta.model_dir)
+    t['MODEL_NAME'] = np.char.strip(t['MODEL_NAME'])
+    t = append_menv(t)
+    t.sort('MODEL_NAME')
+    source = []
+    for info in fin:
+        source.append(info)
+    return fin, source
 
+# In[10]
 def new_results_final(input_fits, verbose=True, output=True,
                 av_file=None, keep=('D', 1), convert_from_ak = True,
                 scale_chi2=True,fname='',prot_only=False, ratio=0.05):
@@ -295,6 +306,7 @@ def new_results_final(input_fits, verbose=True, output=True,
             fname = input_fits[:-8] + '_out_%s%i_%s.md'%(keep[0],keep[1],fname)
 
         fout = open(fname , 'w')
+        fout.write("source file: %s"%input_fits)
         fout.write("| Source | Class |  $\chi^2_{best}$ |  $N_{data}$ |  $N_{fits}$ | $N_{P}$ | $N_{D}$ | $M\_{env}/M\_{\\star}$ ($\\times 10^{-2}$) |       | $\\dot{M}/M_{\\star}$ ($\\times 10^{-6}$) |       | $M_{\\star}$ |       |\n")
         fout.write("|:------:|:-----:|:----------------:|:-----------:|:-----------:|:-------:|:-------:|:------------------------------------------:|:-----:|:-----------------------------------------:|:-----:|:------------:|:-----:|\n")
         fout.write("|        |       |                  |             |             |         |         |       Median                               | Range |      Median                               | Range |  Median      | Range |\n")
