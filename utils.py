@@ -4,15 +4,19 @@ Created on Tue Jul  5 18:11:33 2016
 
 @author: johnlewisiii
 """
-
+import os,sys
 import numpy as np
 from scipy import stats, special, interpolate
 import matplotlib.pyplot as plt
 from weighted import quantile
-import george
 from astropy.io import fits
-import corner #dfm corner.py needed for quantiles
+from astropy.table import Table
 
+__location__ = os.path.realpath(
+    os.path.join(os.getcwd(), os.path.dirname(__file__)))
+    
+__filtertable__ = Table.read(os.path.join(__location__,'FilterSpecs.tsv'),format='ascii')
+    
 # Plot the KDE for a set of x,y values. No weighting
 # code modified from 
 # http://stackoverflow.com/questions/30145957/plotting-2d-kernel-density-estimation-with-python
@@ -144,7 +148,7 @@ def grid_data(x,y,z,nxy=(512,512), interp='linear', plot = False,\
 
 # To make this robust need a disambiguation table
 # for filter names, or a decision tree to disamb.
-def convert_flux(mag=None,emag=None,filter=None,return_wavelength=False):
+def convert_flux(mag=None,emag=None,filt=None,return_wavelength=False):
     """"Return flux for a given magnitude/filter combo
     
     Input:
@@ -152,29 +156,38 @@ def convert_flux(mag=None,emag=None,filter=None,return_wavelength=False):
     filter -- either filter zeropoint or filer name
     """
     
-    if mag is None or filter is None:
+    if mag is None or filt is None:
         print 'List of filters and filter properties'
-        tab = Table.read('FilterSpecs.tsv',format='ascii')
-        tab.pprint()
+        __filtertable__.pprint(max_lines=len(__filtertable__)+3)
         return None
         
     
-    if not isinstance(filter,float):
-        tab = Table.read('FilterSpecs.tsv',format='ascii')
+    if not isinstance(filt,float):
+        tab = __filtertable__
         tab['fname'] = [s.lower() for s in tab['fname']]
-        f0 = tab['F0_Jy'][np.where(filter.lower() in tab['fname'])][0]
+        if not filt.lower() in tab['fname']:
+            print 'Filter %s not found'%filt.lower()
+            print 'Please select one of the following'
+            print tab['fname'].data
+            filt = input('Include quotes in answer (example (\'johnsonK\')): ')
+        
+        f0 = tab['F0_Jy'][np.where(filt.lower() == tab['fname'])][0]
     else:
-        f0 = filter
+        f0 = filt
     
     flux = f0 * 10.**(-mag/2.5)
     
     if emag is not None:
         eflux = 1.08574 * emag * flux
-        
-    if return_wavelength:
-        return flux, eflux, tab['Wavelength'][np.where(filter.lower() in tab['fname'])][0]
+        if return_wavelength:
+            return flux, eflux, tab['Wavelength'][np.where(filt.lower() == tab['fname'])]
+        else:
+            return flux, eflux
     else:
-        return flux, eflux
+        if return_wavelength:
+            return flux, tab['Wavelength'][np.where(filt.lower() == tab['fname'])][0]
+        else:
+            return flux
     
     
     
