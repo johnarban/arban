@@ -1,21 +1,68 @@
-import glob
-import os,sys
-import fitsio
+#import glob
+#import os,sys
+#import fitsio
 import numpy as np
-from astropy.io import fits
-import keplerspline as bs
-import pdb
-from astropy.stats import LombScargle,sigma_clipped_stats
+#from astropy.io import fits
+#import keplerspline as bs
+#import pdb
+from astropy.stats import LombScargle#,sigma_clipped_stats
 from scipy import stats,signal,optimize
 from scipy.interpolate import LSQUnivariateSpline
 #import matplotlib.pyplot as plt
+#import peakutils as peakutil
 
-def regrid(x,y,diff=30.):
+def peak_detect(y, thres=0.3, min_dist=1):
+    '''Peak detection routine.
+    Finds the peaks in *y* by taking its first order difference. By using
+    *thres* and *min_dist* parameters, it is possible to reduce the number of
+    detected peaks.
+    Parameters
+    ----------
+    y : ndarray
+        1D amplitude data to search for peaks.
+    thres : float between [0., 1.]
+        Normalized threshold. Only the peaks with amplitude higher than the
+        threshold will be detected.
+    min_dist : int
+        Minimum distance between each detected peak. The peak with the highest
+        amplitude is preferred to satisfy this constraint.
+    Returns
+    -------
+    ndarray
+        Array containing the indexes of the peaks that were detected
+     
+    stolen from https://pypi.python.org/pypi/PeakUtils :)
+    '''
+    thres *= np.max(y) - np.min(y)
+
+    # find the peaks by using the first order difference
+    dy = np.diff(y)
+    peaks = np.where((np.hstack([dy, 0.]) < 0.)
+                     & (np.hstack([0., dy]) > 0.)
+                     & (y > thres))[0]
+
+    if peaks.size > 1 and min_dist > 1:
+        highest = peaks[np.argsort(y[peaks])][::-1]
+        rem = np.ones(y.size, dtype=bool)
+        rem[peaks] = False
+
+        for peak in highest:
+            if not rem[peak]:
+                sl = slice(max(0, peak - min_dist), peak + min_dist + 1)
+                rem[sl] = True
+                rem[peak] = False
+
+        peaks = np.arange(y.size)[~rem]
+
+    return peaks
+
+
+def regrid(x,y,diff=30.,gap_width=.25):
     #diff = np.min(np.diff(x))
     diff = diff/60./24.
     new_x = np.arange(x.min(),x.max(),diff)
     new_y = np.interp(new_x,x,y)
-    gaps = np.where(np.diff(x) > .25)[0]
+    gaps = np.where(np.diff(x) > gap_width)[0]
     for gap in gaps:
         bad = (new_x > x[gap]) & (new_x < x[gap+1])
         new_y[bad] = 1 # assign data mean 
@@ -97,7 +144,7 @@ def scargle_fast(t,c,fmin=None,fmax=None,freq=None,norm='psd'):
     return px,nu
 
 
-def period_analysis(t, f, mask = None, dft = True, scargle = True, scipy = False, phase = False, fmin = None, fmax = None,lsfreq=None):
+def period_analysis(t, f, mask = None, dft = True, scargle = True, scipy = False, phase = False, fmin = None, fmax = None,lsfreq=None,matchL=False):
     
     if mask is None:
         mask = np.full(t.shape,True,dtype=np.bool)
@@ -120,7 +167,7 @@ def period_analysis(t, f, mask = None, dft = True, scargle = True, scipy = False
     
     if scipy:
         fprdgrm,prdgrm = signal.periodogram(new_f,fs=1./dnu)
-        ret = ret + (prdgrm,fprdfrm)
+        ret = ret + (prdgrm,fprdgrm)
             
     return ret
         
@@ -129,11 +176,17 @@ def period_analysis(t, f, mask = None, dft = True, scargle = True, scipy = False
 ### Folding the light-curve ####
 ################################
 ################################    
-def ppp(fft, freq,angle=None):
-    pos = freq > 0
-    fft = fft[pos]
-    freq = freq[pos]
-    peak = np.where(fft == max(fft))[0][0]
+def ppp(fft, freq,angle=None,use_peaks = False,thresh=0.,min_dist=0.):
+    if not use_peaks:
+    	pos = freq > 0
+    	fft = fft[pos]
+    	freq = freq[pos]
+    	peak = np.where(fft == max(fft))[0][0]
+    else:
+        peaks = peak_detect(fft,thres=thresh/np.max(fft),min_dist=len(fft)/100)
+        if peaks.size == 0:
+            return np.nan,np.nan,None
+        peak = np.sort(peaks[np.argsort(fft[peaks])[::-1][:3]])[0]
     period = 1./freq[peak]
     if angle is None:
         return peak,period, None
@@ -152,11 +205,12 @@ def bindata(x, y, mode = 'mean', return_std = False, nbins=30):
     N, binex = np.histogram(x, bins=nbins)
     binx = (binex[1:] + binex[:-1])/2.
     mean = stats.binned_statistic(x,y,bins=binex,statistic=mode)[0]
+    count = stats.binned_statistic(x,y,bins=binex,statistic='count')[0]
     ## shift bins to center minimum
     min = np.where(mean == np.nanmin(mean))[0]
     phase_offset = binx[min]
     if return_std:
-        std = stats.binned_statistic(x,y,bins=binex,statistic=np.std)[0]    
+        std = stats.binned_statistic(x,y,bins=binex,statistic=np.std)[0]/(np.sqrt(count)-1)    
         return binx, mean, phase_offset, std
     else:
         return binx, mean, phase_offset

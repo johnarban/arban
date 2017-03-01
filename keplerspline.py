@@ -200,12 +200,18 @@ def single_spline(time, fcor, mask = None, \
     
     x = time[mask]
     y = fcor[mask]
+    srt = np.argsort(x)
+    x = x[srt]
+    y = y[srt]
     kn = get_knots(x, delta)
     #print x.min(),kn.min(),kn.max(),x.max()
-    spl= LSQUnivariateSpline(x, y, t=kn, k=4 ) #eval spline
+    spl= LSQUnivariateSpline(x, y, t=kn, k=k ) #eval spline
     spl = spl(time)
     
-    return spl.ravel()
+    if return_knots:
+        return spl.ravel(),kn
+    else:
+        return spl.ravel()
                 
 def get_k2_data(k2dataset):
     if isinstance(k2dataset,str):
@@ -234,10 +240,11 @@ def get_k2_data(k2dataset):
     return t,f, cadenceno, campaign
 
 def detrend_iter_single(t,f,delta, k=4,low=3,high=3):
-    # My iterative detrending algorithm, based on the concept in Vandenberg & Johnson 2015
-    # borrowed clipping portion from scipy.stats.sigmaclip
-    # with substantial modifications. 
-    
+    '''
+     My iterative detrending algorithm, based on the concept in Vandenberg & Johnson 2015
+     borrowed clipping portion from scipy.stats.sigmaclip
+     with substantial modifications. 
+    '''
     clip = 1
     c = np.asarray(f).ravel()
     mask = np.full(c.shape,True,dtype=np.bool)

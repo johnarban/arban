@@ -827,7 +827,7 @@ def plot_walkers(sampler,limits = None, bad = None):
             color = 'k'
         for p, param in enumerate(walk.T):
             ax = plt.subplot(ndim, 1, p + 1)
-            ax.plot(param[:2000], color, alpha=.25, lw=0.5)
+            ax.plot(param, color, alpha=.75, lw=0.75)
             # ax.set_ylim(param.min()*0.5,param.max()*1.5)
             # ax.semilogy()
     plt.tight_layout()
