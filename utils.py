@@ -88,9 +88,11 @@ def wcsaxis(wcs, N=6, ax=None,fmt='%0.2f'):
 
     offset = (naxis1/N)/5
     x_tick_pix = np.linspace(offset,naxis1-offset,N) #generate 6 values from 0 to naxis1 (150)
+    #x_tick_pix = ax.get_xticks()
     x_tick_label = (x_tick_pix - crpix1)*cdelt1 + crval1
 
     y_tick_pix = np.linspace(offset,naxis2-offset,N) #generate 6 values from 0 to naxis2 (100)
+    #y_tick_pix = ax.get_yticks()
     y_tick_label = (x_tick_pix - crpix2)*cdelt2 + crval2
     
     plt.xticks(x_tick_pix, [fmt%i for i in x_tick_label])
@@ -191,9 +193,219 @@ def convert_flux(mag=None,emag=None,filt=None,return_wavelength=False):
     
     
     
-    
-    
-    
+# ================================================================== #
+#
+#  Function copied from schmidt_funcs to make them generally available
+#
+
+def rot_matrix(theta):
+    '''
+    rot_matrix(theta)
+    2D rotation matrix for theta in radians
+    returns numpy matrix
+    '''
+    c, s = np.cos(theta), np.sin(theta)
+    return np.matrix([[c, -s], [s, c]])
+
+
+def rectangle(c, w, h, angle=0, center=True):
+    '''
+    create rotated rectangle
+    for input into PIL ImageDraw.polygon
+    to make a rectangle polygon mask
+
+    Rectagle is created and rotated with center
+    at zero, and then translated to center position
+
+    accepts centers
+    Default : center
+    options for center: tl, tr, bl, br
+    '''
+    cx, cy = c
+    # define initial polygon irrespective of center
+    x = -w / 2., +w / 2., +w / 2., -w / 2.
+    y = +h / 2., +h / 2., -h / 2., -h / 2.
+    # correct center if starting from corner
+    if center is not True:
+        if center[0] == 'b':
+            # y = tuple([i + h/2. for i in y])
+            cy = cy + h / 2.
+        else:
+            # y = tuple([i - h/2. for i in y])
+            cy = cy - h / 2.
+        if center[1] == 'l':
+            # x = tuple([i + w/2 for i in x])
+            cx = cx + w / 2.
+        else:
+            # x = tuple([i - w/2 for i in x])
+            cx = cx - w / 2.
+
+    R = rot_matrix(angle * np.pi / 180.)
+    c = []
+
+    for i in xrange(4):
+        xr, yr = np.dot(R, np.asarray([x[i], y[i]])).A.ravel()
+        # coord switch to match ordering of FITs dimensions
+        c.append((cx + xr, cy + yr))
+    # print (cx,cy)
+    return c
+
+
+def comp(arr):
+    '''
+    returns the compressed version
+    of the input array if it is a
+    numpy MaskedArray
+    '''
+    try:
+        return arr.compressed()
+    except:
+        return arr
+
+
+def mavg(arr, n=2, mode='valid'):
+    '''
+    returns the moving average of an array.
+    returned array is shorter by (n-1)
+    '''
+    if len(arr) > 400:
+        return signal.fftconvolve(arr, [1. / float(n)] * n, mode=mode)
+    else:
+        return signal.convolve(arr, [1. / float(n)] * n, mode=mode)
+
+
+def mgeo(arr, n=2):
+    '''
+    Returns array of lenth len(arr) - (n-1)
+
+    # # written by me
+    # # slower for short loops
+    # # faster for n ~ len(arr) and large arr
+    a = []
+    for i in xrange(len(arr)-(n-1)):
+        a.append(stats.gmean(arr[i:n+i]))
+
+    # # Original method# #
+    # # written by me ... ~10x faster for short arrays
+    b = np.array([np.roll(np.pad(arr,(0,n),mode='constant',constant_values=1),i)
+              for i in xrange(n)])
+    return np.product(b,axis=0)[n-1:-n]**(1./float(n))
+    '''
+    a = []
+    for i in xrange(len(arr) - (n - 1)):
+        a.append(stats.gmean(arr[i:n + i]))
+
+    return np.asarray(a)
+
+
+def avg(arr, n=2):
+    '''
+    NOT a general averaging function
+    return bin centers (lin and log)
+    '''
+    diff = np.diff(arr)
+    # 2nd derivative of linear bin is 0
+    if np.allclose(diff, diff[::-1]):
+        return mavg(arr, n=n)
+    else:
+        return np.power(10., mavg(np.log10(arr), n=n))
+        # return mgeo(arr, n=n) # equivalent methods, only easier
+
+def shift_bins(arr,phase=0,nonneg=False):
+    # assume original bins are nonneg
+    if phase != 0:
+        diff = np.diff(arr)
+        if np.allclose(diff,diff[::-1]):
+            diff = diff[0]
+            arr = arr + phase*diff
+            #pre = arr[0] + phase*diff
+            return arr
+        else:
+            arr = np.log10(arr)
+            diff = np.diff(arr)[0]
+            arr = arr + phase * diff
+            return np.power(10.,arr)
+    else:
+        return arr
+
+def llspace(xmin, xmax, n=None, log=False, dx=None, dex=None):
+    '''
+    llspace(xmin, xmax, n = None, log = False, dx = None, dex = None)
+    get values evenly spaced in linear or log spaced
+    n [10] -- Optional -- number of steps
+    log [false] : switch for log spacing
+    dx : spacing for linear bins
+    dex : spacing for log bins (in base 10)
+    dx and dex override n
+    '''
+    xmin, xmax = float(xmin), float(xmax)
+    nisNone = n is None
+    dxisNone = dx is None
+    dexisNone = dex is None
+    if nisNone & dxisNone & dexisNone:
+        print 'Error: Defaulting to 10 linears steps'
+        n = 10.
+        nisNone = False
+
+    # either user specifies log or gives dex and not dx
+    log = log or (dxisNone and (not dexisNone))
+    if log:
+        if xmin == 0:
+            print "log(0) is -inf. xmin must be > 0 for log spacing"
+        xmin, xmax = np.log10(xmin), np.log10(xmax)
+    # print nisNone, dxisNone, dexisNone, log # for debugging logic
+    if not nisNone:  # this will make dex or dx if they are not specified
+        if log and dexisNone:  # if want log but dex not given
+            dex = (xmax - xmin) / n
+            # print dex
+        elif (not log) and dxisNone:  # else if want lin but dx not given
+            dx = (xmax - xmin) / n  # takes floor
+            print dx
+
+    if log:
+        #return np.power(10, np.linspace(xmin, xmax , (xmax - xmin)/dex + 1))
+        return np.power(10, np.arange(xmin, xmax + dex, dex))
+    else:
+        #return np.linspace(xmin, xmax, (xmax-xmin)/dx + 1)
+        return np.arange(xmin, xmax + dx, dx)
+
+
+def nametoradec(name):
+    '''
+    Get names formatted as
+    hhmmss.ss+ddmmss to Decimal Degree
+    only works for dec > 0 (splits on +, not -)
+    Will fix this eventually...
+    '''
+    if 'string' not in str(type(name)):
+        rightascen = []
+        declinatio = []
+        for n in name:
+            if '+' in n:
+                ra, de = n.split('+')
+                sign = ''
+            elif '-' in n:
+                ra, de = n.split('+')
+                sign = '-'
+            ra = ra[0:2] + ':' + ra[2:4] + ':' + ra[4:6] + '.' + ra[6:8]
+            de = sign + de[0:2] + ':' + de[2:4] + ':' + de[4:6]
+            coord = SkyCoord(ra, de, frame='icrs',
+                             unit=('hourangle', 'degree'))
+            rightascen.append(coord.ra.value)
+            declinatio.append(coord.dec.value)
+        return np.array(rightascen), np.array(declinatio)
+    else:
+        if '+' in n:
+            ra, de = n.split('+')
+            sign = ''
+        elif '-' in n:
+            ra, de = n.split('+')
+            sign = '-'
+        ra, de = name.split('+')
+        ra = ra[0:2] + ':' + ra[2:4] + ':' + ra[4:6] + '.' + ra[6:8]
+        de = sign + de[0:2] + ':' + de[2:4] + ':' + de[4:6]
+        coord = SkyCoord(ra, de, frame='icrs', unit=('hourangle', 'degree'))
+        return np.array(coord.ra.value), np.array(coord.dec.value)
 
 
 
