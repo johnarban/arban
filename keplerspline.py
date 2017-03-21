@@ -288,7 +288,7 @@ def detrend_iter(k2dataset, delta, k = 4, low = 3, high = 3):
     if isinstance(low,tuple):
         low, masklow = low
         if np.isinf(masklow):
-            ret
+            None
     i = 0
     while clip:
         i+=1
