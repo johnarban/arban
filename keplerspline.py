@@ -77,11 +77,13 @@ def check_knots(x,t,k,verbose=False):
     # i.e., there must be data between
     # every knot. 
     # implementation 1
-    #arr = []
-    #for j in xrange(n-k-1):
-    #    arr.append(np.any((t[j] <= x[j:]) & (x[j:] <= t[j+k+1])))
-    #if not np.all(arr):
-    #    return False
+    arr = []
+    for j in xrange(n-k-1):
+        arr.append(np.any((t[j] <= x[j:]) & (x[j:] <= t[j+k+1])))
+    if not np.all(arr):
+        print arr
+    else:
+        print arr
     # Diericx FORTRAN implementation (fastest if condition fails)
     #i = 0
     #l = k2 -1
@@ -91,9 +93,9 @@ def check_knots(x,t,k,verbose=False):
     #    while x[i] <= t[j]:
     #        i+=1
     #        if i >= m:
-    #            return False
+    #            print i,j
     #    if x[i] > t[l]:
-    #        return False
+    #        print i,j
     empty = np.histogram(x,bins=oldt)[0] == 0
     if np.any(empty):
         if verbose: print 'Failed schoenberg-whitney condition'
