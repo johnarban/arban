@@ -284,6 +284,11 @@ def detrend_iter(k2dataset, delta, k = 4, low = 3, high = 3):
     clip = 1
     c = np.asarray(f).ravel()
     mask = np.full(c.shape,True,dtype=np.bool)
+    outmask = np.full(c.shape,True,dtype=np.bool)
+    if isinstance(low,tuple):
+        low, masklow = low
+        if np.isinf(masklow):
+            ret
     i = 0
     while clip:
         i+=1
@@ -292,12 +297,13 @@ def detrend_iter(k2dataset, delta, k = 4, low = 3, high = 3):
         c_mean = c_detrend.mean()
         c_std = c_detrend.std()
         size = c_detrend.size
-        critlower = c_mean - c_std*low
+        critlower = c_mean - c_std*high
         critupper = c_mean + c_std*high
         newmask = (c_detrend >= critlower) & (c_detrend <= critupper)
+        outmask[mask] = c_detrend <= critupper
         mask[mask] = newmask
         clip = size - c[mask].size
         #print i,clip, np.sum(mask), len(t)
         #plt.plot(x[mask],c_trend[newmask])
     
-    return t, c_trend, mask
+    return t, c_trend, outmask
