@@ -12,14 +12,14 @@ modified and simplified for SciPy
 """
 
 import numpy as np
-import glob
-from scipy import signal
-from scipy import stats
-from scipy import interpolate
+#import glob
+#from scipy import signal
+#from scipy import stats
+#from scipy import interpolate
 from scipy.interpolate import LSQUnivariateSpline
-import scipy.fftpack as fft
-import matplotlib.pyplot as plt
-import os
+#import scipy.fftpack as fft
+#import matplotlib.pyplot as plt
+#import os
 import fitsio
 from astropy.io import fits
 
@@ -28,6 +28,9 @@ def get_knots(x, dt = None, npts = None, k=4,verbose=False):
     determines the inner knots for a spline
     the satisfy the Shoenberg-Whiteney conditions
     """
+    
+    if len(x)<1:
+        return x,'fail'
 
     xrange = max(x) - min(x)
     if dt is not None:
@@ -44,34 +47,37 @@ def get_knots(x, dt = None, npts = None, k=4,verbose=False):
         print('Defaulting to %i knots. dt = %0.2f'%(npts,dt))
         t = np.arange(x[0]+ dt/2.,x[-1]-dt/2.,dt)
         
-    killknot = check_knots(x,t,k,verbose=verbose)
-    if not isinstance(killknot,bool):
+    fmode = check_knots(x,t,k,verbose=verbose)
+    if not isinstance(fmode,bool):
         if verbose: print 'delete'
-        t = np.delete(t,killknot)
+        if fmode[0]=='sw':
+            t = np.delete(t,fmode[1])
+    else:
+        fmode=True
     
-    return t
+    return t,fmode
 
-def check_knots(x,t,k,verbose=False):
+def check_knots(x,t,k,verbose=True):
     m = len(x)
-    oldt = t.copy()
+    #oldt = t.copy()
     t = np.concatenate(([x[0]]*(k+1), t, [x[-1]]*(k+1)))
     n = len(t)
     # condition 1
     if not np.all(t[k+1:n-k]-t[k:n-k-1] > 0):
-        if verbose: print 'Failed condition 1'
-        #return False
+        if verbose: print 'Failed condition 1 (t[k+1:n-k]-t[k:n-k-1]>0)'
+        return 'f1',False
     if  not (k+1 <= n-k-1 <= m):
         # >2k+2 and < m-(k+1) point
-        if verbose: print 'Failed condition 2'
-        #return False
+        if verbose: print 'Failed condition 2 (too few points for order)'
+        return 'f2',False
     if not np.all(t[1:]-t[:-1] >= 0):
         # monitonically increasing
-        if verbose: print 'Failed condition 3a'
-        #return False
+        if verbose: print 'Failed condition 3a (monotonic abscissa)'
+        return 'f3',False
     if not np.all(t[n-k-1:-1] <= t[n-k:]):
         # monitonically increasing
-        if verbose: print 'Failed condition 3b'
-        #return False
+        if verbose: print 'Failed condition 3b (monotonic abscissa)'
+        return 'f3',False
     
     # Schoenberg-Whitney Condition
     # i.e., there must be data between
@@ -81,9 +87,7 @@ def check_knots(x,t,k,verbose=False):
     for j in xrange(n-k-1):
         arr.append(np.any((t[j] <= x[j:]) & (x[j:] <= t[j+k+1])))
     if not np.all(arr):
-        print arr
-    else:
-        print arr
+        return 'sw',np.where(~np.asarray(arr))[0]
     # Diericx FORTRAN implementation (fastest if condition fails)
     #i = 0
     #l = k2 -1
@@ -96,10 +100,11 @@ def check_knots(x,t,k,verbose=False):
     #            print i,j
     #    if x[i] > t[l]:
     #        print i,j
-    empty = np.histogram(x,bins=oldt)[0] == 0
-    if np.any(empty):
-        if verbose: print 'Failed schoenberg-whitney condition'
-        return np.where(empty)[0]
+    #empty = np.histogram(x,bins=oldt)[0] == 0
+    #if np.any(empty):
+    #    if verbose: print 'Failed schoenberg-whitney condition'
+    #    return np.where(empty)[0]
+    #return True
     return True
     
 def find_data_gaps(time):
@@ -150,7 +155,7 @@ def get_breaks(cadenceno, campaign = None):
     return breakp
 
 
-def piecewise_spline(time, fcor, cadenceno, campaign = 0, mask = None, \
+def piecewise_spline(time, fcor, cadenceno, campaign = 0, mask = None, verbose=False,\
                     breakpoints = None, delta = None, return_knots = False, k = 4):
     """
     returns the piecewise spline fit for every x (or time) value
@@ -187,11 +192,16 @@ def piecewise_spline(time, fcor, cadenceno, campaign = 0, mask = None, \
     for cond in condlist:
         x = time[cond & mask]
         y = fcor[cond & mask]
-        kn = get_knots(x, delta)
+        kn,fail_mode = get_knots(x, delta,verbose=verbose)
         #print len(kn),len(x)
-        spl_part = LSQUnivariateSpline(x, y, t=kn, k=4 ) #eval spline
+        if not isinstance(fail_mode,bool):
+            x = time[cond]
+            y = fcor[cond]
+            kn,_ = get_knots(x, delta,verbose=verbose)
+            spl_part = LSQUnivariateSpline(time[cond],fcor[cond],t=kn,k=4)
+        else:
+            spl_part = LSQUnivariateSpline(x, y, t=kn, k=4 ) #eval spline
         spl = np.append(spl,spl_part(time[cond]))
-    
     return spl.ravel()
 
 
@@ -210,7 +220,7 @@ def single_spline(time, fcor, mask = None, \
     srt = np.argsort(x)
     x = x[srt]
     y = y[srt]
-    kn = get_knots(x, delta)
+    kn,fmode = get_knots(x, delta)
     #print x.min(),kn.min(),kn.max(),x.max()
     spl= LSQUnivariateSpline(x, y, t=kn, k=k ) #eval spline
     spl = spl(time)
@@ -276,7 +286,7 @@ def detrend_iter_single(t,f,delta, k=4,low=3,high=3):
 
     
     
-def detrend_iter(k2dataset, delta, k = 4, low = 3, high = 3, cutboth=False):
+def detrend_iter(k2dataset, delta, k = 4, low = 3, high = 3, cutboth=False,verbose=False):
     # My iterative detrending algorithm, based on the concept in Vandenberg & Johnson 2015
     # borrowed clipping portion from scipy.stats.sigmaclip
     # with substantial modifications. 
@@ -300,7 +310,7 @@ def detrend_iter(k2dataset, delta, k = 4, low = 3, high = 3, cutboth=False):
     i = 0
     while clip:
         i+=1
-        c_trend = piecewise_spline(t, c, cadenceno, campaign=campaign, mask=mask, k=k, delta=delta)
+        c_trend = piecewise_spline(t, c, cadenceno, campaign=campaign, mask=mask, k=k, delta=delta,verbose=verbose)
         c_detrend = (c - c_trend + 1)[mask] #get masked detreneded lighcurve
         c_mean = c_detrend.mean()
         c_std = c_detrend.std()
