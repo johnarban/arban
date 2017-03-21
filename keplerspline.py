@@ -100,7 +100,12 @@ def check_knots(x,t,k,verbose=False):
         return np.where(empty)[0]
     return True
     
-    
+def find_data_gaps(time):
+    diff = np.diff(time)
+    delta = np.median(np.diff(time))
+    madev = np.median(np.abs(diff-delta))
+    breaks = np.where(diff > 5*madev)
+    return breaks  
     
 def get_breaks(cadenceno, campaign = None):
     """
@@ -221,7 +226,7 @@ def get_k2_data(k2dataset):
             f = data[1]['FCOR'].read()
             cadenceno = data[1]['CADENCENO'].read()
             campaign = data[0].read_header()['CAMPAIGN']
-            #mag = data[0].read_header()['KEPMAG']
+            mag = data[0].read_header()['KEPMAG']
             data.close()
         except:
             print 'Problem'
@@ -230,14 +235,15 @@ def get_k2_data(k2dataset):
             f = data[1].data['FCOR']
             campaign = data[0].header['CAMPAIGN']
             cadenceno = data[1].data['CADENCENO']
-            #mag = data[0].header['KEPMAG']
+            mag = data[0].header['KEPMAG']
     else:
         t = k2dataset['BESTAPER'].data['T']
         f = k2dataset['BESTAPER'].data['FCOR']
         cadenceno = k2dataset['BESTAPER'].data['CADENCENO']
         campaign = k2dataset[0].header['CAMPAIGN']
+        mag = k2dataset[0].header['KEPMAG']
     
-    return t,f, cadenceno, campaign
+    return t,f, cadenceno, campaign, mag
 
 def detrend_iter_single(t,f,delta, k=4,low=3,high=3):
     '''
@@ -268,7 +274,7 @@ def detrend_iter_single(t,f,delta, k=4,low=3,high=3):
 
     
     
-def detrend_iter(k2dataset, delta, k = 4, low = 3, high = 3):
+def detrend_iter(k2dataset, delta, k = 4, low = 3, high = 3, cutboth=False):
     # My iterative detrending algorithm, based on the concept in Vandenberg & Johnson 2015
     # borrowed clipping portion from scipy.stats.sigmaclip
     # with substantial modifications. 
@@ -306,4 +312,6 @@ def detrend_iter(k2dataset, delta, k = 4, low = 3, high = 3):
         #print i,clip, np.sum(mask), len(t)
         #plt.plot(x[mask],c_trend[newmask])
     
+    if cutboth:
+        outmask = mask
     return t, c_trend, outmask
