@@ -58,8 +58,9 @@ def peak_detect(y, thres=0.3, min_dist=1):
 
 
 def regrid(x,y,diff=30.,gap_width=.25):
-    #diff = np.min(np.diff(x))
-    diff = diff/60./24.
+    diff = np.nanmedian(np.diff(x))
+    #diff = diff/60./24.
+    
     new_x = np.arange(x.min(),x.max(),diff)
     new_y = np.interp(new_x,x,y)
     gaps = np.where(np.diff(x) > gap_width)[0]
