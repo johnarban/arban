@@ -202,7 +202,7 @@ def llspace(xmin, xmax, n=None, log=False, dx=None, dex=None):
             # print dex
         elif (not log) and dxisNone:  # else if want lin but dx not given
             dx = (xmax - xmin) / n  # takes floor
-            print dx
+            #print dx
 
     if log:
         #return np.power(10, np.linspace(xmin, xmax , (xmax - xmin)/dex + 1))
@@ -436,12 +436,12 @@ def bootstrap(X, X_err=None, n=None, smooth=False):
     if n is None:  # default n
         n = len(X)
 
-    resample_i = np.floor(np.random.rand(n) * len(X)).astype(int)
+    resample_i = np.random.randint(0,len(X),size=(n,))
     X_resample = np.asarray(X)[resample_i]
 
     if smooth:
-        X_resample = X_resample + np.random.rand(n) * \
-            np.asarray(X_err)[resample_i]
+        X_resample = np.random.normal(X_resample, \
+                                        np.asarray(X_err)[resample_i])
 
     return X_resample
 
@@ -545,11 +545,13 @@ def schmidt_law(Ak, theta):
         return sfr
 
 
-def lmfit_powerlaw(x, y, yerr, xmin=-np.inf, xmax=np.inf, init=None, maxiter=1000000):
+def lmfit_powerlaw(x, y, yerr=None, xmin=-np.inf, xmax=np.inf, init=None, maxiter=1000000):
     @custom_model
     def model(x, beta=init[0], kappa=init[1]):
         return np.log(kappa * (np.exp(x) ** beta))
-    keep = np.isfinite(1. / y) & np.isfinite(1. / yerr) & (x >= xmin) & (x <= xmax)
+    keep = np.isfinite(1. / y) & (x >= xmin) & (x <= xmax)
+    if yerr is not None:
+        keep = keep & np.isfinite(1. / yerr)
     m_init = model()
     fit = LevMarLSQFitter()
     weights = (yerr / y)[keep]**(-2.)

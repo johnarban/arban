@@ -57,9 +57,17 @@ def peak_detect(y, thres=0.3, min_dist=1):
     return peaks
 
 
-def regrid(x,y,diff=30.,gap_width=.25):
-    diff = np.nanmedian(np.diff(x))
-    #diff = diff/60./24.
+def regrid(x,y,diff=None,gap_width=.25):
+    """
+    inputs x, y
+    optional inputs diff, gap_width
+    
+    returns: spacing, new_x, new_y
+    """
+    if diff is None:
+        diff = np.nanmedian(np.diff(x))
+    else:
+        diff = diff/60./24.
     
     new_x = np.arange(x.min(),x.max(),diff)
     new_y = np.interp(new_x,x,y)

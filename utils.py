@@ -11,12 +11,24 @@ import matplotlib.pyplot as plt
 from weighted import quantile
 from astropy.io import fits
 from astropy.table import Table
+from astropy.wcs import WCS
 
 __location__ = os.path.realpath(
     os.path.join(os.getcwd(), os.path.dirname(__file__)))
     
 __filtertable__ = Table.read(os.path.join(__location__,'FilterSpecs.tsv'),format='ascii')
-    
+
+
+# Set uniform plot options
+def set_plot_opts(serif_fonts=True):
+
+    if set_fonts:
+        mpl.rcParams['mathtext.fontset']='stix'
+        mpl.rcParams['font.family']=u'serif'
+
+
+    return None
+
 # Plot the KDE for a set of x,y values. No weighting
 # code modified from 
 # http://stackoverflow.com/questions/30145957/plotting-2d-kernel-density-estimation-with-python
@@ -70,41 +82,67 @@ def discrete_cmap(colormap, N_colors):
     return colormap
 
 # In[WCS axis labels]
-def wcsaxis(wcs, N=6, ax=None,fmt='%0.2f'):
+def wcsaxis(wcs, N=6, ax=None,fmt='%0.2f',use_axes=False):
     if ax is None:
         ax = plt.gca()
-    naxis1 = wcs['NAXIS1']
-    naxis2 = wcs['NAXIS2']
-    crpix1 = wcs['CRPIX1']
-    crpix2 = wcs['CRPIX2']
-    crval1 = wcs['CRVAL1']
-    crval2 = wcs['CRVAL2']
+    xlim = ax.axes.get_xlim()
+    ylim = ax.axes.get_ylim()
     try:
-        cdelt1 = wcs['CDELT1']
-        cdelt2 = wcs['CDELT2']
+        wcs = WCS(wcs)
     except:
-        cdelt1 = wcs['CD1_1']
-        cdelt2 = wcs['CD2_2']
+        None
+    hdr = wcs.to_header()
+    naxis = wcs.naxis #naxis
+    naxis1 = wcs._naxis1 #naxis1
+    naxis2 = wcs._naxis2 #naxis2
+    crpix1 = hdr['CRPIX1']
+    crpix2 = hdr['CRPIX2']
+    crval1 = hdr['CRVAL1']
+    crval2 = hdr['CRVAL2']
+    #try:
+    #    cdelt1 = wcs['CDELT1']
+    #    cdelt2 = wcs['CDELT2']
+    #except:
+    #    cdelt1 = wcs['CD1_1']
+    #    cdelt2 = wcs['CD2_2']
 
-    offset = (naxis1/N)/5
-    x_tick_pix = np.linspace(offset,naxis1-offset,N) #generate 6 values from 0 to naxis1 (150)
-    #x_tick_pix = ax.get_xticks()
-    x_tick_label = (x_tick_pix - crpix1)*cdelt1 + crval1
+    if not use_axes:
+        xoffset = (naxis1/N)/5
+        x = np.linspace(xoffset,naxis1-xoffset,N)
+        if naxis>=2:
+            yoffset = (naxis2/N)/5
+            y = np.linspace(yoffset,naxis2-yoffset,N)
+    else:
+        x = ax.get_xticks()
+        if naxis>=2:
+            y = ax.get_yticks()
 
-    y_tick_pix = np.linspace(offset,naxis2-offset,N) #generate 6 values from 0 to naxis2 (100)
-    #y_tick_pix = ax.get_yticks()
-    y_tick_label = (x_tick_pix - crpix2)*cdelt2 + crval2
+
+    if naxis == 1:
+        x_tick = wcs.all_pix2world(x,0)
+    elif naxis == 2:   
+        coord = zip(x,y)
+        x_tick, y_tick = wcs.all_pix2world(coord,0).T
+    elif naxis > 2:
+        c = [x,y]
+        for i in xrange(naxis-2):
+            c.append([0]*N)
+        coord = zip(*c)
+        ticks = wcs.all_pix2world(coord,0)
+        x_tick,y_tick = np.asarray(ticks)[:,:2].T
     
-    plt.xticks(x_tick_pix, [fmt%i for i in x_tick_label])
-    plt.yticks(y_tick_pix, [fmt%i for i in y_tick_label])
+    plt.xticks(x, [fmt%i for i in x_tick])
+    plt.yticks(y, [fmt%i for i in y_tick])
     
-    if wcs['CTYPE1'][0].lower() == 'g':
+    if hdr['CTYPE1'][0].lower() == 'g':
         plt.xlabel('Galactic Longitude (l)')
         plt.ylabel('Galactic Latitude (b)')
     else:
         plt.xlabel('Right Ascension (J2000)')
         plt.ylabel('Declination (J2000)')
     
+    ax.axes.set_xlim(xlim[0],xlim[1])
+    ax.axes.set_ylim(ylim[0],ylim[1])
     return ax
     
 
