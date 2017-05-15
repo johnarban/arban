@@ -34,7 +34,7 @@ def peak_detect(y, thres=0.3, min_dist=1):
     stolen from https://pypi.python.org/pypi/PeakUtils :)
     '''
     thres *= np.max(y) - np.min(y)
-
+    print thres
     # find the peaks by using the first order difference
     dy = np.diff(y)
     peaks = np.where((np.hstack([dy, 0.]) < 0.)
@@ -246,7 +246,7 @@ def var_period(t, f, period,nbins=30):
         #std.append(np.std(fp - spl(p)))
         return np.std(fp - spl(p))**2
     
-    res = optimize.minimize(func,[period],method='Powell')#,bounds=[(period*0.4,period*2.4)])
+    res = optimize.minimize(func,[period],method='Nelder-Mead')#,bounds=[(period*0.4,period*2.4)])
     #Ps = np.logspace(np.log10(1./24.),np.log10(100./24.),30000)
     #std = map(func,Ps)
     #print (period - res.x)*24*60
