@@ -454,17 +454,20 @@ def num_below(values, level):
     return np.sum((values < level) & np.isfinite(values), dtype=np.float)
 
 
-def alpha_ML(data, data_min):
+def alpha_ML(data, xmin,xmax):
     '''
     uses maximum likelihood to estimation
     to determine power-law and error
     From Clauset et al. 2010
     '''
     data = data[np.isfinite(data)]
-    data = data[data > data_min]
-    alpha = 1 + len(data) * (np.sum(np.log(data / data_min))**(-1))
-    # error = (alpha -1 )/np.sqrt(len(data))
-    return alpha  # , error
+    data = data[(data >= xmin) & (data <= xmax)]
+    alpha = 1 + len(data) * (np.sum(np.log(data / xmin))**(-1))
+    error = (alpha -1 )/np.sqrt(len(data))
+    #loglike = np.sum((-1+alpha)*np.log(xmin)-alpha*np.log(data)+np.log(-1+alpha))
+    N = len(data)
+    loglike = N*np.log(alpha-1) - N*np.log(xmin) - alpha * np.sum(np.log(data/xmin))
+    return alpha  , error, loglike, xmin, xmax
 
 def sigconf1d(n):
     cdf = (1/2.)*(1+special.erf(n/np.sqrt(2)))
@@ -487,6 +490,7 @@ def surfd(X, Xmap, bins, Xerr = None, Xmaperr = None, boot=False, scale=1., retu
         n = np.histogram(X, bins = bins, range=(bins.min(),bins.max()))[0]
         s = np.histogram(Xmap, bins = bins, range=(bins.min(),bins.max()))[0] * scale
 
+    
     if not return_err:
         return n / s
     else:

@@ -8,10 +8,13 @@ import os,sys
 import numpy as np
 from scipy import stats, special, interpolate
 import matplotlib.pyplot as plt
+import matplotlib as mpl
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from weighted import quantile
 from astropy.io import fits
 from astropy.table import Table
 from astropy.wcs import WCS
+from scipy import signal,integrate,special,stats
 
 __location__ = os.path.realpath(
     os.path.join(os.getcwd(), os.path.dirname(__file__)))
@@ -22,12 +25,19 @@ __filtertable__ = Table.read(os.path.join(__location__,'FilterSpecs.tsv'),format
 # Set uniform plot options
 def set_plot_opts(serif_fonts=True):
 
-    if set_fonts:
+    if serif_fonts:
         mpl.rcParams['mathtext.fontset']='stix'
         mpl.rcParams['font.family']=u'serif'
-
-
+        mpl.rcParams['font.size']=12
     return None
+
+def get_cax(ax=None,size=3):
+    if ax is None:
+        ax = plt.gca()
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="%f%%"%(size*1.), pad=0.05)
+    return cax
+
 
 # Plot the KDE for a set of x,y values. No weighting
 # code modified from 
@@ -116,7 +126,6 @@ def wcsaxis(wcs, N=6, ax=None,fmt='%0.2f',use_axes=False):
         x = ax.get_xticks()
         if naxis>=2:
             y = ax.get_yticks()
-
 
     if naxis == 1:
         x_tick = wcs.all_pix2world(x,0)
@@ -447,12 +456,138 @@ def nametoradec(name):
 
 
 
+def pdf(values, bins):
+    '''
+    ** Normalized differential area function. **
+    (statistical) probability denisty function
+    normalized so that the integral is 1
+    and. The integral over a range is the
+    probability of the value is within
+    that range.
+
+    Returns array of size len(bins)-1
+    Plot versus bins[:-1]
+    '''
+    if hasattr(bins,'__getitem__'):
+        range=(np.nanmin(bins),np.nanmax(bins))
+    else:
+        range = None
+    
+    h, x = np.histogram(values, bins=bins, range=range, density=False)
+    # From the definition of Pr(x) = dF(x)/dx this
+    # is the correct form. It returns the correct
+    # probabilities when tested
+    pdf = h / (np.sum(h, dtype=float) * np.diff(x))
+    return pdf, avg(x)
 
 
+def pdf2(values, bins):
+    '''
+    The ~ PDF normalized so that
+    the integral is equal to the
+    total amount of a quantity.
+    The integral over a range is the
+    total amount within that range.
+
+    Returns array of size len(bins)-1
+    Plot versus bins[:-1]
+    '''
+    if hasattr(bins,'__getitem__'):
+        range=(np.nanmin(bins),np.nanmax(bins))
+    else:
+        range = None
+    
+    pdf, x = np.histogram(values, bins=bins, range=range, density=False)
+    pdf = pdf.astype(float) / np.diff(x)
+    return pdf, avg(x)
 
 
+def edf(data, pdf=False):
+    y = np.arange(len(data), dtype=float)
+    x = np.sort(data).astype(float)
+    return y, x
 
 
+def cdf(values, bins):
+    '''
+    (statistical) cumulative distribution function
+    Integral on [-inf, b] is the fraction below b.
+    CDF is invariant to binning.
+    This assumes you are using the entire range in the binning.
+    Returns array of size len(bins)
+    Plot versus bins[:-1]
+    '''
+    if hasattr(bins,'__getitem__'):
+        range = (np.nanmin(bins),np.nanmax(bins))
+    else:
+        range = None
+    
+    h, bins = np.histogram(values, bins=bins, range=range, density=False)  # returns int
+
+    c = np.cumsum(h / np.sum(h, dtype=float)) # cumulative fraction below bin_k
+    # append 0 to beginning because P( X < min(x)) = 0
+    return np.append(0, c), bins
+
+
+def cdf2(values, bins):
+    '''
+    # # Exclusively for area_function which needs to be unnormalized
+    (statistical) cumulative distribution function
+    Value at b is total amount below b.
+    CDF is invariante to binning
+
+    Plot versus bins[:-1]
+    Not normalized to 1
+    '''
+    if hasattr(bins,'__getitem__'):
+        range=(np.nanmin(bins),np.nanmax(bins))
+    else:
+        range = None
+    
+    h, bins = np.histogram(values, bins=bins, range=range, density=False)
+    c = np.cumsum(h).astype(float)
+    return np.append(0., c), bins
+
+
+def area_function(extmap, bins):
+    '''
+    Complimentary CDF for cdf2 (not normalized to 1)
+    Value at b is total amount above b.
+    '''
+    c, bins = cdf2(extmap, bins)
+    return c.max() - c, bins
+
+
+def diff_area_function(extmap, bins,scale=1):
+    '''
+    See pdf2
+    '''
+    s, bins = area_function(extmap, bins)
+    dsdx = -np.diff(s) / np.diff(bins)
+    return dsdx*scale, avg(bins)
+
+def log_diff_area_function(extmap, bins):
+    '''
+    See pdf2
+    '''
+    s, bins = diff_area_function(extmap, bins)
+    g=s>0
+    dlnsdlnx = np.diff(np.log(s[g])) / np.diff(np.log(bins[g]))
+    return dlnsdlnx, avg(bins[g])
+
+def mass_function(values, bins, scale=1, aktomassd=183):
+    '''
+    M(>Ak), mass weighted complimentary cdf
+    '''
+    if hasattr(bins,'__getitem__'):
+        range=(np.nanmin(bins),np.nanmax(bins))
+    else:
+        range = None
+    
+    h, bins = np.histogram(values, bins=bins, range=range, density=False, weights=values*aktomassd*scale)
+    c = np.cumsum(h).astype(float)
+    return c.max() - c, bins
+    
 
 
 
