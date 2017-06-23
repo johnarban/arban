@@ -46,7 +46,7 @@ def get_knots(x, dt = None, npts = None, k=4,verbose=False):
     ##########################################################
     
     # if dt is given, use it
-    if dt is not None:                            
+    if dt is not None:
         t = np.arange(x[0]+ dt/2.,x[-1]-dt/2.,dt)
     # if dt not given & npts is, divide
     elif npts is not None: 
