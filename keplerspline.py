@@ -29,31 +29,48 @@ def get_knots(x, dt = None, npts = None, k=4,verbose=False):
     the satisfy the Shoenberg-Whiteney conditions
     """
     
+    # if there is an empty list, return it and fail
     if len(x)<1:
         return x,'fail'
-
-    xrange = max(x) - min(x)
-    if dt is not None:
+    
+    # Get the range in x
+    x.sort() # sort x from low to high
+    x_range = x[-1] - x[0
+    
+    ##########################################################
+    ## Get evenly spaced knots                               #
+    ## knots must be internal to the                         #
+    ## abcissa. We first generate                            # 
+    ## a list evenly spaced on [min(x) + dt/2,max(x) - dt/2) #
+    ##########################################################
+    
+    # if dt is given, use it
+    if dt is not None:                            
         t = np.arange(x[0]+ dt/2.,x[-1]-dt/2.,dt)
-    elif npts is not None:
-        # Determine knows based on # of knots wanted
+    # if dt not given & npts is, divide
+    elif npts is not None: 
         npts = int(npts)
-        dt = xrange/(npts - 1.)
+        dt = x_range/(npts - 1.) # find dt
         t = np.arange(x[0]+ dt/2.,x[-1]-dt/2.,dt)
+    # Default to 11 knots
     else:
-        # Default to 11 knots
         npts = 11
-        dt = dt = xrange/(npts - 1.)
+        dt = dt = x_range/(npts - 1.)
         print('Defaulting to %i knots. dt = %0.2f'%(npts,dt))
         t = np.arange(x[0]+ dt/2.,x[-1]-dt/2.,dt)
-        
-    fmode = check_knots(x,t,k,verbose=verbose)
-    if not isinstance(fmode,bool):
-        if verbose: print 'delete'
-        if fmode[0]=='sw':
-            t = np.delete(t,fmode[1])
-    else:
-        fmode=True
+    
+    ## Check Shoenberg-Whiteney conditions
+    fmode = True,None
+    
+    ## Check condition again after 
+    ## removing offending knots
+    while fmode[0]:
+        fmode = check_knots(x,t,k,verbose=verbose) # Schoenberg-Whitney conditions
+        if not isinstance(fmode,bool):
+            if verbose: print 'delete'
+            if fmode[1]=='sw':
+                t = np.delete(t,fmode[1])
+            
     
     return t,fmode
 
@@ -65,19 +82,19 @@ def check_knots(x,t,k,verbose=True):
     # condition 1
     if not np.all(t[k+1:n-k]-t[k:n-k-1] > 0):
         if verbose: print 'Failed condition 1 (t[k+1:n-k]-t[k:n-k-1]>0)'
-        return 'f1',False
+        return False,'f1'
     if  not (k+1 <= n-k-1 <= m):
         # >2k+2 and < m-(k+1) point
         if verbose: print 'Failed condition 2 (too few points for order)'
-        return 'f2',False
+        return False,'f2'
     if not np.all(t[1:]-t[:-1] >= 0):
         # monitonically increasing
         if verbose: print 'Failed condition 3a (monotonic abscissa)'
-        return 'f3',False
+        return False,'f3'
     if not np.all(t[n-k-1:-1] <= t[n-k:]):
         # monitonically increasing
         if verbose: print 'Failed condition 3b (monotonic abscissa)'
-        return 'f3',False
+        return False,'f3'
     
     # Schoenberg-Whitney Condition
     # i.e., there must be data between
@@ -88,24 +105,8 @@ def check_knots(x,t,k,verbose=True):
         arr.append(np.any((t[j] <= x[j:]) & (x[j:] <= t[j+k+1])))
     if not np.all(arr):
         return 'sw',np.where(~np.asarray(arr))[0]
-    # Diericx FORTRAN implementation (fastest if condition fails)
-    #i = 0
-    #l = k2 -1
-    #for j in range(1,nk3):
-    #    l += 1
-    #    i += 1
-    #    while x[i] <= t[j]:
-    #        i+=1
-    #        if i >= m:
-    #            print i,j
-    #    if x[i] > t[l]:
-    #        print i,j
-    #empty = np.histogram(x,bins=oldt)[0] == 0
-    #if np.any(empty):
-    #    if verbose: print 'Failed schoenberg-whitney condition'
-    #    return np.where(empty)[0]
-    #return True
-    return True
+    else:
+        return True, None
     
 def find_data_gaps(time):
     diff = np.diff(time)
