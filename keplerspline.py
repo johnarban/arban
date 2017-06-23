@@ -23,6 +23,7 @@ from scipy.interpolate import LSQUnivariateSpline
 import fitsio
 from astropy.io import fits
 
+#here some changes
 def get_knots(x, dt = None, npts = None, k=4,verbose=False):
     """
     determines the inner knots for a spline
