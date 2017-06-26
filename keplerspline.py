@@ -29,15 +29,15 @@ def get_knots(x, dt = None, npts = None, k=4,verbose=False):
     determines the inner knots for a spline
     the satisfy the Shoenberg-Whiteney conditions
     """
-    
+
     # if there is an empty list, return it and fail
     if len(x)<1:
-        return x,'fail'
+        return x, 'fail'
     
     # Get the range in x
     x.sort() # sort x from low to high
     x_range = x[-1] - x[0]
-    
+
     ##########################################################
     ## Get evenly spaced knots                               #
     ## knots must be internal to the                         #
@@ -46,8 +46,8 @@ def get_knots(x, dt = None, npts = None, k=4,verbose=False):
     ##########################################################
     
     # if dt is given, use it
-	if dt is not None:
-		t = np.arange(x[0]+ dt/2.,x[-1]-dt/2.,dt)
+    if dt is not None:
+        t = np.arange(x[0]+ dt/2.,x[-1]-dt/2.,dt)
 	# if dt not given & npts is, divide
     elif npts is not None: 
         npts = int(npts)
