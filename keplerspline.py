@@ -297,13 +297,13 @@ def detrend_iter(k2dataset, delta, k = 4, low = 3, high = 3, cutboth=False,verbo
     # borrowed clipping portion from scipy.stats.sigmaclip
     # with substantial modifications. 
     
-    if len(k2dataset) > 4:
+    if len(k2dataset) > 5:
         t = k2dataset['BESTAPER'].data['T']
         f = k2dataset['BESTAPER'].data['FCOR']
         cadenceno = k2dataset['BESTAPER'].data['CADENCENO']
         campaign = k2dataset[0].header['CAMPAIGN']
     else:
-        t,f,cadenceno,campaign = k2dataset
+        t,f,cadenceno,campaign,mag = k2dataset
     
     clip = 1
     c = np.asarray(f).ravel()
