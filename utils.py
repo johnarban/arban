@@ -21,8 +21,13 @@ __location__ = os.path.realpath(
     
 __filtertable__ = Table.read(os.path.join(__location__,'FilterSpecs.tsv'),format='ascii')
 
+#############################
+#############################
+####  Plotting commands  ####
+#############################
+#############################
 
-# Set uniform plot options
+## Set uniform plot options
 def set_plot_opts(serif_fonts=True):
 
     if serif_fonts:
@@ -39,9 +44,8 @@ def get_cax(ax=None,size=3):
     return cax
 
 
-# Plot the KDE for a set of x,y values. No weighting
-# code modified from 
-# http://stackoverflow.com/questions/30145957/plotting-2d-kernel-density-estimation-with-python
+## Plot the KDE for a set of x,y values. No weighting code modified from 
+## http://stackoverflow.com/questions/30145957/plotting-2d-kernel-density-estimation-with-python
 def kdeplot(xp, yp, filled=False, ax=None, grid=None, bw = None, *args, **kwargs):
     if ax is None:
         ax = plt.gca()
@@ -73,7 +77,38 @@ def kdeplot(xp, yp, filled=False, ax=None, grid=None, bw = None, *args, **kwargs
     cs = cont(x_flat, y_flat, z, *args, **kwargs)
     return cs
 
+#############################
+#############################
+## Convenience math functions
+#############################
+#############################
+
+def freq_grid(t,fmin=None,fmax=None,oversamp=10.,pmin=None,pmax=None):
+    '''
+    freq_grid(t,fmin=None,fmax=None,oversamp=10.,pmin=None,pmax=None)
+    Generate a 1D list of frequences over a certain range
+    '''
+    if pmax is not None:
+        if pmax==pmin:
+            pmax=10*pmax
+        fmin=1./pmax
+    if pmin is not None:
+        if pmax==pmin:
+            pmin=.1*pmin
+        fmax = 1./pmin
+
+    dt = t.max()-t.min()
+    nyquist = 2./dt
+    df = nyquist/oversamp
+    Nf = 1 + int(np.round((fmax-fmin)/df))
+    return fmin + df * np.arange(Nf)
+
+
 def sigconf1d(n):
+    '''
+    calculate the percentile corresponding to n*sigma
+    for a 1D gaussian 
+    '''
     cdf = (1/2.)*(1+special.erf(n/np.sqrt(2)))
     return (1-cdf)*100,100* cdf,100*special.erf(n/np.sqrt(2))
 
@@ -89,7 +124,7 @@ def t2a(table):
 # In[Discrete Colorbar]
 def discrete_cmap(colormap, N_colors):
     print 'Not doing anything yet'
-    return colormap
+    return None
 
 # In[WCS axis labels]
 def wcsaxis(wcs, N=6, ax=None,fmt='%0.2f',use_axes=False):
@@ -195,8 +230,10 @@ def grid_data(x,y,z,nxy=(512,512), interp='linear', plot = False,\
     return xi, yi, zi
 
 
-# To make this robust need a disambiguation table
-# for filter names, or a decision tree to disamb.
+##########################################
+##########################################
+###### A general utility to convert fluxes
+###### and magnitudes.
 def convert_flux(mag=None,emag=None,filt=None,return_wavelength=False):
     """"Return flux for a given magnitude/filter combo
     
@@ -432,7 +469,7 @@ def nametoradec(name):
                 ra, de = n.split('+')
                 sign = ''
             elif '-' in n:
-                ra, de = n.split('+')
+                ra, de = n.split('-')
                 sign = '-'
             ra = ra[0:2] + ':' + ra[2:4] + ':' + ra[4:6] + '.' + ra[6:8]
             de = sign + de[0:2] + ':' + de[2:4] + ':' + de[4:6]
@@ -446,9 +483,9 @@ def nametoradec(name):
             ra, de = n.split('+')
             sign = ''
         elif '-' in n:
-            ra, de = n.split('+')
+            ra, de = n.split('-')
             sign = '-'
-        ra, de = name.split('+')
+        #ra, de = name.split('+')
         ra = ra[0:2] + ':' + ra[2:4] + ':' + ra[4:6] + '.' + ra[6:8]
         de = sign + de[0:2] + ':' + de[2:4] + ':' + de[4:6]
         coord = SkyCoord(ra, de, frame='icrs', unit=('hourangle', 'degree'))
@@ -483,6 +520,7 @@ def pdf(values, bins):
 
 def pdf2(values, bins):
     '''
+    N * PDF(x)
     The ~ PDF normalized so that
     the integral is equal to the
     total amount of a quantity.
@@ -510,6 +548,7 @@ def edf(data, pdf=False):
 
 def cdf(values, bins):
     '''
+    CDF(x)
     (statistical) cumulative distribution function
     Integral on [-inf, b] is the fraction below b.
     CDF is invariant to binning.

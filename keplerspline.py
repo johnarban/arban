@@ -12,16 +12,18 @@ modified and simplified for SciPy
 """
 
 import numpy as np
+from astropy.io import fits
 #import glob
 #from scipy import signal
 #from scipy import stats
 #from scipy import interpolate
 from scipy.interpolate import LSQUnivariateSpline
+
 #import scipy.fftpack as fft
 #import matplotlib.pyplot as plt
 #import os
 import fitsio
-from astropy.io import fits
+
 
 #here some changes
 def get_knots(x, dt = None, npts = None, k=4,verbose=False):
@@ -113,10 +115,10 @@ def find_data_gaps(time):
     diff = np.diff(time)
     delta = np.median(np.diff(time))
     madev = np.median(np.abs(diff-delta))
-    breaks = np.where(diff > 5*madev)
+    breaks = np.where(diff > 3*madev)
     return breaks  
     
-def get_breaks(cadenceno, campaign = None):
+def get_breaks(cadenceno, campaign = None, time=None):
     """
     if no campaign number is given it checks 
     to see if cadenceno is a K2 LC fits file
@@ -151,6 +153,8 @@ def get_breaks(cadenceno, campaign = None):
         breakp2 = np.where(cadenceno >= 121345)[0][0]
         breakp3 = np.where(cadenceno >= 121824)[0][0]
         breakp = [breakp1, breakp2, breakp3]
+    elif campaign==10:
+        breakp = find_data_gaps(time)
     else:
         breakp = []
             
@@ -172,7 +176,7 @@ def piecewise_spline(time, fcor, cadenceno, campaign = 0, mask = None, verbose=F
     """
     
     if breakpoints is None:
-        breakpoints = get_breaks(cadenceno, campaign)
+        breakpoints = get_breaks(cadenceno, campaign, time=time)
     
     if mask is None:
         mask = np.full(cadenceno.shape,True,dtype=np.bool)
