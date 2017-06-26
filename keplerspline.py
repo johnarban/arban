@@ -63,21 +63,37 @@ def get_knots(x, dt = None, npts = None, k=4,verbose=False):
         t = np.arange(x[0]+ dt/2.,x[-1]-dt/2.,dt)
     
     ## Check Shoenberg-Whiteney conditions
-    fmode = True,None
+    fmode = True, None #initialize failure mode
     
     ## Check condition again after 
     ## removing offending knots
     while fmode[0]:
+        if verbose and not fmode[0]: print "Checking Schoenberg-Whitney"
+        #fmode contains bool for if failed, and list of where it fails
         fmode = check_knots(x,t,k,verbose=verbose) # Schoenberg-Whitney conditions
-        if not isinstance(fmode,bool):
-            if verbose: print 'delete'
-            if fmode[1]=='sw':
-                t = np.delete(t,fmode[1])
-            
+        if fmode[0]=='sw':
+            if verbose:
+                print 'delete'
+            t = np.delete(t,fmode[1])
+            fmode[0]=True # set to recheck SW conditions
+        elif fmode[1]=='f3':
+            t = np.unique(t) # sort and recheck SW conditions
+        elif fmode[1]=='f2': # ger new knots for k=1
+            if verbose: print "+1 level deep in checking 'SW'"
+            t, fmode = get_knots(x,dt=dt, npts=npts, k=1,verbose=verbose)
+            # new knows will go through checks and return fmode=False
     
     return t,fmode
 
 def check_knots(x,t,k,verbose=True):
+    '''
+    returns bool,fmode or 'sw', [indices where it fails]
+    bool: Did it fail SW conditions
+    fmode: f1 - fails a uniqueness conditions
+           f2 - too few points
+           f3 - not monotonic increasing
+           sw - fails SW conditions
+    '''
     m = len(x)
     #oldt = t.copy()
     t = np.concatenate(([x[0]]*(k+1), t, [x[-1]]*(k+1)))
@@ -85,19 +101,19 @@ def check_knots(x,t,k,verbose=True):
     # condition 1
     if not np.all(t[k+1:n-k]-t[k:n-k-1] > 0):
         if verbose: print 'Failed condition 1 (t[k+1:n-k]-t[k:n-k-1]>0)'
-        return False,'f1'
+        return True,'f1'
     if  not (k+1 <= n-k-1 <= m):
         # >2k+2 and < m-(k+1) point
         if verbose: print 'Failed condition 2 (too few points for order)'
-        return False,'f2'
+        return True,'f2'
     if not np.all(t[1:]-t[:-1] >= 0):
         # monitonically increasing
         if verbose: print 'Failed condition 3a (monotonic abscissa)'
-        return False,'f3'
+        return True,'f3'
     if not np.all(t[n-k-1:-1] <= t[n-k:]):
         # monitonically increasing
         if verbose: print 'Failed condition 3b (monotonic abscissa)'
-        return False,'f3'
+        return True,'f3'
     
     # Schoenberg-Whitney Condition
     # i.e., there must be data between
@@ -107,9 +123,10 @@ def check_knots(x,t,k,verbose=True):
     for j in xrange(n-k-1):
         arr.append(np.any((t[j] <= x[j:]) & (x[j:] <= t[j+k+1])))
     if not np.all(arr):
+        if verbose: print "Failed Schoenberg-Whitney"
         return 'sw',np.where(~np.asarray(arr))[0]
     else:
-        return True, None
+        return False, None
     
 def find_data_gaps(time):
     diff = np.diff(time)
@@ -327,7 +344,9 @@ def detrend_iter(k2dataset, delta, k = 4, low = 3, high = 3, cutboth=False,verbo
         outmask[mask] = c_detrend <= critupper
         mask[mask] = newmask
         clip = size - c[mask].size
-        #print i,clip, np.sum(mask), len(t)
+        if i == 3:
+            clip = 0
+        if verbose: print 'iter: %i num clipped: %i num good: %i  num orig: %i'%(i,clip, np.sum(mask), len(t))
         #plt.plot(x[mask],c_trend[newmask])
     
     if cutboth:
