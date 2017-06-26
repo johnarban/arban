@@ -321,7 +321,7 @@ def detrend_iter(k2dataset, delta, k = 4, low = 3, high = 3, cutboth=False,verbo
         c_mean = c_detrend.mean()
         c_std = c_detrend.std()
         size = c_detrend.size
-        critlower = c_mean - c_std*high
+        critlower = c_mean - c_std*low
         critupper = c_mean + c_std*high
         newmask = (c_detrend >= critlower) & (c_detrend <= critupper)
         outmask[mask] = c_detrend <= critupper

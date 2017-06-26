@@ -78,6 +78,10 @@ def regrid(x,y,diff=None,gap_width=.25):
     
     return diff,new_x,new_y
 
+
+
+
+
 def scargle_slow(t,c):
     """
     ripped straight out of IDL scargle
@@ -110,6 +114,10 @@ def scargle_slow(t,c):
                 
     return px,period
  
+
+
+
+
 def lsfreq(t,fmin=None,fmax=None,freq=None):
     time = t-t[0]
     tmax = max(time)	
@@ -153,6 +161,10 @@ def scargle_fast(t,c,fmin=None,fmax=None,freq=None,norm='psd'):
     return px,nu
 
 
+
+
+
+
 def period_analysis(t, f, mask = None, dft = True, scargle = True, scipy = False, phase = False, fmin = None, fmax = None,lsfreq=None,matchL=False):
     
     if mask is None:
@@ -179,7 +191,9 @@ def period_analysis(t, f, mask = None, dft = True, scargle = True, scipy = False
         ret = ret + (prdgrm,fprdgrm)
             
     return ret
-        
+
+
+
 ################################
 ################################
 ### Folding the light-curve ####
@@ -204,11 +218,20 @@ def ppp(fft, freq,angle=None,use_peaks = False,thresh=0.,min_dist=0.):
         phase = angle[peak]
         return peak, period, phase
 
+
+
+
+
+
 def t2phi(time,period,phase=None):
     if phase is None:
         return (time/period % 1) - 0.5
     else:
         return ((time + period*phase/np.pi)/period % 1 ) - 0.5
+
+
+
+
 
 def bindata(x, y, mode = 'mean', return_std = False, nbins=30):
     N, binex = np.histogram(x, bins=nbins)
@@ -227,7 +250,6 @@ def bindata(x, y, mode = 'mean', return_std = False, nbins=30):
 
 def var_period(t, f, period,nbins=30):
 
-    
     def func(P):
         #Ps.append(P)
         p = t2phi(t,P)
