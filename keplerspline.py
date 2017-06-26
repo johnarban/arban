@@ -36,7 +36,7 @@ def get_knots(x, dt = None, npts = None, k=4,verbose=False):
     
     # Get the range in x
     x.sort() # sort x from low to high
-    x_range = x[-1] - x[0
+    x_range = x[-1] - x[0]
     
     ##########################################################
     ## Get evenly spaced knots                               #
@@ -46,9 +46,9 @@ def get_knots(x, dt = None, npts = None, k=4,verbose=False):
     ##########################################################
     
     # if dt is given, use it
-    if dt is not None:
-        t = np.arange(x[0]+ dt/2.,x[-1]-dt/2.,dt)
-    # if dt not given & npts is, divide
+	if dt is not None:
+		t = np.arange(x[0]+ dt/2.,x[-1]-dt/2.,dt)
+	# if dt not given & npts is, divide
     elif npts is not None: 
         npts = int(npts)
         dt = x_range/(npts - 1.) # find dt
