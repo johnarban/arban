@@ -155,8 +155,7 @@ def scargle_fast(t,c,fmin=None,fmax=None,freq=None,norm='psd'):
     else:
         nu=freq
     
-    
-    px = LombScargle(time,c - np.mean(c)).power(nu,method='fast',normalization=norm)
+    px = LombScargle(time,c , fit_mean=True).power(nu,method='fast',normalization=norm)
                     
     return px,nu
 
@@ -165,7 +164,7 @@ def scargle_fast(t,c,fmin=None,fmax=None,freq=None,norm='psd'):
 
 
 
-def period_analysis(t, f, mask = None, dft = True, scargle = True, scipy = False, phase = False, fmin = None, fmax = None,lsfreq=None,matchL=False):
+def period_analysis(t, f, mask = None, dft = True, scargle = True, fmin = None, fmax = None, lsfreq=None, matchL=False):
     
     if mask is None:
         mask = np.full(t.shape,True,dtype=np.bool)
@@ -177,18 +176,12 @@ def period_analysis(t, f, mask = None, dft = True, scargle = True, scipy = False
         dnu, new_t, new_f = regrid(t[mask],f[mask]) #grid to 30 minutes
         fft = np.abs(np.fft.fft(new_f))
         fftfreq = np.fft.fftfreq(len(new_f),d=dnu) # cycles/second
-        if not phase:
-            ret = ret + (fft,fftfreq)
-        else:
-            ret = ret + (fft,np.angle(fft),fftfreq)
+        ret = ret + (fft,fftfreq)
 
     if scargle:
         lmscrgl,lmsfreq = scargle_fast(t[mask],f[mask],fmin=fmin,fmax=fmax,freq=lsfreq)
         ret = ret + (lmscrgl, lmsfreq)
     
-    if scipy:
-        fprdgrm,prdgrm = signal.periodogram(new_f,fs=1./dnu)
-        ret = ret + (prdgrm,fprdgrm)
             
     return ret
 
@@ -199,14 +192,14 @@ def period_analysis(t, f, mask = None, dft = True, scargle = True, scipy = False
 ### Folding the light-curve ####
 ################################
 ################################    
-def ppp(fft, freq,angle=None,use_peaks = False,thresh=0.,min_dist=0.):
+def ppp(fft, freq,angle=None,use_peaks = False,thresh=0.5,min_dist=0.):
     if not use_peaks:
     	pos = freq > 0
     	fft = fft[pos]
     	freq = freq[pos]
     	peak = np.where(fft == max(fft))[0][0]
     else:
-        peaks = peak_detect(fft,thres=thresh/np.max(fft),min_dist=len(fft)/100)
+        peaks = peak_detect(fft,thres=thresh,min_dist=min_dist)
         if peaks.size == 0:
             return np.nan,np.nan,None
         peak = np.sort(peaks[np.argsort(fft[peaks])[::-1][:3]])[0]

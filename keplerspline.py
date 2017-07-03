@@ -217,7 +217,7 @@ def piecewise_spline(time, fcor, cadenceno, campaign = 0, mask = None, verbose=F
         y = fcor[cond & mask]
         kn,fail_mode = get_knots(x, delta,verbose=verbose)
         #print len(kn),len(x)
-        if not isinstance(fail_mode,bool):
+        if not fail_mode:
             x = time[cond]
             y = fcor[cond]
             kn,_ = get_knots(x, delta,verbose=verbose)
@@ -309,7 +309,7 @@ def detrend_iter_single(t,f,delta, k=4,low=3,high=3):
 
     
     
-def detrend_iter(k2dataset, delta, k = 4, low = 3, high = 3, cutboth=False,verbose=False):
+def detrend_iter(k2dataset, delta, k = 4, low = 3, high = 3, cutboth=False,verbose=False,maxiter=1000):
     # My iterative detrending algorithm, based on the concept in Vandenberg & Johnson 2015
     # borrowed clipping portion from scipy.stats.sigmaclip
     # with substantial modifications. 
@@ -344,9 +344,9 @@ def detrend_iter(k2dataset, delta, k = 4, low = 3, high = 3, cutboth=False,verbo
         outmask[mask] = c_detrend <= critupper
         mask[mask] = newmask
         clip = size - c[mask].size
-        if i == 3:
-            clip = 0
         if verbose: print 'iter: %i num clipped: %i num good: %i  num orig: %i'%(i,clip, np.sum(mask), len(t))
+        if i == maxiter:
+                clip = 0
         #plt.plot(x[mask],c_trend[newmask])
     
     if cutboth:
