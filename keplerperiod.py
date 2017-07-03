@@ -136,7 +136,7 @@ def lsfreq(t,fmin=None,fmax=None,freq=None):
 
     return nu
 
-def scargle_fast(t,c,fmin=None,fmax=None,freq=None,norm='psd'):
+def scargle_fast(t,c,fmin=None,fmax=None,freq=None,norm='psd', window=False):
     """
     Lomb-Scargle periodogram using 
     Horne specs for frequencies
@@ -155,7 +155,10 @@ def scargle_fast(t,c,fmin=None,fmax=None,freq=None,norm='psd'):
     else:
         nu=freq
     
-    px = LombScargle(time,c , fit_mean=True).power(nu,method='fast',normalization=norm)
+    if window:
+        px = LombScargle(time,c , fit_mean=False, center_data=False).power(nu,method='fast',normalization=norm)
+    else:
+        px = LombScargle(time,c , fit_mean=True).power(nu,method='fast',normalization=norm)
                     
     return px,nu
 
@@ -164,7 +167,7 @@ def scargle_fast(t,c,fmin=None,fmax=None,freq=None,norm='psd'):
 
 
 
-def period_analysis(t, f, mask = None, dft = True, scargle = True, fmin = None, fmax = None, lsfreq=None, matchL=False):
+def period_analysis(t, f, mask = None, dft = True, scargle = True, fmin = None, fmax = None, lsfreq=None, matchL=False,window=False):
     
     if mask is None:
         mask = np.full(t.shape,True,dtype=np.bool)
@@ -179,7 +182,7 @@ def period_analysis(t, f, mask = None, dft = True, scargle = True, fmin = None, 
         ret = ret + (fft,fftfreq)
 
     if scargle:
-        lmscrgl,lmsfreq = scargle_fast(t[mask],f[mask],fmin=fmin,fmax=fmax,freq=lsfreq)
+        lmscrgl,lmsfreq = scargle_fast(t[mask],f[mask],fmin=fmin,fmax=fmax,freq=lsfreq,window=False)
         ret = ret + (lmscrgl, lmsfreq)
     
             

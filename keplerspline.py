@@ -22,7 +22,13 @@ from scipy.interpolate import LSQUnivariateSpline
 #import scipy.fftpack as fft
 #import matplotlib.pyplot as plt
 #import os
-import fitsio
+
+# check if fitsio is installed
+try:
+    import fitsio
+    nofitsio = False
+except ImportError:
+    nofitsio = True
 
 
 #here some changes
@@ -256,29 +262,43 @@ def single_spline(time, fcor, mask = None, \
 def get_k2_data(k2dataset):
     if isinstance(k2dataset,str):
         try:
-            data = fitsio.FITS(k2dataset)
-            t = data[1]['T'].read()
-            f = data[1]['FCOR'].read()
-            cadenceno = data[1]['CADENCENO'].read()
-            campaign = data[0].read_header()['CAMPAIGN']
-            mag = data[0].read_header()['KEPMAG']
-            data.close()
+            if not nofitsio:
+                data = fitsio.FITS(k2dataset)
+                t = data[1]['T'].read()
+                f = data[1]['FCOR'].read()
+                firing = data[1]['MOVING'].read() == 0
+                cadenceno = data[1]['CADENCENO'].read()
+                campaign = data[0].read_header()['CAMPAIGN']
+                mag = data[0].read_header()['KEPMAG']
+                data.close()
+
+            else:
+                data = fits.open(k2dataset)
+                t = data[1].data['T']
+                f = data[1].data['FCOR']
+                firing = data[1].data['MOVING']
+                campaign = data[0].header['CAMPAIGN']
+                cadenceno = data[1].data['CADENCENO']
+                mag = data[0].header['KEPMAG']
         except:
             print 'Problem'
             data = fits.open(k2dataset)
             t = data[1].data['T']
             f = data[1].data['FCOR']
+            firing = data[1].data['MOVING']
             campaign = data[0].header['CAMPAIGN']
             cadenceno = data[1].data['CADENCENO']
             mag = data[0].header['KEPMAG']
     else:
         t = k2dataset['BESTAPER'].data['T']
         f = k2dataset['BESTAPER'].data['FCOR']
+        firing = k2dataset['BESTAPER'].data['FIRING']
         cadenceno = k2dataset['BESTAPER'].data['CADENCENO']
         campaign = k2dataset[0].header['CAMPAIGN']
         mag = k2dataset[0].header['KEPMAG']
-    
-    return t,f, cadenceno, campaign, mag
+    g = firing == 0
+#    import pdb;pdb.set_trace()
+    return t[g],f[g], cadenceno[g], campaign, mag
 
 def detrend_iter_single(t,f,delta, k=4,low=3,high=3):
     '''
