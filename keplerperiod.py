@@ -1,5 +1,5 @@
 #import glob
-#import os,sys
+import os,sys
 #import fitsio
 import numpy as np
 #from astropy.io import fits
@@ -10,6 +10,9 @@ from scipy import stats,signal,optimize
 from scipy.interpolate import LSQUnivariateSpline
 #import matplotlib.pyplot as plt
 #import peakutils as peakutil
+
+#> sys.platform
+#> win32 or linus2 or macosx
 
 def peak_detect(y, thres=0.3, min_dist=1):
     '''Peak detection routine.
@@ -146,6 +149,7 @@ def scargle_fast(t,c,fmin=None,fmax=None,freq=None,norm='psd', window=False):
     if fmin is None:
         fmin = 1./max(time)
     if fmax is None:
+        # fmax is 2/<dt> or ~ nyquist
         fmax = n0 / (2 * max(time))
     
     if freq is None:
@@ -163,10 +167,23 @@ def scargle_fast(t,c,fmin=None,fmax=None,freq=None,norm='psd', window=False):
 
 
 
-
-
-def period_analysis(t, f, mask = None, dft = True, scargle = True, fmin = None, fmax = None, lsfreq=None, matchL=False,window=False):
+def period_analysis(t, f, mask = None, dft = True, scargle = True, nft = False, fmin = None, fmax = None, lsfreq=None, window=False):
+    '''
+    period_analysis(t, f, mask = None, 
+                        dft = True, scargle = True, 
+                        fmin = None, fmax = None, lsfreq=None, 
+                        window=False)
     
+    get periodograms for a specific dataset
+    t : time step
+    f:  flux
+    mask: which data points to keep [True] or skip [False]
+    scargle: default True, return fast LombScargle with psd normalization
+    fmin : frequency min 
+    fmax : frequency min
+    lsfreq : pass a list of frequencies for LS or nufft
+    window : find the window function
+    '''
     if mask is None:
         mask = np.full(t.shape,True,dtype=np.bool)
     else:
@@ -178,14 +195,17 @@ def period_analysis(t, f, mask = None, dft = True, scargle = True, fmin = None, 
         fft = np.abs(np.fft.fft(new_f))
         fftfreq = np.fft.fftfreq(len(new_f),d=dnu) # cycles/second
         ret = ret + (fft,fftfreq)
-  
-    if scargle:
+
+
+    if scargle and not nft:
         lmscrgl,lmsfreq = scargle_fast(t[mask],f[mask],fmin=fmin,fmax=fmax,freq=lsfreq,window=False)
         ret = ret + (lmscrgl, lmsfreq)
     
-    if dft:
+    if nft:
+        lmsfreq = lsfreq(t, fmin=fmin, fmax=fmax, freq=lsfreq)
         nfft, nfreq = nufft_j(t[mask],f[mask], freq = lmsfreq)
-        ret = (nfft, nfreq) + ret
+        ret = ret + (nfft, nfreq)
+
       
             
     return ret
@@ -247,6 +267,8 @@ def bindata(x, y, mode = 'mean', return_std = False, nbins=30):
         return binx, mean, phase_offset
 
 
+
+
 def var_period(t, f, period,nbins=30):
 
     def func(P):
@@ -278,6 +300,7 @@ def var_period(t, f, period,nbins=30):
 #==================================================
 #   NUFFT programs #
 #if True:
+
 import nufft
 def freq_grid(t,fmin=None,fmax=None,oversamp=10.,pmin=None,pmax=None):
     if pmax is not None:
@@ -294,6 +317,10 @@ def freq_grid(t,fmin=None,fmax=None,oversamp=10.,pmin=None,pmax=None):
     df = nyquist/oversamp
     Nf = 1 + int(np.round((fmax-fmin)/df))
     return fmin + df * np.arange(Nf)
+
+
+
+
 
 def nufft_j(x, y, freq = None, period_max=1., period_min=.5/24, window=False, oversamp=10.):
     """
