@@ -170,7 +170,7 @@ def scargle_fast(t,c,fmin=None,fmax=None,freq=None,norm='psd', window=False):
 def period_analysis(t, f, mask = None, dft = True, scargle = True, nft = False, fmin = None, fmax = None, lsfreq=None, window=False):
     '''
     period_analysis(t, f, mask = None, 
-                        dft = True, scargle = True, 
+                        dft = True, scargle = True, nft = False
                         fmin = None, fmax = None, lsfreq=None, 
                         window=False)
     
