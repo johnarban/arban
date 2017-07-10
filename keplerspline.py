@@ -266,7 +266,7 @@ def get_k2_data(k2dataset):
                 data = fitsio.FITS(k2dataset)
                 t = data[1]['T'].read()
                 f = data[1]['FCOR'].read()
-                firing = data[1]['MOVING'].read() == 0
+                firing = data[1]['MOVING'].read()
                 cadenceno = data[1]['CADENCENO'].read()
                 campaign = data[0].read_header()['CAMPAIGN']
                 mag = data[0].read_header()['KEPMAG']

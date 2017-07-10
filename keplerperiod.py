@@ -79,9 +79,6 @@ def regrid(x,y,diff=None,gap_width=.25):
     return diff,new_x,new_y
 
 
-
-
-
 def scargle_slow(t,c):
     """
     ripped straight out of IDL scargle
@@ -117,7 +114,6 @@ def scargle_slow(t,c):
 
 
 
-
 def lsfreq(t,fmin=None,fmax=None,freq=None):
     time = t-t[0]
     tmax = max(time)	
@@ -135,6 +131,8 @@ def lsfreq(t,fmin=None,fmax=None,freq=None):
         nu=freq
 
     return nu
+
+
 
 def scargle_fast(t,c,fmin=None,fmax=None,freq=None,norm='psd', window=False):
     """
@@ -175,16 +173,20 @@ def period_analysis(t, f, mask = None, dft = True, scargle = True, fmin = None, 
         mask = np.asarray(mask, dtype=np.bool)
     
     ret = ()
-    if dft:
+    if dft and False:
         dnu, new_t, new_f = regrid(t[mask],f[mask]) #grid to 30 minutes
         fft = np.abs(np.fft.fft(new_f))
         fftfreq = np.fft.fftfreq(len(new_f),d=dnu) # cycles/second
         ret = ret + (fft,fftfreq)
-
+  
     if scargle:
         lmscrgl,lmsfreq = scargle_fast(t[mask],f[mask],fmin=fmin,fmax=fmax,freq=lsfreq,window=False)
         ret = ret + (lmscrgl, lmsfreq)
     
+    if dft:
+        nfft, nfreq = nufft_j(t[mask],f[mask], freq = lmsfreq)
+        ret = (nfft, nfreq) + ret
+      
             
     return ret
 
@@ -205,7 +207,8 @@ def ppp(fft, freq,angle=None,use_peaks = False,thresh=0.5,min_dist=0.):
         peaks = peak_detect(fft,thres=thresh,min_dist=min_dist)
         if peaks.size == 0:
             return np.nan,np.nan,None
-        peak = np.sort(peaks[np.argsort(fft[peaks])[::-1][:3]])[0]
+        peak = peaks[0]
+        #peak = np.sort(peaks[np.argsort(fft[peaks])[::-1][:3]])[0]
     period = 1./freq[peak]
     if angle is None:
         return peak,period, None
@@ -271,8 +274,56 @@ def var_period(t, f, period,nbins=30):
     return res.x
 
 
+#==================================================
+#==================================================
+#   NUFFT programs #
+#if True:
+import nufft
+def freq_grid(t,fmin=None,fmax=None,oversamp=10.,pmin=None,pmax=None):
+    if pmax is not None:
+        if pmax==pmin:
+            pmax=10*pmax
+        fmin=1./pmax
+    if pmin is not None:
+        if pmax==pmin:
+            pmin=.1*pmin
+        fmax = 1./pmin
 
+    dt = t.max()-t.min()
+    nyquist = 2./dt
+    df = nyquist/oversamp
+    Nf = 1 + int(np.round((fmax-fmin)/df))
+    return fmin + df * np.arange(Nf)
 
+def nufft_j(x, y, freq = None, period_max=1., period_min=.5/24, window=False, oversamp=10.):
+    """
+    nufft_j(x, y, period_max=1., 
+      period_min=.5/24, window=False, oversamp=10.):
+    
+    Basic STFT algorithm
+    for evenly sampled data
+    """
+    srt = np.argsort(x)
+    x = x[srt] # get sorted x, y arrays
+    y = y[srt]
+    
+    if freq is None:
+      # Get a good frequency sampling, based on scargle in IDL
+      #freq = LombScargle(x,y).autofrequency()
+      #    minimum_frequency=1./period_max,maximum_frequency=1./period_min)
+      freq = freq_grid(x,fmin=1./period_max,fmax=1./period_min,oversamp=oversamp)
+      # create array to hold fft results
+      
+    fft = np.zeros_like(freq)
+
+    
+    if window:
+      np.absolute((len(x))*nufft.nufft3(x,y/y,freq*np.pi*2),out=fft)
+    else:
+      np.absolute((len(x))*nufft.nufft3(x,y-np.nanmean(y),freq*np.pi*2),out=fft)
+            
+    
+    return fft,freq
 
 
 
