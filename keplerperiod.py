@@ -167,7 +167,7 @@ def scargle_fast(t,c,fmin=None,fmax=None,freq=None,norm='psd', window=False):
 
 
 
-def period_analysis(t, f, mask = None, dft = True, scargle = True, nft = False, fmin = None, fmax = None, lsfreq=None, window=False):
+def period_analysis(t, f, mask = None, dft = True, scargle = True, nft = False, fmin = None, fmax = None, lfreq=None, window=False):
     '''
     period_analysis(t, f, mask = None, 
                         dft = True, scargle = True, nft = False
@@ -190,7 +190,9 @@ def period_analysis(t, f, mask = None, dft = True, scargle = True, nft = False, 
         mask = np.asarray(mask, dtype=np.bool)
     
     ret = ()
-    if dft and False:
+    
+    if dft:
+        #print 'DFT'
         dnu, new_t, new_f = regrid(t[mask],f[mask]) #grid to 30 minutes
         fft = np.abs(np.fft.fft(new_f))
         fftfreq = np.fft.fftfreq(len(new_f),d=dnu) # cycles/second
@@ -198,11 +200,13 @@ def period_analysis(t, f, mask = None, dft = True, scargle = True, nft = False, 
 
 
     if scargle and not nft:
-        lmscrgl,lmsfreq = scargle_fast(t[mask],f[mask],fmin=fmin,fmax=fmax,freq=lsfreq,window=False)
+        #print 'L-S'
+        lmscrgl,lmsfreq = scargle_fast(t[mask],f[mask],fmin=fmin,fmax=fmax,freq=lfreq,window=False)
         ret = ret + (lmscrgl, lmsfreq)
     
     if nft:
-        lmsfreq = lsfreq(t, fmin=fmin, fmax=fmax, freq=lsfreq)
+        #print 'NUFFT'
+        lmsfreq = lsfreq(t, fmin=fmin, fmax=fmax, freq=lfreq)
         nfft, nfreq = nufft_j(t[mask],f[mask], freq = lmsfreq)
         ret = ret + (nfft, nfreq)
 
@@ -345,9 +349,9 @@ def nufft_j(x, y, freq = None, period_max=1., period_min=.5/24, window=False, ov
 
     
     if window:
-      np.absolute((len(x))*nufft.nufft3(x,y/y,freq*np.pi*2),out=fft)
+        np.absolute(nufft.nufft3(x,y/y,freq*np.pi*2),out=fft)
     else:
-      np.absolute((len(x))*nufft.nufft3(x,y-np.nanmean(y),freq*np.pi*2),out=fft)
+        np.absolute(nufft.nufft3(x,y-np.nanmean(y),freq*np.pi*2),out=fft)
             
     
     return fft,freq
