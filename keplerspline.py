@@ -300,7 +300,7 @@ def get_k2_data(k2dataset):
 #    import pdb;pdb.set_trace()
     return t[g],f[g], cadenceno[g], campaign, mag
 
-def detrend_iter_single(t,f,delta, k=4,low=3,high=3):
+def detrend_iter_single(t,f,delta, k=4,low=3,high=3,cutboth=False):
     '''
      My iterative detrending algorithm, based on the concept in Vandenberg & Johnson 2015
      borrowed clipping portion from scipy.stats.sigmaclip
@@ -308,7 +308,9 @@ def detrend_iter_single(t,f,delta, k=4,low=3,high=3):
     '''
     clip = 1
     c = np.asarray(f).ravel()
-    mask = np.full(c.shape,True,dtype=np.bool)
+    #mask = np.full(c.shape,True,dtype=np.bool)
+    mask = np.isfinite(c)
+    outmask = np.copy(mask) #np.full(c.shape,True, dtype=np.bool)
     i = 0
     while clip:
         i+=1
@@ -320,12 +322,15 @@ def detrend_iter_single(t,f,delta, k=4,low=3,high=3):
         critlower = c_mean - c_std*low
         critupper = c_mean + c_std*high
         newmask = (c_detrend >= critlower) & (c_detrend <= critupper)
+        outmask[mask] = c_detrend <= critupper
         mask[mask] = newmask
         clip = size - c[mask].size
-        #print i,clip, np.sum(mask), len(t)
+        print i,clip, np.sum(mask), len(t)
         #plt.plot(x[mask],c_trend[newmask])
-    
-    return t, c_trend, mask
+
+    if cutboth:
+        outmask = mask
+    return t, c_trend, outmask
 
     
     

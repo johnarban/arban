@@ -198,7 +198,7 @@ def period_analysis(t, f, mask = None, dft = True, scargle = True, nft = False, 
         fftfreq = np.fft.fftfreq(len(new_f),d=dnu) # cycles/second
         ret = ret + (fft,fftfreq)
 
-
+        
     if scargle and not nft:
         print 'L-S'
         lmscrgl,lmsfreq = scargle_fast(t[mask],f[mask],fmin=fmin,fmax=fmax,freq=lfreq,window=False)
@@ -273,7 +273,7 @@ def bindata(x, y, mode = 'mean', return_std = False, nbins=30):
 
 
 
-def var_period(t, f, period,nbins=30):
+def var_period(t, f, period,nbins=60):
 
     def func(P):
         #Ps.append(P)
@@ -358,7 +358,9 @@ def nufft_j(x, y, freq = None, period_max=1., period_min=.5/24, window=False, ov
 
 
 
-
+def PDM(x,y,periods):
+    p = x[:,np.newaxis]/period % 1
+    return None
 
 
 
