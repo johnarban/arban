@@ -192,7 +192,7 @@ def period_analysis(t, f, mask = None, dft = True, scargle = True, nft = False, 
     ret = ()
     
     if dft:
-        #print 'DFT'
+        print 'DFT'
         dnu, new_t, new_f = regrid(t[mask],f[mask]) #grid to 30 minutes
         fft = np.abs(np.fft.fft(new_f))
         fftfreq = np.fft.fftfreq(len(new_f),d=dnu) # cycles/second
@@ -200,12 +200,12 @@ def period_analysis(t, f, mask = None, dft = True, scargle = True, nft = False, 
 
 
     if scargle and not nft:
-        #print 'L-S'
+        print 'L-S'
         lmscrgl,lmsfreq = scargle_fast(t[mask],f[mask],fmin=fmin,fmax=fmax,freq=lfreq,window=False)
         ret = ret + (lmscrgl, lmsfreq)
     
     if nft:
-        #print 'NUFFT'
+        print 'NUFFT'
         lmsfreq = lsfreq(t, fmin=fmin, fmax=fmax, freq=lfreq)
         nfft, nfreq = nufft_j(t[mask],f[mask], freq = lmsfreq)
         ret = ret + (nfft, nfreq)
