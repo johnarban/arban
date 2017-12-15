@@ -13,15 +13,9 @@ modified and simplified for SciPy
 
 import numpy as np
 from astropy.io import fits
-#import glob
-#from scipy import signal
-#from scipy import stats
-#from scipy import interpolate
 from scipy.interpolate import LSQUnivariateSpline
+from scipy.special import erf,erfc
 
-#import scipy.fftpack as fft
-#import matplotlib.pyplot as plt
-#import os
 
 # check if fitsio is installed
 try:
@@ -29,6 +23,11 @@ try:
     nofitsio = False
 except ImportError:
     nofitsio = True
+
+def rolling_window(a, window):
+    shape = a.shape[:-1] + (a.shape[-1] - window + 1, window)
+    strides = a.strides + (a.strides[-1],)
+    return np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
 
 
 #here some changes
@@ -69,8 +68,11 @@ def get_knots(x, dt = None, npts = None, k=4,verbose=False):
         t = np.arange(x[0]+ dt/2.,x[-1]-dt/2.,dt)
     
     ## Check Shoenberg-Whiteney conditions
-    fmode = True, None #initialize failure mode
-    
+    ## set fmode to True so that it actually starts 
+    ## checking. Keep checking until fmode[0] is False,
+    ## indicating that knots satisfy SW conditions
+    fmode = True, None 
+
     ## Check condition again after 
     ## removing offending knots
     while fmode[0]:
@@ -81,14 +83,16 @@ def get_knots(x, dt = None, npts = None, k=4,verbose=False):
             if verbose:
                 print 'delete'
             t = np.delete(t,fmode[1])
-            fmode[0]=True # set to recheck SW conditions
+            fmode=True,None # set to recheck SW conditions
         elif fmode[1]=='f3':
             t = np.unique(t) # sort and recheck SW conditions
-        elif fmode[1]=='f2': # ger new knots for k=1
-            if verbose: print "+1 level deep in checking 'SW'"
-            t, fmode = get_knots(x,dt=dt, npts=npts, k=1,verbose=verbose)
-            # new knows will go through checks and return fmode=False
-    
+        elif fmode[1]=='f2': # get new knots for k=1
+            #if verbose: print "+1 level deep in checking 'SW'"
+            #t, fmode = get_knots(x,dt=dt, npts=npts, k=1,verbose=verbose)
+            return t,(True,None)
+            # little recursive portion so that
+            # new knots will go through checks and return fmode=False
+
     return t,fmode
 
 def check_knots(x,t,k,verbose=True):
@@ -176,10 +180,25 @@ def get_breaks(cadenceno, campaign = None, time=None):
         breakp2 = np.where(cadenceno >= 121345)[0][0]
         breakp3 = np.where(cadenceno >= 121824)[0][0]
         breakp = [breakp1, breakp2, breakp3]
-    elif campaign==10:
+    elif campaign==102:
         breakp = find_data_gaps(time)
+    elif campaign==111:
+        breakp1 = np.where(cadenceno >= 124742)[0][0]
+        breakp = [breakp1]
+    elif campaign==12:
+        breakp1 = np.where(cadenceno >= 137332)[0][0]
+        breakp = [breakp1]
+    elif campaign==13:
+        breakp1 = np.where(k.cadenceno >= 141356)[0][0]
+        breakp2 = np.where(k.cadenceno >= 143095)[0][0]
+        breakp = [breakp1, breakp2]
+    elif campaign==14:
+        breakp1 = np.where(k.cadenceno >= 145715)[0][0]
+        breakp2 = np.where(k.cadenceno >= 147539)[0][0]
+        breakp = [breakp1, breakp2]
     else:
         breakp = []
+
             
     return breakp
 
@@ -221,15 +240,16 @@ def piecewise_spline(time, fcor, cadenceno, campaign = 0, mask = None, verbose=F
     for cond in condlist:
         x = time[cond & mask]
         y = fcor[cond & mask]
-        kn,fail_mode = get_knots(x, delta,verbose=verbose)
-        #print len(kn),len(x)
-        if not fail_mode:
+        kn,fail_mode = get_knots(x, delta,verbose=verbose,k=k)
+        # fail_mode is True
+        if fail_mode[0]:
+            if verbose: print 'Ignoring mask and using default knots'
             x = time[cond]
             y = fcor[cond]
             kn,_ = get_knots(x, delta,verbose=verbose)
-            spl_part = LSQUnivariateSpline(time[cond],fcor[cond],t=kn,k=4)
+            spl_part = LSQUnivariateSpline(time[cond],fcor[cond],t=kn,k=k)
         else:
-            spl_part = LSQUnivariateSpline(x, y, t=kn, k=4 ) #eval spline
+            spl_part = LSQUnivariateSpline(x, y, t=kn, k=k ) #eval spline
         spl = np.append(spl,spl_part(time[cond]))
     return spl.ravel()
 
@@ -300,6 +320,31 @@ def get_k2_data(k2dataset):
 #    import pdb;pdb.set_trace()
     return t[g],f[g], cadenceno[g], campaign, mag
 
+def pmpoints(m,n,ns):
+    '''
+    m: number of points found
+    n: number of trials
+    ns: n*sigma for prob of finding a point
+    '''
+    m = m // 1 # np.floor(m)
+    valid = np.ones_like(m)
+    #np.sqrt(2) = 1.4142135623730951
+    prob = special.erfc(ns/1.4142135623730951)
+    #np.log(2) = 0.69314718055994529
+    p = -(n*0.69314718055994529) + np.log(special.binom(n,m)) 
+    p += (-m + n)*np.log(2 - prob) 
+    p += m*np.log(prob)
+    valid[(m < 0) | (m >n)] = 0
+    return np.exp(p) * valid
+
+def cmpoints(m,n,ns):
+    m = m // 1 # np.floor(m)
+    valid = np.ones_like(m)
+    p = np.log(special.betainc(-m + n,1 + m,1 - special.erfc(ns/np.sqrt(2))/2.))
+    valid[(m<0)] = 0.
+    p[m>=n] = 1.
+    return np.exp(p) * valid
+
 def detrend_iter_single(t,f,delta, k=4,low=3,high=3,cutboth=False):
     '''
      My iterative detrending algorithm, based on the concept in Vandenberg & Johnson 2015
@@ -316,8 +361,8 @@ def detrend_iter_single(t,f,delta, k=4,low=3,high=3,cutboth=False):
         i+=1
         c_trend = single_spline(t, c, mask=mask, k=k, delta=delta)
         c_detrend = (c - c_trend + 1)[mask] #get masked detreneded lighcurve
-        c_mean = c_detrend.mean()
-        c_std = c_detrend.std()
+        c_mean = c_detrend.median() # use median for mean
+        c_std = 1.4826 * np.median(np.abs(c_detrend - c_mean))# use mad # c_detrend.std()
         size = c_detrend.size
         critlower = c_mean - c_std*low
         critupper = c_mean + c_std*high
@@ -347,7 +392,6 @@ def detrend_iter(k2dataset, delta, k = 4, low = 3, high = 3, cutboth=False,verbo
     else:
         t,f,cadenceno,campaign,mag = k2dataset
     
-    clip = 1
     c = np.asarray(f).ravel()
     mask = np.full(c.shape,True,dtype=np.bool)
     outmask = np.full(c.shape,True,dtype=np.bool)
@@ -355,6 +399,9 @@ def detrend_iter(k2dataset, delta, k = 4, low = 3, high = 3, cutboth=False,verbo
         low, masklow = low
         if np.isinf(masklow):
             None
+    clip = 1
+    clipped = len(t) - np.sum(mask)
+    M = np.arange(len(c))
     i = 0
     while clip:
         i+=1
@@ -366,10 +413,11 @@ def detrend_iter(k2dataset, delta, k = 4, low = 3, high = 3, cutboth=False,verbo
         critlower = c_mean - c_std*low
         critupper = c_mean + c_std*high
         newmask = (c_detrend >= critlower) & (c_detrend <= critupper)
+
         outmask[mask] = c_detrend <= critupper
         mask[mask] = newmask
         clip = size - c[mask].size
-        if verbose: print 'iter: %i num clipped: %i num good: %i  num orig: %i'%(i,clip, np.sum(mask), len(t))
+        if verbose: print 'iter: %i num clipped: %i num good: %i  num orig: %i clipped low: %i clipped high: %i'%(i,clip, np.sum(mask), len(t),np.sum(c_detrend < critlower),np.sum(c_detrend > critupper))
         if i == maxiter:
                 clip = 0
         #plt.plot(x[mask],c_trend[newmask])

@@ -10,6 +10,7 @@ from scipy import stats,signal,optimize
 from scipy.interpolate import LSQUnivariateSpline
 #import matplotlib.pyplot as plt
 #import peakutils as peakutil
+import bls
 
 #> sys.platform
 #> win32 or linus2 or macosx
@@ -115,6 +116,10 @@ def scargle_slow(t,c):
     return px,period
  
 
+def horne(n0):
+    # number of frequencies via horne algorithm
+    # wrt to number of data points
+    return int( -6.363 + 1.93*n0 + 0.00098*n0**2)
 
 
 def lsfreq(t,fmin=None,fmax=None,freq=None):
@@ -164,10 +169,26 @@ def scargle_fast(t,c,fmin=None,fmax=None,freq=None,norm='psd', window=False):
                     
     return px,nu
 
+def box_least_squares(time, flux, pmin,pmax):
+    u = np.empty_like(flux)
+    v = np.empty_like(flux)
+    #nf = 338
+    nf = horne(len(time))
+    df = 0.0007224
+    nb = 50
+    qmi = 0.01
+    qma = 0.5
+    fmax = 1/pmin
+    fmin = 1/pmax
+    df = (fmax - fmin)/nf
+    nu = fmin + np.arange(nf)*df
+    #nf = (fmax-fmin)/df //1
+    results = bls.eebls(time, flux, u, v, nf, fmin, df, nb, qmi, qma)
+    return results, nu
 
 
 
-def period_analysis(t, f, mask = None, dft = True, scargle = True, nft = False, fmin = None, fmax = None, lfreq=None, window=False):
+def period_analysis(t, f, mask = None, dft = False, scargle = False, nft = False, bls=False, fmin = None, fmax = None, lfreq=None, window=False):
     '''
     period_analysis(t, f, mask = None, 
                         dft = True, scargle = True, nft = False
@@ -183,6 +204,8 @@ def period_analysis(t, f, mask = None, dft = True, scargle = True, nft = False, 
     fmax : frequency min
     lsfreq : pass a list of frequencies for LS or nufft
     window : find the window function
+    
+    returns periodogram, frequency for each element
     '''
     if mask is None:
         mask = np.full(t.shape,True,dtype=np.bool)
@@ -192,25 +215,32 @@ def period_analysis(t, f, mask = None, dft = True, scargle = True, nft = False, 
     ret = ()
     
     if dft:
-        print 'DFT'
+        #print 'DFT'
         dnu, new_t, new_f = regrid(t[mask],f[mask]) #grid to 30 minutes
         fft = np.abs(np.fft.fft(new_f))
         fftfreq = np.fft.fftfreq(len(new_f),d=dnu) # cycles/second
-        ret = ret + (fft,fftfreq)
+        ret = ret + (fft,fftfreq,None,None,'DFT')
 
         
-    if scargle and not nft:
-        print 'L-S'
-        lmscrgl,lmsfreq = scargle_fast(t[mask],f[mask],fmin=fmin,fmax=fmax,freq=lfreq,window=False)
-        ret = ret + (lmscrgl, lmsfreq)
+    if scargle:
+        #print 'L-S'
+        ls,ls_freq = scargle_fast(t[mask],f[mask],fmin=fmin,fmax=fmax,freq=lfreq,window=False)
+        ret = ret + (ls,ls_freq,None,None,'LS')
     
     if nft:
-        print 'NUFFT'
-        lmsfreq = lsfreq(t, fmin=fmin, fmax=fmax, freq=lfreq)
-        nfft, nfreq = nufft_j(t[mask],f[mask], freq = lmsfreq)
-        ret = ret + (nfft, nfreq)
+        #print 'NUFFT'
+        freq = lsfreq(t, fmin=fmin, fmax=fmax, freq=lfreq)
+        nfft, nfreq = nufft_j(t[mask],f[mask], freq = freq)
+        ret = ret + (nfft, nfreq,None,None,'NUFFT')
+        
+    if bls:
+        #print 'BLS'
+        results, bls_freq = box_least_squares(t[mask],f[mask],pmin=1/fmax, pmax=1/fmin)
+        power, best_period, best_power, depth, q, in1, in2 = results
+        ret = ret + (power, bls_freq, best_period,best_power,'BLS')
+        
 
-      
+    
             
     return ret
 
@@ -227,6 +257,10 @@ def ppp(fft, freq,angle=None,use_peaks = False,thresh=0.5,min_dist=0.):
     	fft = fft[pos]
     	freq = freq[pos]
     	peak = np.where(fft == max(fft))[0][0]
+        if fft[peak] > thresh * (fft.max()-fft.min()):
+            peak = peak
+        else:
+            return np.nan,np.nan,None
     else:
         peaks = peak_detect(fft,thres=thresh,min_dist=min_dist)
         if peaks.size == 0:
@@ -257,18 +291,24 @@ def t2phi(time,period,phase=None):
 
 
 def bindata(x, y, mode = 'mean', return_std = False, nbins=30):
-    N, binex = np.histogram(x, bins=nbins)
-    binx = (binex[1:] + binex[:-1])/2.
-    mean = stats.binned_statistic(x,y,bins=binex,statistic=mode)[0]
-    count = stats.binned_statistic(x,y,bins=binex,statistic='count')[0]
-    ## shift bins to center minimum
-    min = np.where(mean == np.nanmin(mean))[0]
-    phase_offset = binx[min]
-    if return_std:
-        std = stats.binned_statistic(x,y,bins=binex,statistic=np.std)[0]/(np.sqrt(count)-1)    
-        return binx, mean, phase_offset, std
+    if not all(np.isnan(x)):
+        N, binex = np.histogram(x, bins=nbins)
+        binx = (binex[1:] + binex[:-1])/2.
+        mean = stats.binned_statistic(x,y,bins=binex,statistic=mode)[0]
+        count = stats.binned_statistic(x,y,bins=binex,statistic='count')[0]
+        ## shift bins to center minimum
+        imin = np.where(mean == np.nanmin(mean))[0]
+        phase_offset = binx[imin]
+        if return_std:
+            std = stats.binned_statistic(x,y,bins=binex,statistic=np.std)[0]/(np.sqrt(count)-1)    
+            return binx, mean, phase_offset, std
+        else:
+            return binx, mean, phase_offset
     else:
-        return binx, mean, phase_offset
+        if return_std:
+            return np.linspace(-.5,.5,nbins),np.ones((nbins,)),np.nan,np.nan
+        else:
+            return np.linspace(-.5,.5,nbins),np.ones((nbins,)),np.nan
 
 
 
