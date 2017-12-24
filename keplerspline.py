@@ -13,8 +13,9 @@ modified and simplified for SciPy
 
 import numpy as np
 from astropy.io import fits
-from scipy.interpolate import LSQUnivariateSpline
-from scipy.special import erf,erfc
+from scipy.interpolate import LSQUnivariateSpline,UnivariateSpline,interp1d
+from scipy.special import erf,erfc,betainc,binom
+from scipy.signal import medfilt
 
 
 # check if fitsio is installed
@@ -81,17 +82,15 @@ def get_knots(x, dt = None, npts = None, k=4,verbose=False):
         fmode = check_knots(x,t,k,verbose=verbose) # Schoenberg-Whitney conditions
         if fmode[0]=='sw':
             if verbose:
-                print 'delete'
+                print 'Deleting %s knots'%len(fmode[1])
             t = np.delete(t,fmode[1])
             fmode=True,None # set to recheck SW conditions
         elif fmode[1]=='f3':
             t = np.unique(t) # sort and recheck SW conditions
         elif fmode[1]=='f2': # get new knots for k=1
-            #if verbose: print "+1 level deep in checking 'SW'"
-            #t, fmode = get_knots(x,dt=dt, npts=npts, k=1,verbose=verbose)
-            return t,(True,None)
-            # little recursive portion so that
-            # new knots will go through checks and return fmode=False
+            return t,(True,None) #Pass this the Univariate Spline
+        elif fmode[1]=='f1':
+            return np.linspace(x[0]*.9,x[-1]*1.1,k+1), (True,None)
 
     return t,fmode
 
@@ -158,7 +157,7 @@ def get_breaks(cadenceno, campaign = None, time=None):
             cadenceno = cadenceno['BESTAPER'].data['CADENCENO']
         except:
             pass
-    
+
     if campaign==3:
         breakp1 = np.where(cadenceno >= 100174)[0][0]
         breakp2 = np.where(cadenceno >= 101801)[0][0]
@@ -180,8 +179,8 @@ def get_breaks(cadenceno, campaign = None, time=None):
         breakp2 = np.where(cadenceno >= 121345)[0][0]
         breakp3 = np.where(cadenceno >= 121824)[0][0]
         breakp = [breakp1, breakp2, breakp3]
-    elif campaign==102:
-        breakp = find_data_gaps(time)
+    #elif campaign==102:
+    #    breakp = find_data_gaps(time)
     elif campaign==111:
         breakp1 = np.where(cadenceno >= 124742)[0][0]
         breakp = [breakp1]
@@ -189,15 +188,18 @@ def get_breaks(cadenceno, campaign = None, time=None):
         breakp1 = np.where(cadenceno >= 137332)[0][0]
         breakp = [breakp1]
     elif campaign==13:
-        breakp1 = np.where(k.cadenceno >= 141356)[0][0]
-        breakp2 = np.where(k.cadenceno >= 143095)[0][0]
+        breakp1 = np.where(cadenceno >= 141356)[0][0]
+        breakp2 = np.where(cadenceno >= 143095)[0][0]
         breakp = [breakp1, breakp2]
     elif campaign==14:
-        breakp1 = np.where(k.cadenceno >= 145715)[0][0]
-        breakp2 = np.where(k.cadenceno >= 147539)[0][0]
+        breakp1 = np.where(cadenceno >= 145715)[0][0]
+        breakp2 = np.where(cadenceno >= 147539)[0][0]
         breakp = [breakp1, breakp2]
     else:
-        breakp = []
+        try:
+            breakp = [[i] for i in np.where(np.diff(cadenceno) > 5*np.nanmedian(np.diff(cadenceno)))[0]]
+        except:
+            breakp = []
 
             
     return breakp
@@ -243,11 +245,11 @@ def piecewise_spline(time, fcor, cadenceno, campaign = 0, mask = None, verbose=F
         kn,fail_mode = get_knots(x, delta,verbose=verbose,k=k)
         # fail_mode is True
         if fail_mode[0]:
-            if verbose: print 'Ignoring mask and using default knots'
+            if verbose: print 'Couldn\'t find knots. Using LSQUnivariate Spline w/o mask'
             x = time[cond]
             y = fcor[cond]
             kn,_ = get_knots(x, delta,verbose=verbose)
-            spl_part = LSQUnivariateSpline(time[cond],fcor[cond],t=kn,k=k)
+            spl_part = LSQUnivariateSpline(time[cond & mask],fcor[cond & mask], t=kn, k=k)
         else:
             spl_part = LSQUnivariateSpline(x, y, t=kn, k=k ) #eval spline
         spl = np.append(spl,spl_part(time[cond]))
@@ -329,9 +331,9 @@ def pmpoints(m,n,ns):
     m = m // 1 # np.floor(m)
     valid = np.ones_like(m)
     #np.sqrt(2) = 1.4142135623730951
-    prob = special.erfc(ns/1.4142135623730951)
+    prob = erfc(ns/1.4142135623730951)
     #np.log(2) = 0.69314718055994529
-    p = -(n*0.69314718055994529) + np.log(special.binom(n,m)) 
+    p = -(n*0.69314718055994529) + np.log(binom(n,m)) 
     p += (-m + n)*np.log(2 - prob) 
     p += m*np.log(prob)
     valid[(m < 0) | (m >n)] = 0
@@ -340,10 +342,59 @@ def pmpoints(m,n,ns):
 def cmpoints(m,n,ns):
     m = m // 1 # np.floor(m)
     valid = np.ones_like(m)
-    p = np.log(special.betainc(-m + n,1 + m,1 - special.erfc(ns/np.sqrt(2))/2.))
+    p = np.log(betainc(-m + n,1 + m,1 - erfc(ns/np.sqrt(2))/2.))
     valid[(m<0)] = 0.
     p[m>=n] = 1.
     return np.exp(p) * valid
+
+def pgtnsigma(n):
+    return 0.5 * erfc(n / np.sqrt(2.))
+
+def mad(x,axis=None):
+    return 1.4826*np.nanmedian(np.abs(x-np.nanmedian(x,axis=axis)),axis=axis)
+
+def std1(x):
+    '''
+    get full standard deviation
+    for top/bottom half of lc
+    '''
+    if np.mean(x-1) < 0:
+        return mad(np.hstack([x-1,np.abs(x-1)]))
+    else:
+        return mad(np.hstack([x-1,-np.abs(x-1)]))
+
+def statmask(f,sl=1e-5,sigma=3,perpoint=False):
+    mxu=np.where(f>=1)[0]
+    gfluxu = f[mxu]
+    Mu = np.arange(0,len(gfluxu))[::-1]
+    srtu = np.argsort(np.argsort(gfluxu))
+    Mu = Mu[srtu]
+    snrsu = np.abs(gfluxu-1) / std1(gfluxu)
+    if perpoint:
+        pu = 1-cmpoints(Mu,len(gfluxu),snrsu)
+    else:
+        pu = 1-cmpoints(Mu,len(gfluxu),sigma)
+
+    mxd=np.where(f<1)[0]
+    gfluxd = f[mxd]
+    Md = np.arange(0,len(gfluxd))
+    srtd = np.argsort(np.argsort(gfluxd))
+    Md = Md[srtd]
+    snrsd = np.abs(gfluxd-1) / std1(gfluxd)
+    if perpoint:
+        pd = 1-cmpoints(Md,len(gfluxd),snrsd)
+    else:
+        pd = 1-cmpoints(Md,len(gfluxd),sigma)
+
+    mx = np.hstack([mxu,mxd])
+    M = np.hstack([Mu,Md])
+    gflux = np.hstack([gfluxu,gfluxd])
+    srt = np.hstack([srtu,srtd])
+    snrs = np.hstack([snrsu,snrsd])
+    p = np.hstack([pu,pd])
+    
+    return (p<sl)[np.argsort(mx)]
+
 
 def detrend_iter_single(t,f,delta, k=4,low=3,high=3,cutboth=False):
     '''
@@ -372,14 +423,15 @@ def detrend_iter_single(t,f,delta, k=4,low=3,high=3,cutboth=False):
         clip = size - c[mask].size
         print i,clip, np.sum(mask), len(t)
         #plt.plot(x[mask],c_trend[newmask])
-
+        if i > 50:
+            clip = 0
     if cutboth:
         outmask = mask
     return t, c_trend, outmask
 
     
     
-def detrend_iter(k2dataset, delta, k = 4, low = 3, high = 3, cutboth=False,verbose=False,maxiter=1000):
+def detrend_iter(k2dataset, delta, delta_start=1.25, k = 4, low = 3, high = 3, cutboth=False,verbose=False,maxiter=50,sigma=5,sl=1e-5):
     # My iterative detrending algorithm, based on the concept in Vandenberg & Johnson 2015
     # borrowed clipping portion from scipy.stats.sigmaclip
     # with substantial modifications. 
@@ -403,25 +455,29 @@ def detrend_iter(k2dataset, delta, k = 4, low = 3, high = 3, cutboth=False,verbo
     clipped = len(t) - np.sum(mask)
     M = np.arange(len(c))
     i = 0
-    while clip:
-        i+=1
-        c_trend = piecewise_spline(t, c, cadenceno, campaign=campaign, mask=mask, k=k, delta=delta,verbose=verbose)
-        c_detrend = (c - c_trend + 1)[mask] #get masked detreneded lighcurve
-        c_mean = c_detrend.mean()
-        c_std = c_detrend.std()
-        size = c_detrend.size
-        critlower = c_mean - c_std*low
-        critupper = c_mean + c_std*high
-        newmask = (c_detrend >= critlower) & (c_detrend <= critupper)
+    if True:
+        for dt in [delta_start,delta]:
+            i = 0
+            clip = 1
+            while clip:
+                i+=1
+                c_trend = piecewise_spline(t, c, cadenceno, campaign=campaign, mask=mask, k=k, delta=dt,verbose=verbose)
+                c_detrend = (c - c_trend + 1)[mask] #get masked detreneded lighcurve
+                c_mean = c_detrend.mean()
+                c_std = mad(c_detrend)
+                size = c_detrend.size
+                critlower = c_mean - c_std*low
+                critupper = c_mean + c_std*high
+                newmask = (c_detrend >= critlower) & (c_detrend <= critupper)
 
-        outmask[mask] = c_detrend <= critupper
-        mask[mask] = newmask
-        clip = size - c[mask].size
-        if verbose: print 'iter: %i num clipped: %i num good: %i  num orig: %i clipped low: %i clipped high: %i'%(i,clip, np.sum(mask), len(t),np.sum(c_detrend < critlower),np.sum(c_detrend > critupper))
-        if i == maxiter:
-                clip = 0
-        #plt.plot(x[mask],c_trend[newmask])
-    
-    if cutboth:
-        outmask = mask
-    return t, c_trend, outmask
+                outmask[mask] = c_detrend <= critupper
+                mask[mask] = newmask
+                clip = size - c[mask].size
+                if verbose: print 'iter: %i dt: %0.2f num clipped: %i num good: %i  num orig: %i clipped low: %i clipped high: %i'%(i,dt,clip, np.sum(mask), len(t),np.sum(c_detrend < critlower),np.sum(c_detrend > critupper))
+                if (i == maxiter):
+                    clip = 0
+        
+        if cutboth:
+            outmask = mask
+        
+        return t, c_trend, outmask  & statmask(c - c_trend + 1,sigma=sigma,sl=sl), dt

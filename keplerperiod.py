@@ -121,6 +121,11 @@ def horne(n0):
     # wrt to number of data points
     return int( -6.363 + 1.93*n0 + 0.00098*n0**2)
 
+def clear_windows(nu, freq, width, aliases = True):
+    if aliases:
+        return nu[~((nu % freq) <= width)]
+    else:
+        return nu[~((nu <= freq + width) & (nu <= freq + width))]
 
 def lsfreq(t,fmin=None,fmax=None,freq=None):
     time = t-t[0]
@@ -137,6 +142,8 @@ def lsfreq(t,fmin=None,fmax=None,freq=None):
         nu = (fmin+(fmax-fmin)*np.arange(nfreq)/(nfreq -1.))
     else:
         nu=freq
+        
+    nu = clear_windows(nu, 47.2e-6 * 86400., .25e-6 * 86400.,aliases=True)
 
     return nu
 
@@ -161,6 +168,8 @@ def scargle_fast(t,c,fmin=None,fmax=None,freq=None,norm='psd', window=False):
         nu = (fmin+(fmax-fmin)*np.arange(nfreq)/(nfreq -1.))
     else:
         nu=freq
+    
+    nu = clear_windows(nu, 47.2e-6 * 86400., .25e-6 * 86400.,aliases=True)
     
     if window:
         px = LombScargle(time,c , fit_mean=False, center_data=False).power(nu,method='fast',normalization=norm)
