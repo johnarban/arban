@@ -143,7 +143,7 @@ def lsfreq(t,fmin=None,fmax=None,freq=None):
     else:
         nu=freq
         
-    nu = clear_windows(nu, 47.2e-6 * 86400., .25e-6 * 86400.,aliases=True)
+    #nu = clear_windows(nu, 47.2e-6 * 86400., .25e-6 * 86400.,aliases=True)
 
     return nu
 
@@ -169,7 +169,7 @@ def scargle_fast(t,c,fmin=None,fmax=None,freq=None,norm='psd', window=False):
     else:
         nu=freq
     
-    nu = clear_windows(nu, 47.2e-6 * 86400., .25e-6 * 86400.,aliases=True)
+    #nu = clear_windows(nu, 47.2e-6 * 86400., .25e-6 * 86400.,aliases=True)
     
     if window:
         px = LombScargle(time,c , fit_mean=False, center_data=False).power(nu,method='fast',normalization=norm)
