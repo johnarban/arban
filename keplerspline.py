@@ -181,9 +181,9 @@ def get_breaks(cadenceno, campaign = None, time=None):
         breakp = [breakp1, breakp2, breakp3]
     #elif campaign==102:
     #    breakp = find_data_gaps(time)
-    elif campaign==111:
-        breakp1 = np.where(cadenceno >= 124742)[0][0]
-        breakp = [breakp1]
+    #elif campaign==111: # bad breakpoints for c11
+    #    breakp1 = np.where(cadenceno >= 134742)[0][0]
+    #    breakp = [breakp1]
     elif campaign==12:
         breakp1 = np.where(cadenceno >= 137332)[0][0]
         breakp = [breakp1]
