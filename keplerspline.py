@@ -39,34 +39,49 @@ def get_knots(x, dt = None, npts = None, k=4,verbose=False):
     """
 
     # if there is an empty list, return it and fail
-    if len(x)<1:
-        return x, 'fail'
+    n = len(x)
+    if n<1:
+        return x, (True,)
     
     # Get the range in x
+    x = np.array(x)
     x.sort() # sort x from low to high
     x_range = x[-1] - x[0]
+    
 
     ##########################################################
     ## Get evenly spaced knots                               #
     ## knots must be internal to the                         #
     ## abcissa. We first generate                            # 
     ## a list evenly spaced on [min(x) + dt/2,max(x) - dt/2) #
+    ## OLD         #t = np.arange(x[0]+ dt/2.,x[-1]-dt/2.,dt)
     ##########################################################
     
     # if dt is given, use it
     if dt is not None:
-        t = np.arange(x[0]+ dt/2.,x[-1]-dt/2.,dt)
+        npts = long(x_range / dt) + 1
+        tempdt = x_range/(npts - 1.)
+        if npts < 2: npts = 2
+        t = np.arange(npts,dtype=float) * tempdt + x[0]
 	# if dt not given & npts is, divide
     elif npts is not None: 
         npts = int(npts)
-        dt = x_range/(npts - 1.) # find dt
-        t = np.arange(x[0]+ dt/2.,x[-1]-dt/2.,dt)
-    # Default to 11 knots
+        tempdt = x_range/(npts - 1.)
+        t = np.arange(npts,dtype=float) * tempdt + x[0]
     else:
         npts = 11
-        dt = dt = x_range/(npts - 1.)
+        tempdt = x_range/(npts - 1.)
         print('Defaulting to %i knots. dt = %0.2f'%(npts,dt))
-        t = np.arange(x[0]+ dt/2.,x[-1]-dt/2.,dt)
+        t = np.arange(npts,dtype=float) * tempdt + x[0]
+        
+    if np.nanmin(x) < np.min(t):
+        t[np.argmin(t)] = np.nanmin(x)
+    if np.nanmax(x) > np.max(t):
+        t[np.argmax(t)] = np.nanmax(x)
+    
+    
+    t = t[(t>np.min(x)) & (t<np.max(x))] # LSQUnivariateSpline internally adds boundary knots 
+    # https://github.com/scipy/scipy/issues/5916#issuecomment-191346579
     
     ## Check Shoenberg-Whiteney conditions
     ## set fmode to True so that it actually starts 
@@ -87,10 +102,10 @@ def get_knots(x, dt = None, npts = None, k=4,verbose=False):
             fmode=True,None # set to recheck SW conditions
         elif fmode[1]=='f3':
             t = np.unique(t) # sort and recheck SW conditions
-        elif fmode[1]=='f2': # get new knots for k=1
-            return t,(True,None) #Pass this the Univariate Spline
+        elif fmode[1]=='f2':
+            return t,(True,None) # Let us know it failed
         elif fmode[1]=='f1':
-            return np.linspace(x[0]*.9,x[-1]*1.1,k+1), (True,None)
+            return None, (True, None) # Let us know if failed
 
     return t,fmode
 
@@ -134,23 +149,35 @@ def check_knots(x,t,k,verbose=True):
     if not np.all(arr):
         if verbose: print "Failed Schoenberg-Whitney"
         return 'sw',np.where(~np.asarray(arr))[0]
+    
+    return False, None
+    
+def find_data_gaps(time, delta = 1.5):
+    '''
+    return np.where(np.diff(time) > delta).tolist()
+    delta = 1.5 [default]
+    '''
+    if time is None:
+        return []
     else:
-        return False, None
+        return np.where(np.diff(time) > delta)[0].tolist()
+
+def where(condition):
+    wh = np.where(condition)[0]
+    if len(wh) > 0:
+        return [wh[0]-1]
+    else:
+        return wh
+
     
-def find_data_gaps(time):
-    diff = np.diff(time)
-    delta = np.median(np.diff(time))
-    madev = np.median(np.abs(diff-delta))
-    breaks = np.where(diff > 3*madev)
-    return breaks  
-    
-def get_breaks(cadenceno, campaign = None, time=None):
+def get_breaks(cadenceno, campaign = None, time=None, dt = 1.5):
     """
     if no campaign number is given it checks 
     to see if cadenceno is a K2 LC fits file
     
     For speed, preferably just pass cadenceno and campaign
     """
+    
     if campaign is None:
         try:
             campaign = cadenceno[0].header['CAMPAIGN']
@@ -158,51 +185,52 @@ def get_breaks(cadenceno, campaign = None, time=None):
         except:
             pass
 
+    breakp = [0]
     if campaign==3:
-        breakp1 = np.where(cadenceno >= 100174)[0][0]
-        breakp2 = np.where(cadenceno >= 101801)[0][0]
-        breakp = [breakp1, breakp2]
+        breakp.extend(where(cadenceno > 100174))
+        breakp.extend(where(cadenceno > 101801))
+        
     elif campaign==4:
-        breakp1 = np.where(cadenceno >= 104222)[0][0]
-        breakp2 = np.where(cadenceno >= 105854)[0][0]
-        breakp = [breakp1, breakp2]
+        breakp.extend(where(cadenceno > 104222))
+        breakp.extend(where(cadenceno > 105854))
+        
     elif campaign==5:
-        breakp = np.where(cadenceno >= 109374)[0][0]
+        breakp.extend(where(cadenceno > 109374))
+        
     elif campaign==6:
-        breakp1 = np.where(cadenceno >= 111550)[0][0]
-        breakp2 = np.where(cadenceno >= 113482)[0][0]
-        breakp = [breakp1, breakp2]
+        breakp.extend(where(cadenceno > 111550))
+        breakp.extend(where(cadenceno > 113482))
+        
     elif campaign==7:
-        breakp = np.where(cadenceno > 117870)[0][0]
+        breakp.extend(where(cadenceno > 117870))
+        
     elif campaign==8:
-        breakp1 = np.where(cadenceno >= 120881)[0][0]
-        breakp2 = np.where(cadenceno >= 121345)[0][0]
-        breakp3 = np.where(cadenceno >= 121824)[0][0]
-        breakp = [breakp1, breakp2, breakp3]
+        breakp.extend(where(cadenceno > 120881))
+        breakp.extend(where(cadenceno > 121345))
+        breakp.extend(where(cadenceno > 121824))
+        
     #elif campaign==102:
     #    breakp = find_data_gaps(time)
-    #elif campaign==111: # bad breakpoints for c11
-    #    breakp1 = np.where(cadenceno >= 134742)[0][0]
-    #    breakp = [breakp1]
+    elif campaign==111: # bad breakpoints for c11
+        breakp.extend(where(cadenceno > 134742))
+        
     elif campaign==12:
-        breakp1 = np.where(cadenceno >= 137332)[0][0]
-        breakp = [breakp1]
+        breakp.extend(where(cadenceno > 137332))
+        
     elif campaign==13:
-        breakp1 = np.where(cadenceno >= 141356)[0][0]
-        breakp2 = np.where(cadenceno >= 143095)[0][0]
-        breakp = [breakp1, breakp2]
+        breakp.extend(where(cadenceno > 141356))
+        breakp.extend(where(cadenceno > 143095))
+        
     elif campaign==14:
-        breakp1 = np.where(cadenceno >= 145715)[0][0]
-        breakp2 = np.where(cadenceno >= 147539)[0][0]
-        breakp = [breakp1, breakp2]
+        breakp.extend(where(cadenceno > 145715))
+        breakp.extend(where(cadenceno > 147539))
+        
     else:
-        try:
-            breakp = [[i] for i in np.where(np.diff(cadenceno) > 5*np.nanmedian(np.diff(cadenceno)))[0]]
-        except:
-            breakp = []
+        breakp.extend([])
 
-            
-    return breakp
+    breakp.extend(find_data_gaps(time, delta = dt))
+
+    return np.unique(breakp).tolist()
 
 
 def piecewise_spline(time, fcor, cadenceno, campaign = 0, mask = None, verbose=False,\
@@ -219,31 +247,33 @@ def piecewise_spline(time, fcor, cadenceno, campaign = 0, mask = None, verbose=F
     you will get unexpected results and offsets
     """
     
-    if breakpoints is None:
-        breakpoints = get_breaks(cadenceno, campaign, time=time)
-    
     if mask is None:
         mask = np.full(cadenceno.shape,True,dtype=np.bool)
+    
+    if breakpoints is None:
+        breakpoints = get_breaks(cadenceno, campaign, time=time, dt = delta)
     
     condlist = []
     spl = np.asarray([])
     
-    breakpoints = np.append(0,breakpoints).astype(int) #first segment starts at 0
+    #breakpoints = np.append(0,breakpoints).astype(int) #first segment starts at 0
     
     # create condlist defining interval start
-    for breakpoint in breakpoints:
-        condlist.append(cadenceno >= cadenceno[breakpoint])
+    for i,breakpoint in enumerate(breakpoints):
+        if i < len(breakpoints)-1:
+            condlist.append((cadenceno >= cadenceno[breakpoint]) & (cadenceno < cadenceno[breakpoints[i+1]]))
+        else:
+            condlist.append((cadenceno >= cadenceno[breakpoint]))
     
-    # isolate each interval with XOR        
-    for i,c in enumerate(condlist[:-1]):
-        condlist[i] = c ^ condlist[i+1]
+    ## isolate each interval with XOR        
+    #for i,c in enumerate(condlist[:-1]):
+    #    condlist[i] = c ^ condlist[i+1]
     
     # Build up the spline array
     for cond in condlist:
         x = time[cond & mask]
         y = fcor[cond & mask]
         kn,fail_mode = get_knots(x, delta,verbose=verbose,k=k)
-        # fail_mode is True
         if fail_mode[0]:
             if verbose: print 'Couldn\'t find knots. Using LSQUnivariate Spline w/o mask'
             x = time[cond]
