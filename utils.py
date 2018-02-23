@@ -32,7 +32,7 @@ def set_plot_opts(serif_fonts=True):
 
     if serif_fonts:
         mpl.rcParams['mathtext.fontset']='stix'
-        mpl.rcParams['font.family']=u'serif'
+        mpl.rcParams['font.family']='serif'
         mpl.rcParams['font.size']=12
     return None
 
@@ -123,7 +123,7 @@ def t2a(table):
 
 # In[Discrete Colorbar]
 def discrete_cmap(colormap, N_colors):
-    print 'Not doing anything yet'
+    print('Not doing anything yet')
     return None
 
 # In[WCS axis labels]
@@ -165,13 +165,13 @@ def wcsaxis(wcs, N=6, ax=None,fmt='%0.2f',use_axes=False):
     if naxis == 1:
         x_tick = wcs.all_pix2world(x,0)
     elif naxis == 2:   
-        coord = zip(x,y)
+        coord = list(zip(x,y))
         x_tick, y_tick = wcs.all_pix2world(coord,0).T
     elif naxis > 2:
         c = [x,y]
-        for i in xrange(naxis-2):
+        for i in range(naxis-2):
             c.append([0]*N)
-        coord = zip(*c)
+        coord = list(zip(*c))
         ticks = wcs.all_pix2world(coord,0)
         x_tick,y_tick = np.asarray(ticks)[:,:2].T
     
@@ -243,7 +243,7 @@ def convert_flux(mag=None,emag=None,filt=None,return_wavelength=False):
     """
     
     if mag is None or filt is None:
-        print 'List of filters and filter properties'
+        print('List of filters and filter properties')
         __filtertable__.pprint(max_lines=len(__filtertable__)+3)
         return None
         
@@ -252,10 +252,10 @@ def convert_flux(mag=None,emag=None,filt=None,return_wavelength=False):
         tab = __filtertable__
         tab['fname'] = [s.lower() for s in tab['fname']]
         if not filt.lower() in tab['fname']:
-            print 'Filter %s not found'%filt.lower()
-            print 'Please select one of the following'
-            print tab['fname'].data
-            filt = input('Include quotes in answer (example (\'johnsonK\')): ')
+            print('Filter %s not found'%filt.lower())
+            print('Please select one of the following')
+            print(tab['fname'].data)
+            filt = eval(input('Include quotes in answer (example (\'johnsonK\')): '))
         
         f0 = tab['F0_Jy'][np.where(filt.lower() == tab['fname'])][0]
     else:
@@ -327,7 +327,7 @@ def rectangle(c, w, h, angle=0, center=True):
     R = rot_matrix(angle * np.pi / 180.)
     c = []
 
-    for i in xrange(4):
+    for i in range(4):
         xr, yr = np.dot(R, np.asarray([x[i], y[i]])).A.ravel()
         # coord switch to match ordering of FITs dimensions
         c.append((cx + xr, cy + yr))
@@ -376,7 +376,7 @@ def mgeo(arr, n=2):
     return np.product(b,axis=0)[n-1:-n]**(1./float(n))
     '''
     a = []
-    for i in xrange(len(arr) - (n - 1)):
+    for i in range(len(arr) - (n - 1)):
         a.append(stats.gmean(arr[i:n + i]))
 
     return np.asarray(a)
@@ -427,7 +427,7 @@ def llspace(xmin, xmax, n=None, log=False, dx=None, dex=None):
     dxisNone = dx is None
     dexisNone = dex is None
     if nisNone & dxisNone & dexisNone:
-        print 'Error: Defaulting to 10 linears steps'
+        print('Error: Defaulting to 10 linears steps')
         n = 10.
         nisNone = False
 
@@ -435,7 +435,7 @@ def llspace(xmin, xmax, n=None, log=False, dx=None, dex=None):
     log = log or (dxisNone and (not dexisNone))
     if log:
         if xmin == 0:
-            print "log(0) is -inf. xmin must be > 0 for log spacing"
+            print("log(0) is -inf. xmin must be > 0 for log spacing")
         xmin, xmax = np.log10(xmin), np.log10(xmax)
     # print nisNone, dxisNone, dexisNone, log # for debugging logic
     if not nisNone:  # this will make dex or dx if they are not specified
@@ -444,7 +444,7 @@ def llspace(xmin, xmax, n=None, log=False, dx=None, dex=None):
             # print dex
         elif (not log) and dxisNone:  # else if want lin but dx not given
             dx = (xmax - xmin) / n  # takes floor
-            print dx
+            print(dx)
 
     if log:
         #return np.power(10, np.linspace(xmin, xmax , (xmax - xmin)/dex + 1))

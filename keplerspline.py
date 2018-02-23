@@ -59,7 +59,7 @@ def get_knots(x, dt = None, npts = None, k=4,verbose=False):
     
     # if dt is given, use it
     if dt is not None:
-        npts = long(x_range / dt) + 1
+        npts = int(x_range / dt) + 1
         tempdt = x_range/(npts - 1.)
         if npts < 2: npts = 2
         t = np.arange(npts,dtype=float) * tempdt + x[0]
@@ -71,7 +71,7 @@ def get_knots(x, dt = None, npts = None, k=4,verbose=False):
     else:
         npts = 11
         tempdt = x_range/(npts - 1.)
-        print('Defaulting to %i knots. dt = %0.2f'%(npts,dt))
+        print(('Defaulting to %i knots. dt = %0.2f'%(npts,dt)))
         t = np.arange(npts,dtype=float) * tempdt + x[0]
         
     if np.nanmin(x) < np.min(t):
@@ -92,12 +92,12 @@ def get_knots(x, dt = None, npts = None, k=4,verbose=False):
     ## Check condition again after 
     ## removing offending knots
     while fmode[0]:
-        if verbose and not fmode[0]: print "Checking Schoenberg-Whitney"
+        if verbose and not fmode[0]: print("Checking Schoenberg-Whitney")
         #fmode contains bool for if failed, and list of where it fails
         fmode = check_knots(x,t,k,verbose=verbose) # Schoenberg-Whitney conditions
         if fmode[0]=='sw':
             if verbose:
-                print 'Deleting %s knots'%len(fmode[1])
+                print('Deleting %s knots'%len(fmode[1]))
             t = np.delete(t,fmode[1])
             fmode=True,None # set to recheck SW conditions
         elif fmode[1]=='f3':
@@ -124,19 +124,19 @@ def check_knots(x,t,k,verbose=True):
     n = len(t)
     # condition 1
     if not np.all(t[k+1:n-k]-t[k:n-k-1] > 0):
-        if verbose: print 'Failed condition 1 (t[k+1:n-k]-t[k:n-k-1]>0)'
+        if verbose: print('Failed condition 1 (t[k+1:n-k]-t[k:n-k-1]>0)')
         return True,'f1'
     if  not (k+1 <= n-k-1 <= m):
         # >2k+2 and < m-(k+1) point
-        if verbose: print 'Failed condition 2 (too few points for order)'
+        if verbose: print('Failed condition 2 (too few points for order)')
         return True,'f2'
     if not np.all(t[1:]-t[:-1] >= 0):
         # monitonically increasing
-        if verbose: print 'Failed condition 3a (monotonic abscissa)'
+        if verbose: print('Failed condition 3a (monotonic abscissa)')
         return True,'f3'
     if not np.all(t[n-k-1:-1] <= t[n-k:]):
         # monitonically increasing
-        if verbose: print 'Failed condition 3b (monotonic abscissa)'
+        if verbose: print('Failed condition 3b (monotonic abscissa)')
         return True,'f3'
     
     # Schoenberg-Whitney Condition
@@ -144,10 +144,10 @@ def check_knots(x,t,k,verbose=True):
     # every knot. 
     # implementation 1
     arr = []
-    for j in xrange(n-k-1):
+    for j in range(n-k-1):
         arr.append(np.any((t[j] <= x[j:]) & (x[j:] <= t[j+k+1])))
     if not np.all(arr):
-        if verbose: print "Failed Schoenberg-Whitney"
+        if verbose: print("Failed Schoenberg-Whitney")
         return 'sw',np.where(~np.asarray(arr))[0]
     
     return False, None
@@ -275,7 +275,7 @@ def piecewise_spline(time, fcor, cadenceno, campaign = 0, mask = None, verbose=F
         y = fcor[cond & mask]
         kn,fail_mode = get_knots(x, delta,verbose=verbose,k=k)
         if fail_mode[0]:
-            if verbose: print 'Couldn\'t find knots. Using LSQUnivariate Spline w/o mask'
+            if verbose: print('Couldn\'t find knots. Using LSQUnivariate Spline w/o mask')
             x = time[cond]
             y = fcor[cond]
             kn,_ = get_knots(x, delta,verbose=verbose)
@@ -333,7 +333,7 @@ def get_k2_data(k2dataset):
                 cadenceno = data[1].data['CADENCENO']
                 mag = data[0].header['KEPMAG']
         except:
-            print 'Problem'
+            print('Problem')
             data = fits.open(k2dataset)
             t = data[1].data['T']
             f = data[1].data['FCOR']
@@ -451,7 +451,7 @@ def detrend_iter_single(t,f,delta, k=4,low=3,high=3,cutboth=False):
         outmask[mask] = c_detrend <= critupper
         mask[mask] = newmask
         clip = size - c[mask].size
-        print i,clip, np.sum(mask), len(t)
+        print(i,clip, np.sum(mask), len(t))
         #plt.plot(x[mask],c_trend[newmask])
         if i > 50:
             clip = 0
@@ -503,7 +503,7 @@ def detrend_iter(k2dataset, delta, delta_start=1.25, k = 4, low = 3, high = 3, c
                 outmask[mask] = c_detrend <= critupper
                 mask[mask] = newmask
                 clip = size - c[mask].size
-                if verbose: print 'iter: %i dt: %0.2f num clipped: %i num good: %i  num orig: %i clipped low: %i clipped high: %i'%(i,dt,clip, np.sum(mask), len(t),np.sum(c_detrend < critlower),np.sum(c_detrend > critupper))
+                if verbose: print('iter: %i dt: %0.2f num clipped: %i num good: %i  num orig: %i clipped low: %i clipped high: %i'%(i,dt,clip, np.sum(mask), len(t),np.sum(c_detrend < critlower),np.sum(c_detrend > critupper)))
                 if (i == maxiter):
                     clip = 0
         
