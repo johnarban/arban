@@ -38,7 +38,7 @@ def peak_detect(y, thres=0.3, min_dist=1):
     stolen from https://pypi.python.org/pypi/PeakUtils :)
     '''
     thres *= np.max(y) - np.min(y)
-    print 'Threshold: %0.3f'%thres
+    print(('Threshold: %0.3f'%thres))
     # find the peaks by using the first order difference
     dy = np.diff(y)
     peaks = np.where((np.hstack([dy, 0.]) < 0.)

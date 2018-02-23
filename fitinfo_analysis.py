@@ -268,7 +268,7 @@ def new_results_final(input_fits, verbose=True, output=True,
                 av_file=None, keep=('D', 1), convert_from_ak = True,
                 scale_chi2=True,fname='',prot_only=False, ratio=0.05):
 
-    print('----- Analyzing %s ----'%(os.path.basename(input_fits)))
+    print(('----- Analyzing %s ----'%(os.path.basename(input_fits))))
 
     avs = return_av_array(av_file, convert_from_ak = convert_from_ak)
 
@@ -284,7 +284,7 @@ def new_results_final(input_fits, verbose=True, output=True,
     tkeys = t.colnames[1:]
     maxt = [b+'+1sig' for b in tkeys]
     mint = [b+'-1sig' for b in tkeys]
-    pkeys = list(chain(*zip(tkeys,mint,maxt)))
+    pkeys = list(chain(*list(zip(tkeys,mint,maxt))))
     keys = ['Source ID', 'class', 'av', 'scale','AVLOS'] + tkeys
     dtypes = [t[n].dtype for n in tkeys]
     [dtypes.insert(0,i) for i in [float,float,float,'|S5','|S5']]
@@ -330,7 +330,7 @@ def new_results_final(input_fits, verbose=True, output=True,
             tsorted = info.filter_table(t, additional={})
 
             get_st = lambda tab: get_stage(tab,ratio=ratio)
-            stages = map(get_st, tsorted) # get stages of selected fits
+            stages = list(map(get_st, tsorted)) # get stages of selected fits
             stageI = np.array(stages) == 'I'
             stageII = (np.array(stages) == 'II') | (np.array(stages) == 'III')
 
