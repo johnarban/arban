@@ -34,7 +34,7 @@ def peak_detect(y, thres=0.3, min_dist=1):
     -------
     ndarray
         Array containing the indexes of the peaks that were detected
-     
+
     stolen from https://pypi.python.org/pypi/PeakUtils :)
     '''
     thres *= np.max(y) - np.min(y)
@@ -65,21 +65,21 @@ def regrid(x,y,diff=None,gap_width=.25):
     """
     inputs x, y
     optional inputs diff, gap_width
-    
+
     returns: spacing, new_x, new_y
     """
     if diff is None:
         diff = np.nanmedian(np.diff(x))
     else:
         diff = diff/60./24.
-    
+
     new_x = np.arange(x.min(),x.max(),diff)
     new_y = np.interp(new_x,x,y)
     gaps = np.where(np.diff(x) > gap_width)[0]
     for gap in gaps:
         bad = (new_x > x[gap]) & (new_x < x[gap+1])
-        new_y[bad] = 1 # assign data mean 
-    
+        new_y[bad] = 1 # assign data mean
+
     return diff,new_x,new_y
 
 
@@ -93,28 +93,28 @@ def scargle_slow(t,c):
     nfreq = int(horne)
     fmin = 1./max(time)
     fmax = n0 / (2 * max(time))
-    
+
     om = 2*np.pi * (fmin+(fmax-fmin)*np.arange(nfreq)/(nfreq -1.))
-    
+
     cn = c - np.mean(c)
-    
+
     px = np.zeros((nfreq,),dtype=float)
     for i in range(nfreq):
         tau = np.arctan(np.sum(np.sin(2*om[i]*time))/np.sum(np.cos(2*om[i]*time)))
         tau = tau/(2*om[i])
-        
+
         co = np.cos(om[i]*(time-tau))
         si = np.sin(om[i]*(time-tau))
-        
+
         px[i] = 0.5*(np.sum(cn*co)**2 / np.sum(co**2) + np.sum(cn*si)**2 / np.sum(si**2))
     var = np.mean(cn)
     if var != 0.:
         var = px/var
     nu = om/(2*np.pi)
     period = 1./nu
-                
+
     return px,period
- 
+
 
 def horne(n0):
     # number of frequencies via horne algorithm
@@ -129,7 +129,7 @@ def clear_windows(nu, freq, width, aliases = True):
 
 def lsfreq(t,fmin=None,fmax=None,freq=None):
     time = t-t[0]
-    tmax = max(time)	
+    tmax = max(time)
     n0 = len(t)
     horne = -6.363 + 1.93*n0 + 0.00098*n0**2
     nfreq = int(horne)
@@ -137,12 +137,12 @@ def lsfreq(t,fmin=None,fmax=None,freq=None):
         fmin = 1./tmax
     if fmax is None:
         fmax = n0 / (2 * tmax)
-    
+
     if freq is None:
         nu = (fmin+(fmax-fmin)*np.arange(nfreq)/(nfreq -1.))
     else:
         nu=freq
-        
+
     #nu = clear_windows(nu, 47.2e-6 * 86400., .25e-6 * 86400.,aliases=True)
 
     return nu
@@ -151,7 +151,7 @@ def lsfreq(t,fmin=None,fmax=None,freq=None):
 
 def scargle_fast(t,c,fmin=None,fmax=None,freq=None,norm='psd', window=False):
     """
-    Lomb-Scargle periodogram using 
+    Lomb-Scargle periodogram using
     Horne specs for frequencies
     """
     time = t-t[0]
@@ -163,19 +163,19 @@ def scargle_fast(t,c,fmin=None,fmax=None,freq=None,norm='psd', window=False):
     if fmax is None:
         # fmax is 2/<dt> or ~ nyquist
         fmax = n0 / (2 * max(time))
-    
+
     if freq is None:
         nu = (fmin+(fmax-fmin)*np.arange(nfreq)/(nfreq -1.))
     else:
         nu=freq
-    
+
     #nu = clear_windows(nu, 47.2e-6 * 86400., .25e-6 * 86400.,aliases=True)
-    
+
     if window:
         px = LombScargle(time,c , fit_mean=False, center_data=False).power(nu,method='fast',normalization=norm)
     else:
         px = LombScargle(time,c , fit_mean=True).power(nu,method='fast',normalization=norm)
-                    
+
     return px,nu
 
 def box_least_squares(time, flux, pmin,pmax):
@@ -199,30 +199,30 @@ def box_least_squares(time, flux, pmin,pmax):
 
 def period_analysis(t, f, mask = None, dft = False, scargle = False, nft = False, bls=False, fmin = None, fmax = None, lfreq=None, window=False):
     '''
-    period_analysis(t, f, mask = None, 
+    period_analysis(t, f, mask = None,
                         dft = True, scargle = True, nft = False
-                        fmin = None, fmax = None, lsfreq=None, 
+                        fmin = None, fmax = None, lsfreq=None,
                         window=False)
-    
+
     get periodograms for a specific dataset
     t : time step
     f:  flux
     mask: which data points to keep [True] or skip [False]
     scargle: default True, return fast LombScargle with psd normalization
-    fmin : frequency min 
+    fmin : frequency min
     fmax : frequency min
     lsfreq : pass a list of frequencies for LS or nufft
     window : find the window function
-    
+
     returns periodogram, frequency for each element
     '''
     if mask is None:
         mask = np.full(t.shape,True,dtype=np.bool)
     else:
         mask = np.asarray(mask, dtype=np.bool)
-    
+
     ret = ()
-    
+
     if dft:
         #print 'DFT'
         dnu, new_t, new_f = regrid(t[mask],f[mask]) #grid to 30 minutes
@@ -230,27 +230,27 @@ def period_analysis(t, f, mask = None, dft = False, scargle = False, nft = False
         fftfreq = np.fft.fftfreq(len(new_f),d=dnu) # cycles/second
         ret = ret + (fft,fftfreq,None,None,'DFT')
 
-        
+
     if scargle:
         #print 'L-S'
         ls,ls_freq = scargle_fast(t[mask],f[mask],fmin=fmin,fmax=fmax,freq=lfreq,window=False)
         ret = ret + (ls,ls_freq,None,None,'LS')
-    
+
     if nft:
         #print 'NUFFT'
         freq = lsfreq(t, fmin=fmin, fmax=fmax, freq=lfreq)
         nfft, nfreq = nufft_j(t[mask],f[mask], freq = freq)
         ret = ret + (nfft, nfreq,None,None,'NUFFT')
-        
+
     if bls:
         #print 'BLS'
         results, bls_freq = box_least_squares(t[mask],f[mask],pmin=1/fmax, pmax=1/fmin)
         power, best_period, best_power, depth, q, in1, in2 = results
         ret = ret + (power, bls_freq, best_period,best_power,'BLS')
-        
 
-    
-            
+
+
+
     return ret
 
 
@@ -259,13 +259,13 @@ def period_analysis(t, f, mask = None, dft = False, scargle = False, nft = False
 ################################
 ### Folding the light-curve ####
 ################################
-################################    
+################################
 def ppp(fft, freq,angle=None,use_peaks = False,thresh=0.5,min_dist=0.):
     if not use_peaks:
-    	pos = freq > 0
-    	fft = fft[pos]
-    	freq = freq[pos]
-    	peak = np.where(fft == max(fft))[0][0]
+         pos = freq > 0
+         fft = fft[pos]
+         freq = freq[pos]
+         peak = np.where(fft == max(fft))[0][0]
         if fft[peak] > thresh * (fft.max()-fft.min()):
             peak = peak
         else:
@@ -309,7 +309,7 @@ def bindata(x, y, mode = 'mean', return_std = False, nbins=30):
         imin = np.where(mean == np.nanmin(mean))[0]
         phase_offset = binx[imin]
         if return_std:
-            std = stats.binned_statistic(x,y,bins=binex,statistic=np.std)[0]/(np.sqrt(count)-1)    
+            std = stats.binned_statistic(x,y,bins=binex,statistic=np.std)[0]/(np.sqrt(count)-1)
             return binx, mean, phase_offset, std
         else:
             return binx, mean, phase_offset
@@ -341,7 +341,7 @@ def var_period(t, f, period,nbins=60):
                 return np.inf
         #std.append(np.std(fp - spl(p)))
         return np.std(fp - spl(p))**2
-    
+
     res = optimize.minimize(func,[period],method='Nelder-Mead')#,bounds=[(period*0.4,period*2.4)])
     #Ps = np.logspace(np.log10(1./24.),np.log10(100./24.),30000)
     #std = map(func,Ps)
@@ -377,32 +377,32 @@ def freq_grid(t,fmin=None,fmax=None,oversamp=10.,pmin=None,pmax=None):
 
 def nufft_j(x, y, freq = None, period_max=1., period_min=.5/24, window=False, oversamp=10.):
     """
-    nufft_j(x, y, period_max=1., 
+    nufft_j(x, y, period_max=1.,
       period_min=.5/24, window=False, oversamp=10.):
-    
+
     Basic STFT algorithm
     for evenly sampled data
     """
     srt = np.argsort(x)
     x = x[srt] # get sorted x, y arrays
     y = y[srt]
-    
+
     if freq is None:
       # Get a good frequency sampling, based on scargle in IDL
       #freq = LombScargle(x,y).autofrequency()
       #    minimum_frequency=1./period_max,maximum_frequency=1./period_min)
       freq = freq_grid(x,fmin=1./period_max,fmax=1./period_min,oversamp=oversamp)
       # create array to hold fft results
-      
+
     fft = np.zeros_like(freq)
 
-    
+
     if window:
         np.absolute(nufft.nufft3(x,y/y,freq*np.pi*2),out=fft)
     else:
         np.absolute(nufft.nufft3(x,y-np.nanmean(y),freq*np.pi*2),out=fft)
-            
-    
+
+
     return fft,freq
 
 
