@@ -193,7 +193,10 @@ def wcsaxis(wcs, N=6, ax=None,fmt='%0.2f',use_axes=False):
 # In[ writefits]
 def writefits(filename, data, wcs = None,clobber=True):
     if wcs is not None:
-        wcs = wcs.to_header()
+        try:
+            wcs = wcs.to_header()
+        except:
+            wcs = wcs
     hdu = fits.PrimaryHDU(data,header=wcs)
     hdu.writeto(filename,clobber=clobber)
     return hdu
@@ -629,14 +632,43 @@ def mass_function(values, bins, scale=1, aktomassd=183):
     
 
 
+def linregress (X,Y):
+    A = np.array([X*0 + 0, X]).T
+    B = Y
+    coeff, r, rank, s = np.linalg.lstsq(A, B)
+    return coeff
 
+def mad(X, stddev=True):
+    if stddev:
+        return 1.4826*np.nanmedian(np.abs(X-np.nanmedian(X)))
+    else:
+        return np.nanmedian(np.abs(X-np.nanmedian(X)))
 
+def rms(X,axis=None):
+    return np.sqrt(np.nanmean(X**2,axis=axis))
 
+def wcs_to_grid(wcs,index=False):
+    try:
+        wcs = WCS(wcs)
+    except:
+        None
+    
+    wcs = wcs.dropaxis(2)
+    print(wcs)
+    naxis = wcs.naxis
+    naxis1 = wcs._naxis1 #naxis1
+    naxis2 = wcs._naxis2 #naxis2
+    x, y = np.arange(naxis1), np.arange(naxis2)
+    if not index:
+        xc, _ = wcs.all_pix2world(x, x*0, 0) # first FITS pixel is 1, numpy index is 0 
+        _, yc = wcs.all_pix2world(y*0, y, 0)
+        coord_grid = np.meshgrid(xc,yc)
+    else:
+        coord_grid = np.meshgrid(x,y)
+    
+    return coord_grid
 
-
-
-
-
-
+def gauss(x, a, mu, sig):
+    return a * np.exp(- (x-mu)**2 / (2 * sig**2) )
 
 
