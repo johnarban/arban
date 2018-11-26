@@ -4,17 +4,19 @@ Created on Tue Jul  5 18:11:33 2016
 
 @author: johnlewisiii
 """
-import os,sys
-import numpy as np
-from scipy import stats, special, interpolate
-import matplotlib.pyplot as plt
+import os
+import sys
+
 import matplotlib as mpl
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-from weighted import quantile
+import matplotlib.pyplot as plt
+import numpy as np
+from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.table import Table
 from astropy.wcs import WCS
-from scipy import signal,integrate,special,stats
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from scipy import integrate, interpolate, signal, special, stats
+from weighted import quantile
 
 __location__ = os.path.realpath(
     os.path.join(os.getcwd(), os.path.dirname(__file__)))
@@ -140,10 +142,10 @@ def wcsaxis(wcs, N=6, ax=None,fmt='%0.2f',use_axes=False):
     naxis = wcs.naxis #naxis
     naxis1 = wcs._naxis1 #naxis1
     naxis2 = wcs._naxis2 #naxis2
-    crpix1 = hdr['CRPIX1']
-    crpix2 = hdr['CRPIX2']
-    crval1 = hdr['CRVAL1']
-    crval2 = hdr['CRVAL2']
+    #crpix1 = hdr['CRPIX1']
+    #crpix2 = hdr['CRPIX2']
+    #crval1 = hdr['CRVAL1']
+    #crval2 = hdr['CRVAL2']
     #try:
     #    cdelt1 = wcs['CDELT1']
     #    cdelt2 = wcs['CDELT2']
@@ -194,11 +196,11 @@ def wcsaxis(wcs, N=6, ax=None,fmt='%0.2f',use_axes=False):
 def writefits(filename, data, wcs = None,clobber=True):
     if wcs is not None:
         try:
-            wcs = wcs.to_header()
+            hdr = wcs.to_header()
         except:
-            wcs = wcs
-    hdu = fits.PrimaryHDU(data,header=wcs)
-    hdu.writeto(filename,clobber=clobber)
+            hdr = wcs
+    hdu = fits.PrimaryHDU(data,header=hdr)
+    hdu.writeto(filename,overwrite=clobber)
     return hdu
     
 def grid_data(x,y,z,nxy=(512,512), interp='linear', plot = False,\
@@ -496,7 +498,7 @@ def nametoradec(name):
 
 
 
-def pdf(values, bins):
+def pdf(values, bins=None,range=None):
     '''
     ** Normalized differential area function. **
     (statistical) probability denisty function
@@ -508,7 +510,7 @@ def pdf(values, bins):
     Returns array of size len(bins)-1
     Plot versus bins[:-1]
     '''
-    if hasattr(bins,'__getitem__'):
+    if hasattr(bins,'__getitem__') and (range is None):
         range=(np.nanmin(bins),np.nanmax(bins))
     else:
         range = None
@@ -521,7 +523,7 @@ def pdf(values, bins):
     return pdf, avg(x)
 
 
-def pdf2(values, bins):
+def pdf2(values, bins=None,range=None):
     '''
     N * PDF(x)
     The ~ PDF normalized so that
@@ -533,7 +535,7 @@ def pdf2(values, bins):
     Returns array of size len(bins)-1
     Plot versus bins[:-1]
     '''
-    if hasattr(bins,'__getitem__'):
+    if hasattr(bins,'__getitem__') and (range is None):
         range=(np.nanmin(bins),np.nanmax(bins))
     else:
         range = None
@@ -632,10 +634,13 @@ def mass_function(values, bins, scale=1, aktomassd=183):
     
 
 
-def linregress (X,Y):
-    A = np.array([X*0 + 0, X]).T
+def linregress (X,Y,pass_through_origin=True):
+    if pass_through_origin:
+        A = np.array([X*0 + 0, X]).T
+    else:
+        A = np.array([X*0 + 1, X]).T
     B = Y
-    coeff, r, rank, s = np.linalg.lstsq(A, B)
+    coeff, _r, _rank, _s = np.linalg.lstsq(A, B)
     return coeff
 
 def mad(X, stddev=True):
@@ -647,14 +652,15 @@ def mad(X, stddev=True):
 def rms(X,axis=None):
     return np.sqrt(np.nanmean(X**2,axis=axis))
 
-def wcs_to_grid(wcs,index=False):
+
+def wcs_to_grid(wcs,index=False,verbose=False):
     try:
         wcs = WCS(wcs)
     except:
         None
     
     wcs = wcs.dropaxis(2)
-    print(wcs)
+    if verbose: print(wcs)
     naxis = wcs.naxis
     naxis1 = wcs._naxis1 #naxis1
     naxis2 = wcs._naxis2 #naxis2
@@ -670,5 +676,3 @@ def wcs_to_grid(wcs,index=False):
 
 def gauss(x, a, mu, sig):
     return a * np.exp(- (x-mu)**2 / (2 * sig**2) )
-
-
