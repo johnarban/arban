@@ -442,7 +442,7 @@ def detrend_iter_single(t,f,delta, k=4,low=3,high=3,cutboth=False):
         i+=1
         c_trend = single_spline(t, c, mask=mask, k=k, delta=delta)
         c_detrend = (c - c_trend + 1)[mask] #get masked detreneded lighcurve
-        c_mean = c_detrend.median() # use median for mean
+        c_mean = np.median(c_detrend) # use median for mean
         c_std = 1.4826 * np.median(np.abs(c_detrend - c_mean))# use mad # c_detrend.std()
         size = c_detrend.size
         critlower = c_mean - c_std*low

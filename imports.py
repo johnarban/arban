@@ -44,11 +44,8 @@ ju = jutils
 nd = ndimage
 
 warnings.simplefilter('ignore', category=AstropyWarning)
-np.seterr(divide='ignore', invalid='ignore');
+np.seterr(divide='ignore', invalid='ignore')
 
-#ipython
-%matplotlib inline
-%config InlineBackend.print_figure_kwargs={'bbox_inches':None}
 
 #from scipy.integrate import simps
 #from scipy.interpolate import UnivariateSpline, griddata

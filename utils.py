@@ -43,6 +43,7 @@ def get_cax(ax=None,size=3):
         ax = plt.gca()
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="%f%%"%(size*1.), pad=0.05)
+    #plt.sca(ax)
     return cax
 
 
@@ -193,13 +194,11 @@ def wcsaxis(wcs, N=6, ax=None,fmt='%0.2f',use_axes=False):
     
 
 # In[ writefits]
-def writefits(filename, data, wcs = None,clobber=True):
-    if wcs is not None:
-        try:
-            hdr = wcs.to_header()
-        except:
-            hdr = wcs
-    hdu = fits.PrimaryHDU(data,header=hdr)
+def writefits(filename, data, header = None, wcs = None,clobber=True):
+    if header is None:
+        if wcs is not None:
+            header = wcs
+    hdu = fits.PrimaryHDU(data,header=header)
     hdu.writeto(filename,overwrite=clobber)
     return hdu
     
@@ -676,3 +675,212 @@ def wcs_to_grid(wcs,index=False,verbose=False):
 
 def gauss(x, a, mu, sig):
     return a * np.exp(- (x-mu)**2 / (2 * sig**2) )
+
+
+import emcee
+def little_emcee_fitter(x,y,model=None,yerr=None, 
+                        loglike = None,lnprior=None,
+                        nwalkers = 10,theta_init=None,use_lnf=False):
+    '''
+    ## sample call
+    sampler,pos = little_emcee_fitter(x,y,
+        theta_init=np.array(mfit.parameters),
+        use_lnf=True)
+    samples = sampler.chain[:,1000:,:].reshape((-1,sampler.dim))
+
+    corner.corner(samples,show_titles=True,
+            quantiles=[.16,.84],
+            labels=["$m$", "$b$", "$\ln\,f$"])
+    ---------------------------------------------
+    
+    Arguments:
+        x {np.array} -- x values as numpy array
+        y {np.array} -- y values as numpy array
+    
+    Keyword Arguments:
+        model {function that is called model(x,theta)} -- (default: {linear model})
+        yerr {yerr as numpy array} -- options (default: {.001 * range(y)})
+        loglike {custom loglikelihood} -- (default: {chi^2})
+        lnprior {custom logprior} --  (default: {no prior})
+        nwalkers {number of walkers} -- (default: {10})
+        theta_init {initial location of walkers} -- [required for operation] (default: {Noalne})
+        use_lnf {use jitter term} -- (default: {False})
+    
+    Returns:
+        sampler, pos -- returns sampler and intial walker positions
+    '''
+
+    if yerr is None:
+        yerr = np.full_like(y,0.001 * (np.nanmax(y) - np.nanmin(y)))
+    
+    if model is None:
+        def model(x,theta):
+            m,b = theta
+            return m*x + b
+    
+    if loglike is None:
+        def lnlike(theta, x, y, yerr ,model=model):
+            #print(theta)
+            if use_lnf:
+                lnf = theta[-1]
+                theta = theta[:-1]
+            ymodel = model(x,theta)
+            if use_lnf:
+                inv_sigma2 = 1.0/(yerr**2 + ymodel**2*np.exp(2*lnf))
+            else:
+                inv_sigma2 = 1.0/yerr**2
+            return -0.5*(np.sum((y-ymodel)**2*inv_sigma2 - np.log(inv_sigma2)))
+    
+    if lnprior is None:
+        def lnprior(theta):
+            if np.all(np.isfinite(theta)):
+                return 0.0
+            return -np.inf
+    
+    def lnprob(theta, x, y, yerr):
+        lp = lnprior(theta)
+        if not np.isfinite(lp):
+            return -np.inf
+        return lp + lnlike(theta, x, y, yerr)
+    
+    if use_lnf:
+        theta_init = np.append(theta_init,0)
+    ndim = len(theta_init)
+    pos = [theta_init + 1e-4 * np.random.randn(ndim) for i in range(nwalkers)]
+    
+    sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, args=(x, y, yerr))
+    return sampler, pos
+
+
+
+import matplotlib.colors as colors
+import numpy as np
+
+# TODO
+
+#Make it scale properly
+#How does matplotlib
+#scaling work
+import matplotlib.colors as colors
+def custom_cmap(colormaps, lower, upper, log = (0,0)):
+    '''
+    colormaps : a list of N matplotlib colormap classes
+    lower : the lower limits for each colormap: array or tuple
+    upper : the upper limits for each colormap: array or tuple
+    log   : Do you want to plot logscale. This will create 
+            a color map that is usable with LogNorm()
+    '''
+    if isinstance(log,tuple):
+        for lg in log:
+            if lg:
+                upper = [np.log10(i/lower[0]) for i in upper]
+                lower = [np.log10(i/lower[0]) for i in lower]
+                norm = upper[-1:][0]
+            else:
+                lower = lower
+                upper = upper
+                norm = upper[-1:][0]
+    elif log:
+        upper = [np.log10(i/lower[0]) for i in upper]
+        lower = [np.log10(i/lower[0]) for i in lower]
+        norm = upper[-1:][0]
+    else:
+        lower = lower
+        upper = upper
+        norm = upper[-1:][0]
+        
+    cdict = { 'red':[], 'green':[],'blue':[] }
+    
+    for color in ['red','green','blue']:
+        for j,col in enumerate(colormaps):
+            #print j,col.name,color
+            x = [i[0] for i in col._segmentdata[color]]
+            y1 = [i[1] for i in col._segmentdata[color]]
+            y0 = [i[2] for i in col._segmentdata[color]]
+            x = [(i-min(x))/(max(x)-min(x)) for i in x]
+            x = [((i * (upper[j] - lower[j]))+lower[j])/norm for i in x]
+            if (j == 0) & (x[0] != 0):
+                x[:0],y1[:0],y0[:0] = [0],[y1[0]],[y0[0]]
+            for i in range(len(x)): #first x needs to be zero
+                cdict[color].append((x[i],y1[i],y0[i]))
+                
+    return colors.LinearSegmentedColormap('my_cmap',cdict)
+
+
+
+
+def plot_2dhist(X, Y, xlog=True, ylog=True, cmap = None, norm = mpl.colors.LogNorm(),
+                vmin=None, vmax=None, bins=50, statistic=np.nanmean, statstd=np.nanstd, 
+                histbins = None, histrange=None,cmin=1, binbins=None, weighted_fit=True, ax=None,
+                plot_bins=True,plot_fit=True):
+    """[plot the 2d hist and x-binned version]
+    
+    Arguments:
+        X {array} -- array of x-values
+        Y {array} -- array of y-values
+    
+    Keyword Arguments:
+        xlog {bool} -- use log of X (default: {True})
+        ylog {bool} -- use log of Y (default: {True})
+        cmap {[type]} -- cmap for histogram (default: {None})
+        norm {[type]} -- normalization for histogram cmap (default: {mpl.colors.LogNorm()})
+        vmin {number} -- min val for cmap (default: {None})
+        vmax {number} -- max val for cmap (default: {None})
+        bins {int} -- number of bins for hist2d (default: {50})
+        statistic {function} -- statistic function (default: {np.nanmean})
+        statstd {function} -- error stat function (default: {np.nanstd})
+        histbins {[type]} -- bins for hisogram (default: {None})
+        histrange {(xmin,xmax),(ymin,ymax)} -- range for histogram (default: {None})
+        cmin {int} -- [description] (default: {1})
+        binbins {[type]} -- [description] (default: {None})
+        weighted_fit {bool} -- [description] (default: {True})
+        ax {[type]} -- [description] (default: {None})
+        plot_bins {bool} -- [description] (default: {True})
+        plot_fit {bool} -- [description] (default: {True})
+    
+    Returns:
+        [tuple] -- [x, y, p, ax]
+        
+    Notes:
+    this uses mavg from this file. if it is not available, please change
+    """
+
+
+    if ax is None:
+        ax = plt.gca()
+
+    if xlog:
+        x = np.log10(X)
+    else:
+        x = np.asarray(X) 
+
+    if ylog:
+        y = np.log10(Y)
+    else:
+        y = np.asarray(Y) 
+
+    im=ax.hist2d(x,y,range=histrange,bins=bins,cmap=cmap,cmin=cmin,norm=norm,vmin=vmin,vmax=vmax,zorder=1,)
+        
+    # bin the data
+  
+    if binbins is None:
+        binbins = np.linspace(np.nanmin(x),np.nanmax(x),10)
+
+    st, be, _ = stats.binned_statistic(x, y,statistic=statistic,bins=binbins)
+    est, be, _ = stats.binned_statistic(x,y,statistic=statstd,bins= binbins)
+    cl = np.isfinite(st) & np.isfinite(est)
+    if plot_bins:
+        ax.errorbar(mavg(be)[cl],st[cl],yerr=est[cl],fmt='s',color='r',label='binned data',lw=1.5,zorder=2)
+
+    if weighted_fit:
+        p = np.polyfit(mavg(be)[cl][1:],st[cl][1:],1,w=1/est[cl][1:]**2)
+    else:
+        p = np.polyfit(mavg(be)[cl][1:],st[cl][1:],1)
+    funcname = 'Best fit: {m:0.5G}*x + {b:0.5G}'.format(m=p[0], b=p[1])
+    if plot_fit:
+        ax.plot([0,64],np.polyval(p,[0,64]),'dodgerblue',lw=1.5, label=funcname)
+
+    ax.legend()
+
+    return x, y, p, ax
+
