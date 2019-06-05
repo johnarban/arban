@@ -49,7 +49,7 @@ def get_cax(ax=None, size=3):
         ax = plt.gca()
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="%f%%" % (size*1.), pad=0.05)
-    # plt.sca(ax)
+    plt.sca(ax)
     return cax
 
 
@@ -97,6 +97,7 @@ def freq_grid(t, fmin=None, fmax=None, oversamp=10., pmin=None, pmax=None):
     '''
     freq_grid(t,fmin=None,fmax=None,oversamp=10.,pmin=None,pmax=None)
     Generate a 1D list of frequences over a certain range
+    [oversamp] * nyquist sampling
     '''
     if pmax is not None:
         if pmax == pmin:
@@ -123,18 +124,7 @@ def sigconf1d(n):
     return (1-cdf)*100, 100 * cdf, 100*special.erf(n/np.sqrt(2))
 
 
-# In[ Convert tables to arrays]
-def table_to_array(table):
-    arr = [list(t) for t in table]
-    return np.asarray(arr)
-
-
-def t2a(table):
-    return table_to_array(table)
-
 # In[Discrete Colorbar]
-
-
 def discrete_cmap(colormap, N_colors):
     print('Not doing anything yet')
     return None
@@ -660,11 +650,29 @@ def linregress(X, Y, pass_through_origin=True):
     return coeff
 
 
-def mad(X, stddev=True):
+def linregress_ppv(x,y):
+    """Where we perform linear regression
+    for ppv cube against a 1D x vector
+
+    Arguments:
+        y {array (M,Ny,Nx)} -- 3-D array of data
+
+    Returns:
+        f -- best fit least squares solution for whole cube
+    """
+    xbar = np.mean(x)
+    ybar = np.mean(y,axis=0)
+    m = np.sum((x-xbar)[:,np.newaxis,np.newaxis]* (y-ybar),axis=0)/ \
+        (np.sum((x-xbar)**2,axis=0))
+    b = ybar - m * xbar
+    f = m[np.newaxis,:,:] * x[:,np.newaxis,np.newaxis] + b[np.newaxis,:,:]
+    return f
+
+def mad(X, stddev=True, axis=None):
     if stddev:
-        return 1.4826*np.nanmedian(np.abs(X-np.nanmedian(X)))
+        return 1.4826*np.nanmedian(np.abs(X-np.nanmedian(X, axis=axis)), axis=axis)
     else:
-        return np.nanmedian(np.abs(X-np.nanmedian(X)))
+        return np.nanmedian(np.abs(X-np.nanmedian(X, axis=axis)), axis=axis)
 
 
 def rms(X, axis=None):
@@ -895,7 +903,7 @@ def plot_2dhist(X, Y, xlog=True, ylog=True, cmap=None, norm=mpl.colors.LogNorm()
     else:
         y = np.asarray(Y)
 
-    im = ax.hist2d(x, y, range=histrange, bins=bins, cmap=cmap,
+    im = ax.hist2d(x, y, range=histrange, bins=histbins, cmap=cmap,
                    cmin=cmin, norm=norm, vmin=vmin, vmax=vmax, zorder=1,)
 
     # bin the data
