@@ -117,7 +117,7 @@ def freq_grid(t, fmin=None, fmax=None, oversamp=10., pmin=None, pmax=None):
 def sigconf1d(n):
     '''
     calculate the percentile corresponding to n*sigma
-    for a 1D gaussian 
+    for a 1D gaussian
     '''
     cdf = (1/2.)*(1+special.erf(n/np.sqrt(2)))
     return (1-cdf)*100, 100 * cdf, 100*special.erf(n/np.sqrt(2))
@@ -699,6 +699,29 @@ def gauss(x, a, mu, sig):
     return a * np.exp(- (x-mu)**2 / (2 * sig**2))
 
 
+def forward_fill_nan(arr):
+    mask = np.isnan(arr)
+    idx = np.where(~mask, np.arange(mask.shape[1]), 0)
+    np.maximum.accumulate(idx, axis=1, out=idx)
+    out = arr[np.arange(idx.shape[0])[:, None], idx]
+    return out
+
+
+def ffill_nan_3d(arr):
+    ''' foward fill 3d arrays along first axis
+    from: https://stackoverflow.com/a/41191127
+
+    '''
+    shape = arr.shape
+    arr = arr.T.reshape(np.product(shape[1:]), shape[0])
+    mask = np.isnan(arr)
+    print('1,', arr.shape, mask.shape)
+    idx = np.where(~mask, np.arange(mask.shape[1]), 0)
+    np.maximum.accumulate(idx, axis=1, out=idx)
+    out = arr[np.arange(idx.shape[0])[:, None], idx]
+    return out.T.reshape(shape)
+
+
 def little_emcee_fitter(x, y, model=None, yerr=None,
                         loglike=None, lnprior=None,
                         nwalkers=10, theta_init=None, use_lnf=False):
@@ -783,7 +806,7 @@ def custom_cmap(colormaps, lower, upper, log=(0, 0)):
     colormaps : a list of N matplotlib colormap classes
     lower : the lower limits for each colormap: array or tuple
     upper : the upper limits for each colormap: array or tuple
-    log   : Do you want to plot logscale. This will create 
+    log   : Do you want to plot logscale. This will create
             a color map that is usable with LogNorm()
     '''
     if isinstance(log, tuple):
