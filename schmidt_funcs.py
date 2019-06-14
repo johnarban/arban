@@ -85,7 +85,7 @@ def rectangle(c, w, h, angle=0, center=True):
     R = rot_matrix(angle * np.pi / 180.)
     c = []
 
-    for i in xrange(4):
+    for i in range(4):
         xr, yr = np.dot(R, np.asarray([x[i], y[i]])).A.ravel()
         # coord switch to match ordering of FITs dimensions
         c.append((cx + xr, cy + yr))
@@ -134,7 +134,7 @@ def mgeo(arr, n=2):
     return np.product(b,axis=0)[n-1:-n]**(1./float(n))
     '''
     a = []
-    for i in xrange(len(arr) - (n - 1)):
+    for i in range(len(arr) - (n - 1)):
         a.append(stats.gmean(arr[i:n + i]))
 
     return np.asarray(a)
@@ -185,7 +185,7 @@ def llspace(xmin, xmax, n=None, log=False, dx=None, dex=None):
     dxisNone = dx is None
     dexisNone = dex is None
     if nisNone & dxisNone & dexisNone:
-        print 'Error: Defaulting to 10 linears steps'
+        print('Error: Defaulting to 10 linears steps')
         n = 10.
         nisNone = False
 
@@ -193,7 +193,7 @@ def llspace(xmin, xmax, n=None, log=False, dx=None, dex=None):
     log = log or (dxisNone and (not dexisNone))
     if log:
         if xmin == 0:
-            print "log(0) is -inf. xmin must be > 0 for log spacing"
+            print("log(0) is -inf. xmin must be > 0 for log spacing")
         xmin, xmax = np.log10(xmin), np.log10(xmax)
     # print nisNone, dxisNone, dexisNone, log # for debugging logic
     if not nisNone:  # this will make dex or dx if they are not specified
@@ -633,13 +633,13 @@ def emcee_schmidt(x, y, yerr, pos=None, pose=None,
     # # Print out final values # #
     theta_mcmc = np.percentile(samples, [16, 50, 84], axis=0).T
 
-    if verbose: print sampler.acor
+    if verbose: print(sampler.acor)
 
     if verbose:
         for i, item in enumerate(theta_mcmc):
             j = ['beta', 'kappa', 'A_{K,0}', 'A_{K,f}']
             inserts = (j[i], item[1], item[2] - item[1], item[1] - item[0])
-            print '%s = %0.2f (+%0.2f,-%0.2f)' % inserts
+            print('%s = %0.2f (+%0.2f,-%0.2f)' % inserts)
 
     return sampler, np.median(samples, axis=0), np.std(samples, axis=0)
 
@@ -719,13 +719,13 @@ def fit(bins, samp, samperr, maps, mapserr, scale=1., sampler=None, log=False,
     # # # # # # # RUN EMCEE # # # # # # #
     # pdb.set_trace()
     if sampler is None:
-        if verbose: print 'Sampler autocorrelation times . . .'
+        if verbose: print('Sampler autocorrelation times . . .')
         sampler, theta, theta_std = emcee_schmidt(x, np.log(y), yerr/y,
                                                   pos=pos, pose=pose,
                                                   nwalkers=nwalkers,
                                                   nsteps=nsteps, burnin=burnin,verbose=verbose)
     else:
-        print 'Next time don\'t give me a ' + str(type(sampler)) + '.'
+        print('Next time don\'t give me a ' + str(type(sampler)) + '.')
 
     #
     try:
@@ -759,7 +759,7 @@ def schmidt_results_plots(sampler, model, x, y, yerr, burnin=200, akmap=None,
     for i, item in enumerate(theta_mcmc):
         j = ['beta', 'kappa', 'A_{K,0}','A_{K,f}']
         inserts = (j[i], item[1], item[2] - item[1], item[1] - item[0])
-        print '%s = %0.2f (+%0.2f,-%0.2f)' % inserts
+        print('%s = %0.2f (+%0.2f,-%0.2f)' % inserts)
     # Plot corner plot
     if triangle_plot:
         if n_params == 3:
@@ -841,6 +841,6 @@ def plot_walkers(sampler,limits = None, bad = None):
 
 
 def tester():
-    print 'hi ya\'ll'
+    print('hi ya\'ll')
 
 

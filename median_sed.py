@@ -81,11 +81,11 @@ class MedianSED():
         else:
             keep = np.isfinite(vs)
             quantile_sed = []
-            for i in xrange(len(self.wav)):
+            for i in range(len(self.wav)):
                 try:
                     quantile_sed.append(quantile(vs[keep[:,i],i],self.weights[keep[:,i],i], q))
                 except:
-                    print 'Error:  computing un-weighted quantile'
+                    print('Error:  computing un-weighted quantile')
                     quantile_sed.append(np.nanpercentile(vs[keep[:,i],i],q*100))
             #quantile_sed = np.asarray([quantile(vs[keep[:,i],i],self.weights[keep[:,i],i], q) for i in xrange(len(self.wav))])
             return np.asarray(quantile_sed)
@@ -115,7 +115,7 @@ class MedianSED():
         ax.fill_between(self.wav[drop], \
             (self.get_quantile(p)/self.wav)[drop], \
             (self.get_quantile(1.-p)/self.wav)[drop],color='0.7')
-        for i in xrange(len(self.wav)):
+        for i in range(len(self.wav)):
             ax.plot([self.wav[i]],[(self.median/self.wav)[i]],colors[self.sort[i]]+shapes[self.sort[i]])
         ax.loglog()
         
