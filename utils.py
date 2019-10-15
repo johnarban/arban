@@ -34,7 +34,6 @@ __filtertable__ = Table.read(os.path.join(
 
 # Set uniform plot options
 
-
 def set_plot_opts(serif_fonts=True):
 
     if serif_fonts:
@@ -42,7 +41,6 @@ def set_plot_opts(serif_fonts=True):
         mpl.rcParams['font.family'] = 'serif'
         mpl.rcParams['font.size'] = 12
     return None
-
 
 def get_cax(ax=None, size=3):
     if ax is None:
@@ -92,7 +90,6 @@ def kdeplot(xp, yp, filled=False, ax=None, grid=None, bw=None, *args, **kwargs):
 #############################
 #############################
 
-
 def freq_grid(t, fmin=None, fmax=None, oversamp=10., pmin=None, pmax=None):
     '''
     freq_grid(t,fmin=None,fmax=None,oversamp=10.,pmin=None,pmax=None)
@@ -114,7 +111,6 @@ def freq_grid(t, fmin=None, fmax=None, oversamp=10., pmin=None, pmax=None):
     Nf = 1 + int(np.round((fmax-fmin)/df))
     return fmin + df * np.arange(Nf)
 
-
 def sigconf1d(n):
     '''
     calculate the percentile corresponding to n*sigma
@@ -130,7 +126,6 @@ def discrete_cmap(colormap, N_colors):
     return None
 
 # In[WCS axis labels]
-
 
 def wcsaxis(wcs, N=6, ax=None, fmt='%0.2f', use_axes=False):
     if ax is None:
@@ -203,7 +198,6 @@ def writefits(filename, data, header=None, wcs=None, clobber=True):
     hdu = fits.PrimaryHDU(data, header=header)
     hdu.writeto(filename, overwrite=clobber)
     return hdu
-
 
 def grid_data(x, y, z, nxy=(512, 512), interp='linear', plot=False,
               cmap='Greys', levels=None, sigmas=None, filled=False):
@@ -297,7 +291,6 @@ def rot_matrix(theta):
     c, s = np.cos(theta), np.sin(theta)
     return np.matrix([[c, -s], [s, c]])
 
-
 def rectangle(c, w, h, angle=0, center=True):
     '''
     create rotated rectangle
@@ -340,7 +333,6 @@ def rectangle(c, w, h, angle=0, center=True):
     # print (cx,cy)
     return c
 
-
 def comp(arr):
     '''
     returns the compressed version
@@ -352,7 +344,6 @@ def comp(arr):
     except:
         return arr
 
-
 def mavg(arr, n=2, mode='valid'):
     '''
     returns the moving average of an array.
@@ -362,7 +353,6 @@ def mavg(arr, n=2, mode='valid'):
         return signal.fftconvolve(arr, [1. / float(n)] * n, mode=mode)
     else:
         return signal.convolve(arr, [1. / float(n)] * n, mode=mode)
-
 
 def mgeo(arr, n=2):
     '''
@@ -387,7 +377,6 @@ def mgeo(arr, n=2):
 
     return np.asarray(a)
 
-
 def avg(arr, n=2):
     '''
     NOT a general averaging function
@@ -400,7 +389,6 @@ def avg(arr, n=2):
     else:
         return np.power(10., mavg(np.log10(arr), n=n))
         # return mgeo(arr, n=n) # equivalent methods, only easier
-
 
 def shift_bins(arr, phase=0, nonneg=False):
     # assume original bins are nonneg
@@ -418,7 +406,6 @@ def shift_bins(arr, phase=0, nonneg=False):
             return np.power(10., arr)
     else:
         return arr
-
 
 def llspace(xmin, xmax, n=None, log=False, dx=None, dex=None):
     '''
@@ -461,7 +448,6 @@ def llspace(xmin, xmax, n=None, log=False, dx=None, dex=None):
         # return np.linspace(xmin, xmax, (xmax-xmin)/dx + 1)
         return np.arange(xmin, xmax + dx, dx)
 
-
 def nametoradec(name):
     '''
     Get names formatted as
@@ -499,7 +485,6 @@ def nametoradec(name):
         coord = SkyCoord(ra, de, frame='icrs', unit=('hourangle', 'degree'))
         return np.array(coord.ra.value), np.array(coord.dec.value)
 
-
 def pdf(values, bins=None, range=None):
     '''
     ** Normalized differential area function. **
@@ -524,7 +509,6 @@ def pdf(values, bins=None, range=None):
     pdf = h / (np.sum(h, dtype=float) * np.diff(x))
     return pdf, avg(x)
 
-
 def pdf2(values, bins=None, range=None):
     '''
     N * PDF(x)
@@ -546,12 +530,10 @@ def pdf2(values, bins=None, range=None):
     pdf = pdf.astype(float) / np.diff(x)
     return pdf, avg(x)
 
-
 def edf(data, pdf=False):
     y = np.arange(len(data), dtype=float)
     x = np.sort(data).astype(float)
     return y, x
-
 
 def cdf(values, bins):
     '''
@@ -576,7 +558,6 @@ def cdf(values, bins):
     # append 0 to beginning because P( X < min(x)) = 0
     return np.append(0, c), bins
 
-
 def cdf2(values, bins):
     '''
     # # Exclusively for area_function which needs to be unnormalized
@@ -596,7 +577,6 @@ def cdf2(values, bins):
     c = np.cumsum(h).astype(float)
     return np.append(0., c), bins
 
-
 def area_function(extmap, bins):
     '''
     Complimentary CDF for cdf2 (not normalized to 1)
@@ -604,7 +584,6 @@ def area_function(extmap, bins):
     '''
     c, bins = cdf2(extmap, bins)
     return c.max() - c, bins
-
 
 def diff_area_function(extmap, bins, scale=1):
     '''
@@ -614,7 +593,6 @@ def diff_area_function(extmap, bins, scale=1):
     dsdx = -np.diff(s) / np.diff(bins)
     return dsdx*scale, avg(bins)
 
-
 def log_diff_area_function(extmap, bins):
     '''
     See pdf2
@@ -623,7 +601,6 @@ def log_diff_area_function(extmap, bins):
     g = s > 0
     dlnsdlnx = np.diff(np.log(s[g])) / np.diff(np.log(bins[g]))
     return dlnsdlnx, avg(bins[g])
-
 
 def mass_function(values, bins, scale=1, aktomassd=183):
     '''
@@ -639,7 +616,6 @@ def mass_function(values, bins, scale=1, aktomassd=183):
     c = np.cumsum(h).astype(float)
     return c.max() - c, bins
 
-
 def linregress(X, Y, pass_through_origin=True):
     if pass_through_origin:
         A = np.array([X*0 + 0, X]).T
@@ -648,7 +624,6 @@ def linregress(X, Y, pass_through_origin=True):
     B = Y
     coeff, _r, _rank, _s = np.linalg.lstsq(A, B)
     return coeff
-
 
 def linregress_ppv(x,y):
     """Where we perform linear regression
@@ -674,10 +649,8 @@ def mad(X, stddev=True, axis=None):
     else:
         return np.nanmedian(np.abs(X-np.nanmedian(X, axis=axis)), axis=axis)
 
-
 def rms(X, axis=None):
     return np.sqrt(np.nanmean(X**2, axis=axis))
-
 
 def wcs_to_grid(wcs, index=False, verbose=False):
     try:
@@ -702,10 +675,8 @@ def wcs_to_grid(wcs, index=False, verbose=False):
 
     return coord_grid
 
-
 def gauss(x, a, mu, sig):
     return a * np.exp(- (x-mu)**2 / (2 * sig**2))
-
 
 def forward_fill_nan(arr):
     mask = np.isnan(arr)
@@ -713,7 +684,6 @@ def forward_fill_nan(arr):
     np.maximum.accumulate(idx, axis=1, out=idx)
     out = arr[np.arange(idx.shape[0])[:, None], idx]
     return out
-
 
 def ffill_nan_3d(arr):
     ''' foward fill 3d arrays along first axis
@@ -728,7 +698,6 @@ def ffill_nan_3d(arr):
     np.maximum.accumulate(idx, axis=1, out=idx)
     out = arr[np.arange(idx.shape[0])[:, None], idx]
     return out.T.reshape(shape)
-
 
 def little_emcee_fitter(x, y, model=None, yerr=None,
                         loglike=None, lnprior=None,
@@ -766,17 +735,18 @@ def little_emcee_fitter(x, y, model=None, yerr=None,
         yerr = np.full_like(y, 0.001 * (np.nanmax(y) - np.nanmin(y)))
 
     if model is None:
-        def model(x, theta):
-            m, b = theta
-            return m*x + b
+        #def model(x, theta):
+        #    m, b = theta
+        #    return m*x + b
+        model = lambda x, theta: theta[0] * x + theta[1]
 
     if loglike is None:
-        def lnlike(theta, x, y, yerr, model=model):
+        def lnlike(theta, x, y, yerr, modell=None,use_lnf=False):
             # print(theta)
             if use_lnf:
                 lnf = theta[-1]
                 theta = theta[:-1]
-            ymodel = model(x, theta)
+            ymodel = modell(x, theta)
             if use_lnf:
                 inv_sigma2 = 1.0/(yerr**2 + ymodel**2*np.exp(2*lnf))
             else:
@@ -793,7 +763,7 @@ def little_emcee_fitter(x, y, model=None, yerr=None,
         lp = lnprior(theta)
         if not np.isfinite(lp):
             return -np.inf
-        return lp + lnlike(theta, x, y, yerr)
+        return lp + lnlike(theta, x, y, yerr,modell=model, use_lnf=use_lnf)
 
     if use_lnf:
         theta_init = np.append(theta_init, 0)
@@ -802,7 +772,6 @@ def little_emcee_fitter(x, y, model=None, yerr=None,
 
     sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, args=(x, y, yerr))
     return sampler, pos
-
 
 # TODO
 
@@ -853,6 +822,34 @@ def custom_cmap(colormaps, lower, upper, log=(0, 0)):
 
     return colors.LinearSegmentedColormap('my_cmap', cdict)
 
+def slit_cmap(split=0.5,log1=False,cmapn='coolwarm'):
+    vmin1 = 12
+    vmax1 =  18
+    vmin2 = vmax1
+    vmax2 =  50
+    vstep=   1
+    levels1 = np.arange(vmin1, vmax1+vstep, vstep)
+    levels2 = np.arange(vmin2, vmax2+vstep, vstep)
+    levels_pieces2 = np.hstack((levels1,levels2[1:]))
+    ncols1 = len(levels1)-1
+    ncols2 = len(levels2)-1
+    ncols = ncols1 + ncols2
+    split = split
+    # Sample the right number of colours
+    # from the right bits (between 0 &amp; 1) of the colormaps we want.
+    if log1:
+        cmap1 = mpl.cm.get_cmap(cmapn+'_r')
+        cols1 = cmap1(np.logspace(np.log10(1-split),0, ncols1))[::-1]
+    else:
+        cmap1 = mpl.cm.get_cmap(cmapn)
+        cols1 = cmap1(np.linspace(0.0, split, ncols1))
+
+    cmap2 = mpl.cm.get_cmap(cmapn)
+    cols2 = cmap2(np.logspace(np.log10(split), 0, ncols2))
+
+    # Combine them and build a new colormap:
+    allcols2 = np.vstack( (cols1,cols2) )
+    return mpl.colors.LinearSegmentedColormap.from_list('piecewise2', allcols2)
 
 def plot_2dhist(X, Y, xlog=True, ylog=True, cmap=None, norm=mpl.colors.LogNorm(),
                 vmin=None, vmax=None, bins=50, statistic=np.nanmean, statstd=np.nanstd,
@@ -903,7 +900,7 @@ def plot_2dhist(X, Y, xlog=True, ylog=True, cmap=None, norm=mpl.colors.LogNorm()
     else:
         y = np.asarray(Y)
 
-    im = ax.hist2d(x, y, range=histrange, bins=histbins, cmap=cmap,
+    _ = ax.hist2d(x, y, range=histrange, bins=histbins, cmap=cmap,
                    cmin=cmin, norm=norm, vmin=vmin, vmax=vmax, zorder=1,)
 
     # bin the data
@@ -930,3 +927,8 @@ def plot_2dhist(X, Y, xlog=True, ylog=True, cmap=None, norm=mpl.colors.LogNorm()
     ax.legend()
 
     return x, y, p, ax
+
+def rolling_window(a, window):
+    shape = a.shape[:-1] + (a.shape[-1] - window + 1, window)
+    strides = a.strides + (a.strides[-1],)
+    return np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
