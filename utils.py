@@ -8,7 +8,7 @@ import matplotlib.colors as colors
 import emcee
 import os
 import sys
-
+import math,statistics
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
@@ -344,17 +344,43 @@ def comp(arr):
     except:
         return arr
 
-def mavg(arr, n=2, mode='valid'):
+def rolling_window(arr, window):
+    """[summary]
+
+    Arguments:
+        arr {[numpy.ndarray]} -- N-d numpy array
+        window {[int]} -- length of window
+
+    Returns:
+        out -- array s.t. np.mean(arr,axis=-1) gives the running mean along rows (or -1 axis of a)
+            out.shape = arr.shape[:-1] + (arr.shape[-1] - window + 1, window)
+
+    """
+    shape = arr.shape[:-1] + (arr.shape[-1] - window + 1, window) # the new shape (a.shapeshap)
+    strides = arr.strides + (arr.strides[-1],)
+    return np.lib.stride_tricks.as_strided(arr, shape=shape, strides=strides)
+
+
+def mavg(arr,axis=-1):
+    '''
+    returns the moving average of an array.
+    returned array is shorter by (n-1)
+    applied along last axis by default
+    '''
+    return np.mean(rolling_window(arr,2),axis=axis)
+
+def _mavg(arr, n=2, mode='valid'):
     '''
     returns the moving average of an array.
     returned array is shorter by (n-1)
     '''
+    weigths = np.full((n,),1/n,dtype=float)
     if len(arr) > 400:
         return signal.fftconvolve(arr, [1. / float(n)] * n, mode=mode)
     else:
         return signal.convolve(arr, [1. / float(n)] * n, mode=mode)
 
-def mgeo(arr, n=2):
+def mgeo(arr, n=2,axis=-1):
     '''
     Returns array of lenth len(arr) - (n-1)
 
@@ -371,11 +397,11 @@ def mgeo(arr, n=2):
               for i in xrange(n)])
     return np.product(b,axis=0)[n-1:-n]**(1./float(n))
     '''
-    a = []
-    for i in range(len(arr) - (n - 1)):
-        a.append(stats.gmean(arr[i:n + i]))
+    #a = []
+    #for i in range(len(arr) - (n - 1)):
+    #    a.append(stats.gmean(arr[i:n + i]))
 
-    return np.asarray(a)
+    return stats.gmean(rolling_window(arr,n),axis=axis)
 
 def avg(arr, n=2):
     '''
@@ -928,7 +954,82 @@ def plot_2dhist(X, Y, xlog=True, ylog=True, cmap=None, norm=mpl.colors.LogNorm()
 
     return x, y, p, ax
 
-def rolling_window(a, window):
-    shape = a.shape[:-1] + (a.shape[-1] - window + 1, window)
-    strides = a.strides + (a.strides[-1],)
-    return np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
+
+def gmtColormap(fileName,GMTPath = None):
+    '''
+    import cpt format colormaps
+    '''
+    import colorsys
+    import Numeric
+    N = Numeric
+    if type(GMTPath) == type(None):
+        filePath = fileName
+    else:
+        filePath = GMTPath+"/"+ fileName +".cpt"
+    try:
+        f = open(filePath)
+    except:
+        print( "file ",filePath, "not found")
+        return None
+
+    lines = f.readlines()
+    f.close()
+
+    x = []
+    r = []
+    g = []
+    b = []
+    colorModel = "RGB"
+    for l in lines:
+        ls = l.split()
+        if l[0] == "#":
+            if ls[-1] == "HSV":
+                colorModel = "HSV"
+                continue
+            else:
+                continue
+        if ls[0] == "B" or ls[0] == "F" or ls[0] == "N":
+            pass
+        else:
+            x.append(float(ls[0]))
+            r.append(float(ls[1]))
+            g.append(float(ls[2]))
+            b.append(float(ls[3]))
+            xtemp = float(ls[4])
+            rtemp = float(ls[5])
+            gtemp = float(ls[6])
+            btemp = float(ls[7])
+
+    x.append(xtemp)
+    r.append(rtemp)
+    g.append(gtemp)
+    b.append(btemp)
+
+    nTable = len(r)
+    x = N.array( x , N.Float)
+    r = N.array( r , N.Float)
+    g = N.array( g , N.Float)
+    b = N.array( b , N.Float)
+    if colorModel == "HSV":
+        for i in range(r.shape[0]):
+            rr,gg,bb = colorsys.hsv_to_rgb(r[i]/360.,g[i],b[i])
+            r[i] = rr ; g[i] = gg ; b[i] = bb
+    if colorModel == "HSV":
+        for i in range(r.shape[0]):
+            rr,gg,bb = colorsys.hsv_to_rgb(r[i]/360.,g[i],b[i])
+            r[i] = rr ; g[i] = gg ; b[i] = bb
+    if colorModel == "RGB":
+        r = r/255.
+        g = g/255.
+        b = b/255.
+    xNorm = (x - x[0])/(x[-1] - x[0])
+
+    red = []
+    blue = []
+    green = []
+    for i in range(len(x)):
+        red.append([xNorm[i],r[i],r[i]])
+        green.append([xNorm[i],g[i],g[i]])
+        blue.append([xNorm[i],b[i],b[i]])
+    colorDict = {"red":red, "green":green, "blue":blue}
+    return (colorDict)
