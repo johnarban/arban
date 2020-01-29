@@ -934,7 +934,7 @@ def custom_cmap(colormaps, lower, upper, log=(0, 0)):
     return colors.LinearSegmentedColormap('my_cmap', cdict)
 
 
-def slit_cmap(split=0.5, vmin1=12, vmax1=18, vmax2=50, vstep=1, log1=False, cmapn='coolwarm'):
+def split_cmap(split=0.5, vmin1=12, vmax1=18, vmax2=50, vstep=1, log1=False, cmapn='coolwarm'):
     vmin1 = vmin1
     vmax1 = vmax1
     vmin2 = vmax1
