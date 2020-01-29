@@ -37,11 +37,14 @@ from scipy.ndimage import median_filter, morphology
 from scipy.optimize import curve_fit, minimize
 from scipy.signal import argrelextrema
 
+import wquantiles as wq
+
 import utils as jutils
 
 # define short aliases
 ju = jutils
 nd = ndimage
+
 
 warnings.simplefilter('ignore', category=AstropyWarning)
 np.seterr(divide='ignore', invalid='ignore')

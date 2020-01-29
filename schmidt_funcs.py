@@ -13,7 +13,7 @@ from astropy.modeling.fitting import LevMarLSQFitter # , SimplexLSQFitter
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import emcee
-#import ipdb; 
+#import ipdb;
 import pdb
 
 # # # # # # # # # # # # # # # # # # # # # #
@@ -285,7 +285,7 @@ def pdf(values, bins):
         range=(np.nanmin(bins),np.nanmax(bins))
     else:
         range = None
-    
+
     h, x = np.histogram(values, bins=bins, range=range, density=False)
     # From the definition of Pr(x) = dF(x)/dx this
     # is the correct form. It returns the correct
@@ -309,7 +309,7 @@ def pdf2(values, bins):
         range=(np.nanmin(bins),np.nanmax(bins))
     else:
         range = None
-    
+
     pdf, x = np.histogram(values, bins=bins, range=range, density=False)
     pdf = pdf.astype(float) / np.diff(x)
     return pdf, avg(x)
@@ -334,7 +334,7 @@ def cdf(values, bins):
         range = (np.nanmin(bins),np.nanmax(bins))
     else:
         range = None
-    
+
     h, bins = np.histogram(values, bins=bins, range=range, density=False)  # returns int
 
     c = np.cumsum(h / np.sum(h, dtype=float)) # cumulative fraction below bin_k
@@ -356,7 +356,7 @@ def cdf2(values, bins):
         range=(np.nanmin(bins),np.nanmax(bins))
     else:
         range = None
-    
+
     h, bins = np.histogram(values, bins=bins, range=range, density=False)
     c = np.cumsum(h).astype(float)
     return np.append(0., c), bins
@@ -396,11 +396,11 @@ def mass_function(values, bins, scale=1, aktomassd=183):
         range=(np.nanmin(bins),np.nanmax(bins))
     else:
         range = None
-    
+
     h, bins = np.histogram(values, bins=bins, range=range, density=False, weights=values*aktomassd*scale)
     c = np.cumsum(h).astype(float)
     return c.max() - c, bins
-    
+
 
 def hist(values, bins, err=False, density=False, **kwargs):
     '''
@@ -410,7 +410,7 @@ def hist(values, bins, err=False, density=False, **kwargs):
         range=(np.nanmin(bins),np.nanmax(bins))
     else:
         range = None
-    
+
     hist, x = np.histogram(values, bins=bins, range=range, density=density, **kwargs)
     if (err is None) or (err is False):
         return hist.astype(np.float), avg(x)
@@ -472,8 +472,8 @@ def alpha_ML(data, xmin,xmax):
 def sigconf1d(n):
     cdf = (1/2.)*(1+special.erf(n/np.sqrt(2)))
     return (1-cdf)*100,100* cdf,100*special.erf(n/np.sqrt(2))
-    
-    
+
+
 
 def surfd(X, Xmap, bins, Xerr = None, Xmaperr = None, boot=False, scale=1., return_err=False, smooth=False):
     '''
@@ -490,7 +490,7 @@ def surfd(X, Xmap, bins, Xerr = None, Xmaperr = None, boot=False, scale=1., retu
         n = np.histogram(X, bins = bins, range=(bins.min(),bins.max()))[0]
         s = np.histogram(Xmap, bins = bins, range=(bins.min(),bins.max()))[0] * scale
 
-    
+
     if not return_err:
         return n / s
     else:
@@ -583,7 +583,7 @@ def emcee_schmidt(x, y, yerr, pos=None, pose=None,
     def lnlike(theta, x, y, yerr):
         mod = model(x, theta)
 
-        inv_sigma2 = 1 / yerr**2 
+        inv_sigma2 = 1 / yerr**2
         # Poisson statistics -- not using this
         #mu = (yerr)**2  # often called lambda = poisson variance for bin x_i
         #resid = np.abs(y - mod) # where w calculate the poisson probability
@@ -617,10 +617,10 @@ def emcee_schmidt(x, y, yerr, pos=None, pose=None,
         return lp + lnlike(theta, x, y, yerr)
 
     ndim, nwalkers = len(pos), nwalkers
-    
+
     pos = [np.array(pos) + np.array(pose) * 0.5 *
            (0.5 - np.random.rand(ndim)) for i in range(nwalkers)]
-    
+
     sampler = emcee.EnsembleSampler(
         nwalkers, ndim, lnprob, args=(x, y, yerr))
 
@@ -676,7 +676,7 @@ def fit(bins, samp, samperr, maps, mapserr, scale=1., sampler=None, log=False,
     ###########################################+
     ###### ADDED FOR SHIFTING EXPERIMENT ######+
     ###########################################+
-    
+
     bins2 = shift_bins(bins,0.5)
     bin
     x2 = avg(bins2)
@@ -688,7 +688,7 @@ def fit(bins, samp, samperr, maps, mapserr, scale=1., sampler=None, log=False,
     x = concatx[srt]
     y = concaty[srt]
     yerr = concatyerr[srt]
-    
+
     nonzero = np.isfinite(1. / y) & np.isfinite(yerr) & np.isfinite(1./yerr)
 
     y = y[nonzero]
@@ -750,7 +750,7 @@ def schmidt_results_plots(sampler, model, x, y, yerr, burnin=200, akmap=None,
     else:
         chain = sampler.chain
         dim = sampler.dim
-    
+
     samples = chain[:, burnin:, :].reshape((-1, dim))
     # # Print out final values # #
     theta_mcmc = np.percentile(samples, [16, 50, 84], axis=0).T  # Get percentiles for each parameter
@@ -807,23 +807,23 @@ def plot_walkers(sampler,limits = None, bad = None):
     '''
     sampler :  emcee Sampler class
     '''
-    
+
     if hasattr(sampler,'__getitem__'):
         chain = sampler
         ndim = chain.shape[-1]
     else:
         chain = sampler.chain
-        ndim = sampler.dim
-    
+        ndim = sampler.ndim
+
     fig = plt.figure(figsize=(8 * ndim, 4 * ndim))
 
     if hasattr(limits,'__getitem__'):
         limits += [None] * (3-len(limits))
-        slices = slice(limits[0],limits[1],limits[2])  
+        slices = slice(limits[0],limits[1],limits[2])
     else:
         slices = slice(None,limits,None)
-        
-    
+
+
     for w,walk in enumerate(chain[:,slices,:]):
         if bad is None:
             color = 'k'
