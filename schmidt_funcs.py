@@ -558,13 +558,13 @@ def lmfit_powerlaw(x, y, yerr=None, xmin=-np.inf, xmax=np.inf, init=None, maxite
         keep = keep & np.isfinite(1. / yerr)
     m_init = model()
     fit = LevMarLSQFitter()
-    weights = (yerr / y)[keep]**(-2.)
+    #weights = (yerr / y)[keep]**(-2.)
     m = fit(m_init, np.log(x[keep]), np.log(y[keep]), maxiter=maxiter)
     return m, fit
 
 
 def fit_lmfit_schmidt(x, y, yerr, init=None):
-    m,fit = lmfit_powerlaw(x,y,yerr,init=init)
+    m, _ = lmfit_powerlaw(x,y,yerr,init=init)
     return m.parameters
 
 
@@ -628,7 +628,7 @@ def emcee_schmidt(x, y, yerr, pos=None, pose=None,
 
     # Get input values
     # x, y, yerr = sampler.args
-    samples = sampler.chain[:, burnin:, :].reshape((-1, sampler.dim))
+    samples = sampler.chain[:, burnin:, :].reshape((-1, sampler.ndim))
 
     # # Print out final values # #
     theta_mcmc = np.percentile(samples, [16, 50, 84], axis=0).T
@@ -769,7 +769,7 @@ def schmidt_results_plots(sampler, model, x, y, yerr, burnin=200, akmap=None,
         else:
             labels = ['beta', 'kappa']
         #print labels
-        fig = triangle.corner(samples, labels=labels,
+        _ = triangle.corner(samples, labels=labels,
                               truths=theta_mcmc[:, 1], quantiles=[.16, .84],
                               verbose=False)
     # generate schmidt laws from parameter samples

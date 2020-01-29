@@ -18,6 +18,7 @@ import numpy as np
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.table import Table
+import astropy.constants as const
 from astropy.wcs import WCS
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy import integrate, interpolate
