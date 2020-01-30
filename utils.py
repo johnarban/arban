@@ -12,6 +12,7 @@ from importlib import reload
 
 import emcee
 import matplotlib as mpl
+import matplotlib.cm as cm
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import numpy as np
@@ -26,9 +27,6 @@ from scipy import ndimage as nd
 from scipy import signal, special, stats
 from weighted import quantile
 
-import myhelpers as mh
-
-reload(mh)
 
 __location__ = os.path.realpath(
     os.path.join(os.getcwd(), os.path.dirname(__file__)))
@@ -50,7 +48,7 @@ def set_plot_opts(serif_fonts=True):
     if serif_fonts:
         mpl.rcParams['mathtext.fontset'] = 'stix'
         mpl.rcParams['font.family'] = 'serif'
-        mpl.rcParams['font.size'] = 12
+        mpl.rcParams['font.size'] = 14
     return None
 
 
@@ -97,7 +95,7 @@ def kdeplot(xp, yp, filled=False, ax=None, grid=None, bw=None, *args, **kwargs):
     return cs
 
 
-AtomicMass = {'H2': 2, '12CO': 12+16, '13CO': 13+18, 'C18O': 12+18}
+AtomicMass = {'H2': 2, '12CO': 12+16, '13CO': 13+18, 'C18O': 12+18, 'ISM':2.33}
 
 
 def thermal_v(T, mu=None, mol=None):
@@ -1210,6 +1208,45 @@ def hist2d(x, y, range=range, bins=20, smooth=False):
     return sm, X1, Y1
 
 
+def clean_color(color, reverse=False):
+    if isinstance(color, str):
+        if color[-2:] == '_r':
+            return color[:-2], True
+        elif reverse is True:
+            return color, True
+        else:
+            return color, False
+    else:
+        return color, reverse
+
+
+def color_cmap(c, alpha=1, to_white=True, reverse=False):
+    if to_white:
+        end = (1, 1, 1, alpha)
+    else:
+        end = (0, 0, 0, alpha)
+
+    color, reverse = clean_color(c, reverse=reverse)
+
+    cmap = mpl.colors.LinearSegmentedColormap.from_list(
+        "density_cmap", [color, end])
+    if reverse:
+        return cmap.reversed()
+    else:
+        return cmap
+
+
+def contour_level_colors(cmap, levels, vmin=None, vmax=None):
+    vmin = vmin or 0
+    vmax = vmax or max(levels)
+    norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
+    #offset = np.diff(levels)[0] * .5
+    #colors = mpl.cm.get_cmap(cmap)(norm(levels-offset))
+    levels = np.r_[0, levels]
+    center_levels = 0.5 * (levels[1:] + levels[:-1])
+    return mpl.cm.get_cmap(cmap)(norm(center_levels))
+
+
 def stat_plot2d(x, y, marker='k.',
             bins=20, range=None, smooth=0,
             xscale=None, yscale=None,
@@ -1363,7 +1400,7 @@ def stat_plot2d(x, y, marker='k.',
     if not cmap_is_set:
         if debug:
             print('making linear cmap')
-        cmap= mh.color_cmap(color,reverse=reverse)
+        cmap = color_cmap(color,reverse=reverse)
         cmap_is_set = True
 
     if debug:
@@ -1383,7 +1420,7 @@ def stat_plot2d(x, y, marker='k.',
     kwargs_not_set = (contour_kwargs.get('cmap') is None) & (contour_kwargs.get('colors') is None)
     if kwargs_not_set:
         if (color_match & no_set_contour_color) | (contour_color == 'match'):
-            contour_kwargs['colors'] = mh.contour_level_colors(cmap,levels)
+            contour_kwargs['colors'] = contour_level_colors(cmap,levels)
         elif contour_kwargs.get('colors') is None:
             contour_kwargs['colors'] = listornone(contour_color) or listornone(color)
 
