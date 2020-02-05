@@ -20,6 +20,7 @@ from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.table import Table
 import astropy.constants as const
+import astropy.units as u
 from astropy.wcs import WCS
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy import integrate, interpolate
@@ -118,7 +119,7 @@ def thermal_v(T, mu=None, mol=None):
         else:
             mu = 1
 
-    return np.sqrt(const.k_B * t * u.Kelvin / (mu * const.m_p)).to("km/s").value
+    return np.sqrt(const.k_B * T * u.Kelvin / (mu * const.m_p)).to("km/s").value
 
 
 #############################
@@ -487,7 +488,7 @@ def _mavg(arr, n=2, mode="valid"):
     returns the moving average of an array.
     returned array is shorter by (n-1)
     """
-    weigths = np.full((n,), 1 / n, dtype=float)
+    #weigths = np.full((n,), 1 / n, dtype=float)
     if len(arr) > 400:
         return signal.fftconvolve(arr, [1.0 / float(n)] * n, mode=mode)
     else:
@@ -1254,7 +1255,7 @@ def data2rank(arr, clip=0, notadummy=True):
         shape = arr.shape
         arr = arr.flatten()
         sort = np.argsort(arr)  # smallest to largest
-        invsort = np.argsort(srt)  # get sorted array in to original order
+        invsort = np.argsort(sort)  # get sorted array in to original order
         sorted_arr = arr[sort]
         uniqsort = np.r_[True, sorted_arr[1:] != sorted_arr[:-1]]
         order = uniqsort.cumsum()
