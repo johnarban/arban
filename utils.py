@@ -1718,6 +1718,7 @@ def oplot_hist(X, bins=None, ylim=None, scale=0.5, ax=None):
     H = (H/H.max()) * (ylim[1]-ylim[0]) * scale + ylim[0]
     ax.step(mavg(xedge), H, where='mid',
             color='0.25', alpha=1, zorder=10, lw=1.5)
+    return ax
 
 
 def get_edges(x):
