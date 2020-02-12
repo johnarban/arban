@@ -29,7 +29,8 @@ from scipy import signal, special, stats
 from weighted import quantile
 
 
-__location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
+__location__ = os.path.realpath(os.path.join(
+    os.getcwd(), os.path.dirname(__file__)))
 
 __filtertable__ = Table.read(
     os.path.join(__location__, "FilterSpecs.tsv"), format="ascii"
@@ -67,20 +68,21 @@ def get_cax(ax=None, size=3):
 def kdeplot(xp, yp, filled=False, ax=None, grid=None, bw=None, *args, **kwargs):
     if ax is None:
         ax = plt.gca()
-    rvs = np.append(xp.reshape((xp.shape[0], 1)), yp.reshape((yp.shape[0], 1)), axis=1)
+    rvs = np.append(xp.reshape((xp.shape[0], 1)), yp.reshape(
+        (yp.shape[0], 1)), axis=1)
 
     kde = stats.kde.gaussian_kde(rvs.T)
     # kde.covariance_factor = lambda: 0.3
     # kde._compute_covariance()
     kde.set_bandwidth(bw)
 
-     # Regular grid to evaluate kde upon
+    # Regular grid to evaluate kde upon
     if grid is None:
-        x_flat = np.r_[rvs[:, 0].min() : rvs[:, 0].max() : 256j]
-        y_flat = np.r_[rvs[:, 1].min() : rvs[:, 1].max() : 256j]
+        x_flat = np.r_[rvs[:, 0].min(): rvs[:, 0].max(): 256j]
+        y_flat = np.r_[rvs[:, 1].min(): rvs[:, 1].max(): 256j]
     else:
-        x_flat = np.r_[0 : grid[0] : complex(0, grid[0])]
-        y_flat = np.r_[0 : grid[1] : complex(0, grid[1])]
+        x_flat = np.r_[0: grid[0]: complex(0, grid[0])]
+        y_flat = np.r_[0: grid[1]: complex(0, grid[1])]
     x, y = np.meshgrid(x_flat, y_flat)
     grid_coords = np.append(x.reshape(-1, 1), y.reshape(-1, 1), axis=1)
 
@@ -94,7 +96,8 @@ def kdeplot(xp, yp, filled=False, ax=None, grid=None, bw=None, *args, **kwargs):
     return cs
 
 
-AtomicMass = {"H2": 2, "12CO": 12 + 16, "13CO": 13 + 18, "C18O": 12 + 18, "ISM": 2.33}
+AtomicMass = {"H2": 2, "12CO": 12 + 16,
+              "13CO": 13 + 18, "C18O": 12 + 18, "ISM": 2.33}
 
 
 def thermal_v(T, mu=None, mol=None):
@@ -267,7 +270,8 @@ def grid_data(
             cont = ax.contourf
         else:
             cont = ax.contour
-        cont(xi, yi, zi / np.max(zi[np.isfinite(zi)]), cmap=cmap, levels=levels)
+        cont(xi, yi, zi / np.max(zi[np.isfinite(zi)]),
+             cmap=cmap, levels=levels)
 
     return xi, yi, zi
 
@@ -296,7 +300,8 @@ def convert_flux(mag=None, emag=None, filt=None, return_wavelength=False):
             print("Filter %s not found" % filt.lower())
             print("Please select one of the following")
             print(tab["fname"].data)
-            filt = eval(input("Include quotes in answer (example ('johnsonK')): "))
+            filt = eval(
+                input("Include quotes in answer (example ('johnsonK')): "))
 
         f0 = tab["F0_Jy"][np.where(filt.lower() == tab["fname"])][0]
     else:
@@ -440,10 +445,10 @@ def plot_rectangle(c, w, h, angle=0, center=True, ax=None, n=10, m="-", **plot_k
     ax.plot(x, y, **plot_kwargs)
     n = n * 1j
     # interpolate each linear segment
-    leg1 = np.r_[x[0] : x[1] : n], np.r_[y[0] : y[1] : n]
-    leg2 = np.r_[x[1] : x[2] : n], np.r_[y[1] : y[2] : n]
-    leg3 = np.r_[x[2] : x[3] : n], np.r_[y[2] : y[3] : n]
-    leg4 = np.r_[x[3] : x[4] : n], np.r_[y[3] : y[4] : n]
+    leg1 = np.r_[x[0]: x[1]: n], np.r_[y[0]: y[1]: n]
+    leg2 = np.r_[x[1]: x[2]: n], np.r_[y[1]: y[2]: n]
+    leg3 = np.r_[x[2]: x[3]: n], np.r_[y[2]: y[3]: n]
+    leg4 = np.r_[x[3]: x[4]: n], np.r_[y[3]: y[4]: n]
     ax.plot(*leg1, m, *leg2, m, *leg3, m, *leg4, m, **plot_kwargs)
     return ax
 
@@ -493,7 +498,7 @@ def weighted_std(x, w):
 
 
 def weighted_mad(x, w, stddev=True):
-    median = lambda arr, wei: quantile(arr, wei, 0.5)
+    def median(arr, wei): return quantile(arr, wei, 0.5)
     if stddev:
         return 1.4826 * median(np.abs(x - median(x, w)), w)
     else:
@@ -641,7 +646,8 @@ def nametoradec(name):
                 sign = "-"
             ra = ra[0:2] + ":" + ra[2:4] + ":" + ra[4:6] + "." + ra[6:8]
             de = sign + de[0:2] + ":" + de[2:4] + ":" + de[4:6]
-            coord = SkyCoord(ra, de, frame="icrs", unit=("hourangle", "degree"))
+            coord = SkyCoord(ra, de, frame="icrs",
+                             unit=("hourangle", "degree"))
             rightascen.append(coord.ra.value)
             declinatio.append(coord.dec.value)
         return np.array(rightascen), np.array(declinatio)
@@ -727,7 +733,8 @@ def cdf(values, bins):
     else:
         range = None
 
-    h, bins = np.histogram(values, bins=bins, range=range, density=False)  # returns int
+    h, bins = np.histogram(values, bins=bins, range=range,
+                           density=False)  # returns int
 
     # cumulative fraction below bin_k
     c = np.cumsum(h / np.sum(h, dtype=float))
@@ -902,7 +909,8 @@ class PolyRegress(object):
     def fit(self):
         if np.linalg.det(self.XX) != 0:
             # self.b = np.dot(np.dot(np.linalg.inv(self.XX),self.A.T),self.Y)
-            self.b = np.linalg.solve(np.dot(self.A.T, self.A), np.dot(self.A.T, self.Y))
+            self.b = np.linalg.solve(
+                np.dot(self.A.T, self.A), np.dot(self.A.T, self.Y))
         else:
             self.b, *_ = np.linalg.lstsq(self.A, self.Y, rcond=-1,)
             # self.b = np.dot(np.dot(np.linalg.pinv(self.XX),self.A.T),self.Y)
@@ -945,7 +953,8 @@ def linregress_ppv(x, y):
         np.sum((x - xbar) ** 2, axis=0)
     )
     b = ybar - m * xbar
-    f = m[np.newaxis, :, :] * x[:, np.newaxis, np.newaxis] + b[np.newaxis, :, :]
+    f = m[np.newaxis, :, :] * x[:, np.newaxis,
+                                np.newaxis] + b[np.newaxis, :, :]
     return f
 
 
@@ -1086,7 +1095,8 @@ def linear_emcee_fitter(
     def lnlike(theta, x, y, yerr, use_lnf=use_lnf):
         ymodel = model(x, theta)
         if use_lnf:
-            inv_sigma2 = 1.0 / (yerr ** 2 + ymodel ** 2 * np.exp(2 * theta[-1]))
+            inv_sigma2 = 1.0 / (yerr ** 2 + ymodel **
+                                2 * np.exp(2 * theta[-1]))
         else:
             inv_sigma2 = 1.0 / yerr ** 2
         return -0.5 * (np.sum((y - ymodel) ** 2 * inv_sigma2 - np.log(inv_sigma2)))
@@ -1330,7 +1340,8 @@ def plot_2dhist(
         p = np.polyfit(mavg(be)[cl][1:], st[cl][1:], 1)
     funcname = "Best fit: {m:0.5G}*x + {b:0.5G}".format(m=p[0], b=p[1])
     if plot_fit:
-        ax.plot([0, 64], np.polyval(p, [0, 64]), "dodgerblue", lw=1.5, label=funcname)
+        ax.plot([0, 64], np.polyval(p, [0, 64]),
+                "dodgerblue", lw=1.5, label=funcname)
 
     ax.legend()
 
@@ -1381,10 +1392,12 @@ def extend_hist(H, X1, Y1, fill=0, padn=2):
     before = np.arange(-padn, 0, 1)
     after = np.arange(1, padn + 1, 1)
     X2 = np.concatenate(
-        [X1[0] + before * np.diff(X1[:2]), X1, X1[-1] + after * np.diff(X1[-2:]),]
+        [X1[0] + before * np.diff(X1[:2]), X1, X1[-1] +
+         after * np.diff(X1[-2:]), ]
     )
     Y2 = np.concatenate(
-        [Y1[0] + before * np.diff(Y1[:2]), Y1, Y1[-1] + after * np.diff(Y1[-2:]),]
+        [Y1[0] + before * np.diff(Y1[:2]), Y1, Y1[-1] +
+         after * np.diff(Y1[-2:]), ]
     )
 
     padn = ((padn, padn), (padn, padn))
@@ -1443,7 +1456,8 @@ def color_cmap(c, alpha=1, to_white=True, reverse=False):
 
     color, reverse = clean_color(c, reverse=reverse)
 
-    cmap = mpl.colors.LinearSegmentedColormap.from_list("density_cmap", [color, end])
+    cmap = mpl.colors.LinearSegmentedColormap.from_list(
+        "density_cmap", [color, end])
     if reverse:
         return cmap.reversed()
     else:
@@ -1486,7 +1500,8 @@ def stat_plot1d(x, ax=None, bins="auto", histtype="step", lw=2, **plot_kwargs):
     if ax is None:
         ax = plt.gca()
 
-    ax.hist(x[np.isfinite(x)], bins="auto", histtype="step", lw=2, **plot_kwargs)
+    ax.hist(x[np.isfinite(x)], bins="auto",
+            histtype="step", lw=2, **plot_kwargs)
     return ax
 
 
@@ -1529,7 +1544,7 @@ def stat_plot2d(
     debug=False,
     zorder=0,
     ax=None,
-    plot_datapoints=False, # for legacy only
+    plot_datapoints=False,  # for legacy only
 ):
     """
     based on hist2d dfm's corner.py
@@ -1564,12 +1579,8 @@ def stat_plot2d(
         bins = 'auto'
         smooth = 2
 
-
-
     if smooth is None:
         smooth = 0
-
-
 
     g = np.isfinite(x + y)
     x, y = np.asarray(x)[g], np.asarray(y)[g]
@@ -1726,7 +1737,8 @@ def stat_plot2d(
         if (color_match & no_set_contour_color) | (contour_color == "match"):
             contour_kwargs["colors"] = contour_level_colors(cmap, levels)
         elif contour_kwargs.get("colors") is None:
-            contour_kwargs["colors"] = listornone(contour_color) or listornone(color)
+            contour_kwargs["colors"] = listornone(
+                contour_color) or listornone(color)
 
     if contour_kwargs.get("levels") is None:
         contour_kwargs["levels"] = np.array(levels)  # levels
@@ -1736,13 +1748,15 @@ def stat_plot2d(
             pass
         else:
             lw = linewidths or lw
-            contour_kwargs["linewidths"] = [i for i in np.asarray([lw]).flatten()]
+            contour_kwargs["linewidths"] = [
+                i for i in np.asarray([lw]).flatten()]
 
     if contour_kwargs.get("alpha") is None:
         contour_kwargs["alpha"] = alpha
 
     if contourf_kwargs.get("levels") is None:
-        contourf_kwargs["levels"] = np.hstack([[0], levels])  # close top contour
+        contourf_kwargs["levels"] = np.hstack(
+            [[0], levels])  # close top contour
 
     if contourf_kwargs.get("alpha") is None:
         contourf_kwargs["alpha"] = alpha
@@ -1865,7 +1879,8 @@ def oplot_hist(X, bins=None, ylim=None, scale=0.5, ax=None):
         X, range=np.nanpercentile(X, [0, 100]), bins=bins, density=True
     )
     H = (H / H.max()) * (ylim[1] - ylim[0]) * scale + ylim[0]
-    ax.step(mavg(xedge), H, where="mid", color="0.25", alpha=1, zorder=10, lw=1.5)
+    ax.step(mavg(xedge), H, where="mid",
+            color="0.25", alpha=1, zorder=10, lw=1.5)
     return ax
 
 
@@ -1877,4 +1892,3 @@ def get_edges(x):
     else:
         dx = np.diff(np.log(x))[0]
         return np.exp(np.r_[np.log(x) - dx / 2, x[-1] + dx / 2])
-
