@@ -29,9 +29,11 @@ from scipy import signal, special, stats
 from weighted import quantile
 
 
-__location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
+__location__ = os.path.realpath(os.path.join(
+    os.getcwd(), os.path.dirname(__file__)))
 
-__filtertable__ = Table.read(os.path.join(__location__, "FilterSpecs.tsv"), format="ascii")
+__filtertable__ = Table.read(os.path.join(
+    __location__, "FilterSpecs.tsv"), format="ascii")
 
 
 #############################
@@ -66,7 +68,8 @@ def get_cax(ax=None, size=3):
 def kdeplot(xp, yp, filled=False, ax=None, grid=None, bw=None, *args, **kwargs):
     if ax is None:
         ax = plt.gca()
-    rvs = np.append(xp.reshape((xp.shape[0], 1)), yp.reshape((yp.shape[0], 1)), axis=1)
+    rvs = np.append(xp.reshape((xp.shape[0], 1)), yp.reshape(
+        (yp.shape[0], 1)), axis=1)
 
     kde = stats.kde.gaussian_kde(rvs.T)
     # kde.covariance_factor = lambda: 0.3
@@ -286,7 +289,8 @@ def convert_flux(mag=None, emag=None, filt=None, return_wavelength=False):
             print("Filter %s not found" % filt.lower())
             print("Please select one of the following")
             print(tab["fname"].data)
-            filt = eval(input("Include quotes in answer (example ('johnsonK')): "))
+            filt = eval(
+                input("Include quotes in answer (example ('johnsonK')): "))
 
         f0 = tab["F0_Jy"][np.where(filt.lower() == tab["fname"])][0]
     else:
@@ -414,9 +418,9 @@ def plot_rectangle(c, w, h, angle=0, center=True, ax=None, n=10, m="-", **plot_k
     if center is True:
         print("Hey, did you know this is built into matplotlib")
         print("Yeah, just do  ax.add_patch(plt.Rectangle(xy=(cx,cy),height=h, width=w, angle=deg))"
-        )
+              )
         print("of course this one will work even if grid is not rectilinear and can use points"
-        )
+              )
         print("defined w.r.t. a corner")
     if ax is None:
         ax = plt.gca()
@@ -441,7 +445,8 @@ def rolling_window(arr, window):
         out -- array s.t. np.mean(arr,axis=-1) gives the running mean along rows (or -1 axis of a)
             out.shape = arr.shape[:-1] + (arr.shape[-1] - window + 1, window)
     """
-    shape = arr.shape[:-1] + (arr.shape[-1] - window + 1, window, )  # the new shape (a.shape)
+    shape = arr.shape[:-1] + (arr.shape[-1] - window + 1,
+                              window, )  # the new shape (a.shape)
     strides = arr.strides + (arr.strides[-1],)
     return np.lib.stride_tricks.as_strided(arr, shape=shape, strides=strides)
 
@@ -775,7 +780,8 @@ def mass_function(values, bins, scale=1, aktomassd=183):
     else:
         range = None
 
-    h, bins = np.histogram(values, bins=bins, range=range, density=False, weights=values * aktomassd * scale, )
+    h, bins = np.histogram(values, bins=bins, range=range,
+                           density=False, weights=values * aktomassd * scale, )
     c = np.cumsum(h).astype(float)
     return c.max() - c, bins
 
@@ -873,7 +879,8 @@ class PolyRegress(object):
     def fit(self):
         if np.linalg.det(self.XX) != 0:
             # self.b = np.dot(np.dot(np.linalg.inv(self.XX),self.A.T),self.Y)
-            self.b = np.linalg.solve(np.dot(self.A.T, self.A), np.dot(self.A.T, self.Y))
+            self.b = np.linalg.solve(
+                np.dot(self.A.T, self.A), np.dot(self.A.T, self.Y))
         else:
             self.b, *_ = np.linalg.lstsq(self.A, self.Y, rcond=-1,)
             # self.b = np.dot(np.dot(np.linalg.pinv(self.XX),self.A.T),self.Y)
@@ -913,7 +920,7 @@ def linregress_ppv(x, y):
     xbar = np.mean(x)
     ybar = np.mean(y, axis=0)
     m = np.sum((x - xbar)[:, np.newaxis, np.newaxis] * (y - ybar), axis=0) / (np.sum((x - xbar) ** 2, axis=0)
-    )
+                                                                              )
     b = ybar - m * xbar
     f = m[np.newaxis, :, :] * x[:, np.newaxis,
                                 np.newaxis] + b[np.newaxis, :, :]
@@ -1228,7 +1235,8 @@ def plot_2dhist(X, Y, xlog=True, ylog=True, cmap=None, norm=mpl.colors.LogNorm()
     else:
         y = np.asarray(Y)
 
-    _ = ax.hist2d(x, y, range=histrange, bins=histbins, cmap=cmap, cmin=cmin, norm=norm, vmin=vmin, vmax=vmax, zorder=1, )
+    _ = ax.hist2d(x, y, range=histrange, bins=histbins, cmap=cmap,
+                  cmin=cmin, norm=norm, vmin=vmin, vmax=vmax, zorder=1, )
 
     # bin the data
 
@@ -1239,7 +1247,8 @@ def plot_2dhist(X, Y, xlog=True, ylog=True, cmap=None, norm=mpl.colors.LogNorm()
     est, be, _ = stats.binned_statistic(x, y, statistic=statstd, bins=binbins)
     cl = np.isfinite(st) & np.isfinite(est)
     if plot_bins:
-        ax.errorbar(mavg(be)[cl], st[cl], yerr=est[cl], fmt="s", color="r", label="binned data", lw=1.5, zorder=2, )
+        ax.errorbar(mavg(be)[cl], st[cl], yerr=est[cl], fmt="s",
+                    color="r", label="binned data", lw=1.5, zorder=2, )
 
     if weighted_fit:
         p = np.polyfit(mavg(be)[cl][1:], st[cl][1:], 1, w=1 / est[cl][1:] ** 2)
@@ -1299,11 +1308,11 @@ def extend_hist(H, X1, Y1, fill=0, padn=2):
     before = np.arange(-padn, 0, 1)
     after = np.arange(1, padn + 1, 1)
     X2 = np.concatenate([X1[0] + before * np.diff(X1[:2]), X1, X1[-1] +
-         after * np.diff(X1[-2:]), ]
-    )
+                         after * np.diff(X1[-2:]), ]
+                        )
     Y2 = np.concatenate([Y1[0] + before * np.diff(Y1[:2]), Y1, Y1[-1] +
-         after * np.diff(Y1[-2:]), ]
-    )
+                         after * np.diff(Y1[-2:]), ]
+                        )
 
     padn = ((padn, padn), (padn, padn))
     H2 = np.pad(H, padn, mode="constant", constant_values=fill)
@@ -1361,7 +1370,8 @@ def color_cmap(c, alpha=1, to_white=True, reverse=False):
 
     color, reverse = clean_color(c, reverse=reverse)
 
-    cmap = mpl.colors.LinearSegmentedColormap.from_list("density_cmap", [color, end])
+    cmap = mpl.colors.LinearSegmentedColormap.from_list(
+        "density_cmap", [color, end])
     if reverse:
         return cmap.reversed()
     else:
@@ -1451,19 +1461,19 @@ def stat_plot2d(x, y, marker="k.", bins=20, range=None, smooth=0, xscale=None, y
 
     if np.isclose(x.var(), 0) & np.isclose(y.var(), 0):
         print("Both variables have Variance=0. So no plot can be generated. Here is a plot to help"
-        )
+              )
         print("First 10 (or less) elements of x", x[:10])
         print("First 10 (or less) elements of y", y[:10])
         ax.scatter(x, y)
         return 0
     elif np.isclose(x.var(), 0):
         print("Variable X has variance=0. Instead of making an ugly plot, here is a histogram of the remaining variable"
-        )
+              )
         stat_plot1d(y)
         return 0
     elif np.isclose(y.var(), 0):
         print("Variable X has variance=0. Instead of making an ugly plot, here is a histogram of the remaining variable"
-        )
+              )
         stat_plot1d(x)
         return 0
 
@@ -1592,12 +1602,13 @@ def stat_plot2d(x, y, marker="k.", bins=20, range=None, smooth=0, xscale=None, y
     # color_match is for contours and data
     no_set_contour_color = contour_color is None
     kwargs_not_set = (contour_kwargs.get("cmap") is None) & (contour_kwargs.get("colors") is None
-    )
+                                                             )
     if kwargs_not_set:
         if (color_match & no_set_contour_color) | (contour_color == "match"):
             contour_kwargs["colors"] = contour_level_colors(cmap, levels)
         elif contour_kwargs.get("colors") is None:
-            contour_kwargs["colors"] = listornone(contour_color) or listornone(color)
+            contour_kwargs["colors"] = listornone(
+                contour_color) or listornone(color)
 
     if contour_kwargs.get("levels") is None:
         contour_kwargs["levels"] = np.array(levels)  # levels
@@ -1614,7 +1625,8 @@ def stat_plot2d(x, y, marker="k.", bins=20, range=None, smooth=0, xscale=None, y
         contour_kwargs["alpha"] = alpha
 
     if contourf_kwargs.get("levels") is None:
-        contourf_kwargs["levels"] = np.hstack([[0], levels])  # close top contour
+        contourf_kwargs["levels"] = np.hstack(
+            [[0], levels])  # close top contour
 
     if contourf_kwargs.get("alpha") is None:
         contourf_kwargs["alpha"] = alpha
@@ -1650,7 +1662,7 @@ def stat_plot2d(x, y, marker="k.", bins=20, range=None, smooth=0, xscale=None, y
 
     if plot_datapoints:
         p = ax.plot(x, y, marker, **data_kwargs, rasterized=rasterized, zorder=zorder + 1
-        )
+                    )
         xlim, ylim = ax.get_xlim(), ax.get_ylim()
     else:
         p = None
@@ -1662,18 +1674,19 @@ def stat_plot2d(x, y, marker="k.", bins=20, range=None, smooth=0, xscale=None, y
 
     if plot_contourf:
         cntrf = ax.contourf(X1, Y1, sm_unflat, **contourf_kwargs, vmin=vmin, vmax=vmax, zorder=zorder + 2
-        )
+                            )
     else:
         cntrf = None
 
     if plot_contour:
         cntr = ax.contour(X1, Y1, sm_unflat, **contour_kwargs, vmin=vmin, vmax=vmax, zorder=zorder + 3
-        )
+                          )
     else:
         cntr = None
 
     if plot_imshow:
-        ax.imshow(sm_unflat, origin="lower", extent=[X1.min(), X1.max(), Y1.min(), Y1.max()], zorder=zorder + 4, )
+        ax.imshow(sm_unflat, origin="lower", extent=[
+                  X1.min(), X1.max(), Y1.min(), Y1.max()], zorder=zorder + 4, )
 
     if plot_datapoints:
         ax.set_xlim(*xlim)
@@ -1720,7 +1733,7 @@ def oplot_hist(X, bins=None, ylim=None, scale=0.5, ax=None):
         bins = "auto"
 
     H, xedge = np.histogram(X, range=np.nanpercentile(X, [0, 100]), bins=bins, density=True
-    )
+                            )
     H = (H / H.max()) * (ylim[1] - ylim[0]) * scale + ylim[0]
     ax.step(mavg(xedge), H, where="mid",
             color="0.25", alpha=1, zorder=10, lw=1.5)
