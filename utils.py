@@ -167,7 +167,7 @@ def wcsaxis(wcs, N=6, ax=None, fmt="%0.2f", use_axes=False):
     ylim = ax.axes.get_ylim()
     try:
         wcs = WCS(wcs)
-    except:
+    except BaseException:
         None
     hdr = wcs.to_header()
     naxis = wcs.naxis  # naxis
@@ -180,7 +180,7 @@ def wcsaxis(wcs, N=6, ax=None, fmt="%0.2f", use_axes=False):
     # try:
     #    cdelt1 = wcs['CDELT1']
     #    cdelt2 = wcs['CDELT2']
-    # except:
+    # except BaseException:
     #    cdelt1 = wcs['CD1_1']
     #    cdelt2 = wcs['CD2_2']
 
@@ -233,7 +233,20 @@ def writefits(filename, data, header=None, wcs=None, clobber=True):
     return hdu
 
 
-def grid_data(x, y, z, nxy=(512, 512), interp="linear", plot=False, cmap="Greys", levels=None, sigmas=None, filled=False, ):
+def grid_data(
+        x,
+        y,
+        z,
+        nxy=(
+            512,
+            512),
+    interp="linear",
+    plot=False,
+    cmap="Greys",
+    levels=None,
+    sigmas=None,
+    filled=False,
+):
     """
     stick x,y,z data on a grid and return
     XX, YY, ZZ
@@ -459,7 +472,7 @@ def comp(arr):
     """
     try:
         return arr.compressed()
-    except:
+    except BaseException:
         return arr
 
 
@@ -838,7 +851,8 @@ def polyregress_bootstrap(X, Y, order=1, iterations=10, thru_origin=False, retur
 
     if return_errs:
         # correct error by sqrt(2) since using 1/2 the data per iteration
-        return (np.nanmean(coeff, axis=0), np.std(coeff, axis=0) / np.sqrt(2), np.nanpercentile(coeff, [16, 50, 84], axis=0).T, )
+        return (np.nanmean(coeff, axis=0), np.std(coeff, axis=0) /
+                np.sqrt(2), np.nanpercentile(coeff, [16, 50, 84], axis=0).T, )
     else:
         return np.array(coeff)
 
@@ -919,8 +933,8 @@ def linregress_ppv(x, y):
     y = y[g]
     xbar = np.mean(x)
     ybar = np.mean(y, axis=0)
-    m = np.sum((x - xbar)[:, np.newaxis, np.newaxis] * (y - ybar), axis=0) / (np.sum((x - xbar) ** 2, axis=0)
-                                                                              )
+    m = np.sum((x - xbar)[:, np.newaxis, np.newaxis] * (y - ybar),
+               axis=0) / (np.sum((x - xbar) ** 2, axis=0))
     b = ybar - m * xbar
     f = m[np.newaxis, :, :] * x[:, np.newaxis,
                                 np.newaxis] + b[np.newaxis, :, :]
@@ -948,7 +962,7 @@ def rms(X, axis=None):
 def wcs_to_grid(wcs, index=False, verbose=False):
     try:
         wcs = WCS(wcs)
-    except:
+    except BaseException:
         None
 
     wcs = wcs.dropaxis(2)
@@ -996,13 +1010,14 @@ def ffill_nan_3d(arr):
     return out.T.reshape(shape)
 
 
-def linear_emcee_fitter(x, y, yerr=None, fit_log=False, gauss_prior=False, nwalkers=10, theta_init=None, use_lnf=True, bounds=([-np.inf, np.inf], [-np.inf, np.inf]), ):
+def linear_emcee_fitter(x, y, yerr=None, fit_log=False, gauss_prior=False, nwalkers=10,
+                        theta_init=None, use_lnf=True, bounds=([-np.inf, np.inf], [-np.inf, np.inf]), ):
     """
     ## sample call
     sampler,pos = little_emcee_fitter(x,y, theta_init=np.array(mfit.parameters), use_lnf=True)
     samples = sampler.chain[:,1000:,:].reshape((-1,sampler.dim))
 
-    corner.corner(samples,show_titles=True, quantiles=[.16,.84], labels=["$m$", "$b$", "$\ln\,f$"])
+    corner.corner(samples,show_titles=True, quantiles=[.16,.84], labels=["$m$", "$b$", r"$\ln\,f$"])
     ---------------------------------------------
 
     Arguments:
@@ -1189,7 +1204,27 @@ def split_cmap(split=0.5, vmin1=12, vmax1=18, vmax2=50, vstep=1, log1=False, cma
     return mpl.colors.LinearSegmentedColormap.from_list("piecewise2", allcols2)
 
 
-def plot_2dhist(X, Y, xlog=True, ylog=True, cmap=None, norm=mpl.colors.LogNorm(), vmin=None, vmax=None, bins=50, statistic=np.nanmean, statstd=np.nanstd, histbins=None, histrange=None, cmin=1, binbins=None, weighted_fit=True, ax=None, plot_bins=True, plot_fit=True, ):
+def plot_2dhist(
+    X,
+    Y,
+    xlog=True,
+    ylog=True,
+    cmap=None,
+    norm=mpl.colors.LogNorm(),
+    vmin=None,
+    vmax=None,
+    bins=50,
+    statistic=np.nanmean,
+    statstd=np.nanstd,
+    histbins=None,
+    histrange=None,
+    cmin=1,
+    binbins=None,
+    weighted_fit=True,
+    ax=None,
+    plot_bins=True,
+    plot_fit=True,
+):
     """[plot the 2d hist and x-binned version]
 
     Arguments:
@@ -1419,7 +1454,46 @@ def stat_plot1d(x, ax=None, bins="auto", histtype="step", lw=2, **plot_kwargs):
     return ax
 
 
-def stat_plot2d(x, y, marker="k.", bins=20, range=None, smooth=0, xscale=None, yscale=None, plot_data=False, plot_contourf=False, plot_contour=False, plot_imshow=False, plot_binned=True, color=None, cmap=None, levels=None, mfc=None, mec=None, mew=None, ms=None, vmin=None, vmax=None, alpha=1, rasterized=True, linewidths=None, data_kwargs=None, contourf_kwargs=None, contour_kwargs=None, data_color=None, contour_color=None, default_color=None, binned_color=None, contourf_levels=None, contour_levels=None, lw=None, debug=False, zorder=0, ax=None, plot_datapoints=False):
+def stat_plot2d(
+        x,
+        y,
+        marker="k.",
+        bins=20,
+        range=None,
+        smooth=0,
+        xscale=None,
+        yscale=None,
+        plot_data=False,
+        plot_contourf=False,
+        plot_contour=False,
+        plot_imshow=False,
+        plot_binned=True,
+        color=None,
+        cmap=None,
+        levels=None,
+        mfc=None,
+        mec=None,
+        mew=None,
+        ms=None,
+        vmin=None,
+        vmax=None,
+        alpha=1,
+        rasterized=True,
+        linewidths=None,
+        data_kwargs=None,
+        contourf_kwargs=None,
+        contour_kwargs=None,
+        data_color=None,
+        contour_color=None,
+        default_color=None,
+        binned_color=None,
+        contourf_levels=None,
+        contour_levels=None,
+        lw=None,
+        debug=False,
+        zorder=0,
+        ax=None,
+        plot_datapoints=False):
     """
     based on hist2d dfm's corner.py
     but so much prettier and so many more options
