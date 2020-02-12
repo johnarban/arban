@@ -33,8 +33,8 @@ __location__ = os.path.realpath(os.path.join(
     os.getcwd(), os.path.dirname(__file__)))
 
 __filtertable__ = Table.read(
-    os.path.join(__location__, "FilterSpecs.tsv"), format="ascii"
-)
+    os.path.join(__location__, "FilterSpecs.tsv"), format="ascii")
+
 
 #############################
 #############################
@@ -96,8 +96,7 @@ def kdeplot(xp, yp, filled=False, ax=None, grid=None, bw=None, *args, **kwargs):
     return cs
 
 
-AtomicMass = {"H2": 2, "12CO": 12 + 16,
-              "13CO": 13 + 18, "C18O": 12 + 18, "ISM": 2.33}
+AtomicMass = {"H2": 2, "12CO": 12 + 16, "13CO": 13 + 18, "C18O": 12 + 18, "ISM": 2.33}
 
 
 def thermal_v(T, mu=None, mol=None):
@@ -234,17 +233,7 @@ def writefits(filename, data, header=None, wcs=None, clobber=True):
 
 
 def grid_data(
-    x,
-    y,
-    z,
-    nxy=(512, 512),
-    interp="linear",
-    plot=False,
-    cmap="Greys",
-    levels=None,
-    sigmas=None,
-    filled=False,
-):
+    x, y, z, nxy=(512, 512), interp="linear", plot=False, cmap="Greys", levels=None, sigmas=None, filled=False, ):
     """
     stick x,y,z data on a grid and return
     XX, YY, ZZ
@@ -270,8 +259,7 @@ def grid_data(
             cont = ax.contourf
         else:
             cont = ax.contour
-        cont(xi, yi, zi / np.max(zi[np.isfinite(zi)]),
-             cmap=cmap, levels=levels)
+        cont(xi, yi, zi / np.max(zi[np.isfinite(zi)]), cmap=cmap, levels=levels)
 
     return xi, yi, zi
 
@@ -313,10 +301,7 @@ def convert_flux(mag=None, emag=None, filt=None, return_wavelength=False):
         eflux = 1.08574 * emag * flux
         if return_wavelength:
             return (
-                flux,
-                eflux,
-                tab["Wavelength"][np.where(filt.lower() == tab["fname"])],
-            )
+                flux, eflux, tab["Wavelength"][np.where(filt.lower() == tab["fname"])], )
         else:
             return flux, eflux
     else:
@@ -463,9 +448,7 @@ def rolling_window(arr, window):
             out.shape = arr.shape[:-1] + (arr.shape[-1] - window + 1, window)
     """
     shape = arr.shape[:-1] + (
-        arr.shape[-1] - window + 1,
-        window,
-    )  # the new shape (a.shape)
+        arr.shape[-1] - window + 1, window, )  # the new shape (a.shape)
     strides = arr.strides + (arr.strides[-1],)
     return np.lib.stride_tricks.as_strided(arr, shape=shape, strides=strides)
 
@@ -646,8 +629,7 @@ def nametoradec(name):
                 sign = "-"
             ra = ra[0:2] + ":" + ra[2:4] + ":" + ra[4:6] + "." + ra[6:8]
             de = sign + de[0:2] + ":" + de[2:4] + ":" + de[4:6]
-            coord = SkyCoord(ra, de, frame="icrs",
-                             unit=("hourangle", "degree"))
+            coord = SkyCoord(ra, de, frame="icrs", unit=("hourangle", "degree"))
             rightascen.append(coord.ra.value)
             declinatio.append(coord.dec.value)
         return np.array(rightascen), np.array(declinatio)
@@ -733,8 +715,7 @@ def cdf(values, bins):
     else:
         range = None
 
-    h, bins = np.histogram(values, bins=bins, range=range,
-                           density=False)  # returns int
+    h, bins = np.histogram(values, bins=bins, range=range, density=False)  # returns int
 
     # cumulative fraction below bin_k
     c = np.cumsum(h / np.sum(h, dtype=float))
@@ -800,12 +781,7 @@ def mass_function(values, bins, scale=1, aktomassd=183):
         range = None
 
     h, bins = np.histogram(
-        values,
-        bins=bins,
-        range=range,
-        density=False,
-        weights=values * aktomassd * scale,
-    )
+        values, bins=bins, range=range, density=False, weights=values * aktomassd * scale, )
     c = np.cumsum(h).astype(float)
     return c.max() - c, bins
 
@@ -835,8 +811,8 @@ def linregress(X, Y, thru_origin=False):
 
 
 def polyregress_bootstrap(
-    X, Y, order=1, iterations=10, thru_origin=False, return_errs=False
-):
+    X, Y, order=1, iterations=10, thru_origin=False, return_errs=False):
+
 
     g = np.isfinite(X + Y)
 
@@ -865,10 +841,7 @@ def polyregress_bootstrap(
     if return_errs:
         # correct error by sqrt(2) since using 1/2 the data per iteration
         return (
-            np.nanmean(coeff, axis=0),
-            np.std(coeff, axis=0) / np.sqrt(2),
-            np.nanpercentile(coeff, [16, 50, 84], axis=0).T,
-        )
+            np.nanmean(coeff, axis=0), np.std(coeff, axis=0) / np.sqrt(2), np.nanpercentile(coeff, [16, 50, 84], axis=0).T, )
     else:
         return np.array(coeff)
 
@@ -953,8 +926,7 @@ def linregress_ppv(x, y):
         np.sum((x - xbar) ** 2, axis=0)
     )
     b = ybar - m * xbar
-    f = m[np.newaxis, :, :] * x[:, np.newaxis,
-                                np.newaxis] + b[np.newaxis, :, :]
+    f = m[np.newaxis, :, :] * x[:, np.newaxis, np.newaxis] + b[np.newaxis, :, :]
     return f
 
 
@@ -1028,26 +1000,13 @@ def ffill_nan_3d(arr):
 
 
 def linear_emcee_fitter(
-    x,
-    y,
-    yerr=None,
-    fit_log=False,
-    gauss_prior=False,
-    nwalkers=10,
-    theta_init=None,
-    use_lnf=True,
-    bounds=([-np.inf, np.inf], [-np.inf, np.inf]),
-):
+    x, y, yerr=None, fit_log=False, gauss_prior=False, nwalkers=10, theta_init=None, use_lnf=True, bounds=([-np.inf, np.inf], [-np.inf, np.inf]), ):
     """
     ## sample call
-    sampler,pos = little_emcee_fitter(x,y,
-        theta_init=np.array(mfit.parameters),
-        use_lnf=True)
+    sampler,pos = little_emcee_fitter(x,y, theta_init=np.array(mfit.parameters), use_lnf=True)
     samples = sampler.chain[:,1000:,:].reshape((-1,sampler.dim))
 
-    corner.corner(samples,show_titles=True,
-            quantiles=[.16,.84],
-            labels=["$m$", "$b$", "$\ln\,f$"])
+    corner.corner(samples,show_titles=True, quantiles=[.16,.84], labels=["$m$", "$b$", "$\ln\,f$"])
     ---------------------------------------------
 
     Arguments:
@@ -1204,8 +1163,8 @@ def custom_cmap(colormaps, lower, upper, log=(0, 0)):
 
 
 def split_cmap(
-    split=0.5, vmin1=12, vmax1=18, vmax2=50, vstep=1, log1=False, cmapn="coolwarm"
-):
+    split=0.5, vmin1=12, vmax1=18, vmax2=50, vstep=1, log1=False, cmapn="coolwarm"):
+
     vmin1 = vmin1
     vmax1 = vmax1
     vmin2 = vmax1
@@ -1236,26 +1195,7 @@ def split_cmap(
 
 
 def plot_2dhist(
-    X,
-    Y,
-    xlog=True,
-    ylog=True,
-    cmap=None,
-    norm=mpl.colors.LogNorm(),
-    vmin=None,
-    vmax=None,
-    bins=50,
-    statistic=np.nanmean,
-    statstd=np.nanstd,
-    histbins=None,
-    histrange=None,
-    cmin=1,
-    binbins=None,
-    weighted_fit=True,
-    ax=None,
-    plot_bins=True,
-    plot_fit=True,
-):
+    X, Y, xlog=True, ylog=True, cmap=None, norm=mpl.colors.LogNorm(), vmin=None, vmax=None, bins=50, statistic=np.nanmean, statstd=np.nanstd, histbins=None, histrange=None, cmin=1, binbins=None, weighted_fit=True, ax=None, plot_bins=True, plot_fit=True, ):
     """[plot the 2d hist and x-binned version]
 
     Arguments:
@@ -1302,17 +1242,7 @@ def plot_2dhist(
         y = np.asarray(Y)
 
     _ = ax.hist2d(
-        x,
-        y,
-        range=histrange,
-        bins=histbins,
-        cmap=cmap,
-        cmin=cmin,
-        norm=norm,
-        vmin=vmin,
-        vmax=vmax,
-        zorder=1,
-    )
+        x, y, range=histrange, bins=histbins, cmap=cmap, cmin=cmin, norm=norm, vmin=vmin, vmax=vmax, zorder=1, )
 
     # bin the data
 
@@ -1324,15 +1254,7 @@ def plot_2dhist(
     cl = np.isfinite(st) & np.isfinite(est)
     if plot_bins:
         ax.errorbar(
-            mavg(be)[cl],
-            st[cl],
-            yerr=est[cl],
-            fmt="s",
-            color="r",
-            label="binned data",
-            lw=1.5,
-            zorder=2,
-        )
+            mavg(be)[cl], st[cl], yerr=est[cl], fmt="s", color="r", label="binned data", lw=1.5, zorder=2, )
 
     if weighted_fit:
         p = np.polyfit(mavg(be)[cl][1:], st[cl][1:], 1, w=1 / est[cl][1:] ** 2)
@@ -1340,8 +1262,7 @@ def plot_2dhist(
         p = np.polyfit(mavg(be)[cl][1:], st[cl][1:], 1)
     funcname = "Best fit: {m:0.5G}*x + {b:0.5G}".format(m=p[0], b=p[1])
     if plot_fit:
-        ax.plot([0, 64], np.polyval(p, [0, 64]),
-                "dodgerblue", lw=1.5, label=funcname)
+        ax.plot([0, 64], np.polyval(p, [0, 64]), "dodgerblue", lw=1.5, label=funcname)
 
     ax.legend()
 
@@ -1500,52 +1421,11 @@ def stat_plot1d(x, ax=None, bins="auto", histtype="step", lw=2, **plot_kwargs):
     if ax is None:
         ax = plt.gca()
 
-    ax.hist(x[np.isfinite(x)], bins="auto",
-            histtype="step", lw=2, **plot_kwargs)
+    ax.hist(x[np.isfinite(x)], bins="auto", histtype="step",lw=2, **plot_kwargs)
     return ax
 
 
-def stat_plot2d(
-    x,
-    y,
-    marker="k.",
-    bins=20,
-    range=None,
-    smooth=0,
-    xscale=None,
-    yscale=None,
-    plot_data=False,
-    plot_contourf=False,
-    plot_contour=False,
-    plot_imshow=False,
-    plot_binned=True,
-    color=None,
-    cmap=None,
-    levels=None,
-    mfc=None,
-    mec=None,
-    mew=None,
-    ms=None,
-    vmin=None,
-    vmax=None,
-    alpha=1,
-    rasterized=True,
-    linewidths=None,
-    data_kwargs=None,
-    contourf_kwargs=None,
-    contour_kwargs=None,
-    data_color=None,
-    contour_color=None,
-    default_color=None,
-    binned_color=None,
-    contourf_levels=None,
-    contour_levels=None,
-    lw=None,
-    debug=False,
-    zorder=0,
-    ax=None,
-    plot_datapoints=False,  # for legacy only
-):
+def stat_plot2d(x, y, marker="k.", bins=20, range=None, smooth=0, xscale=None, yscale=None, plot_data=False, plot_contourf=False, plot_contour=False, plot_imshow=False, plot_binned=True, color=None, cmap=None, levels=None, mfc=None, mec=None, mew=None, ms=None, vmin=None, vmax=None, alpha=1, rasterized=True, linewidths=None, data_kwargs=None, contourf_kwargs=None, contour_kwargs=None, data_color=None, contour_color=None, default_color=None, binned_color=None, contourf_levels=None, contour_levels=None, lw=None, debug=False, zorder=0, ax=None, plot_datapoints=False):
     """
     based on hist2d dfm's corner.py
     but so much prettier and so many more options
@@ -1805,13 +1685,7 @@ def stat_plot2d(
 
     if plot_contourf:
         cntrf = ax.contourf(
-            X1,
-            Y1,
-            sm_unflat,
-            **contourf_kwargs,
-            vmin=vmin,
-            vmax=vmax,
-            zorder=zorder + 2
+            X1, Y1, sm_unflat, **contourf_kwargs, vmin=vmin, vmax=vmax, zorder=zorder + 2
         )
     else:
         cntrf = None
@@ -1825,11 +1699,7 @@ def stat_plot2d(
 
     if plot_imshow:
         ax.imshow(
-            sm_unflat,
-            origin="lower",
-            extent=[X1.min(), X1.max(), Y1.min(), Y1.max()],
-            zorder=zorder + 4,
-        )
+            sm_unflat, origin="lower", extent=[X1.min(), X1.max(), Y1.min(), Y1.max()], zorder=zorder + 4, )
 
     if plot_datapoints:
         ax.set_xlim(*xlim)
@@ -1879,8 +1749,7 @@ def oplot_hist(X, bins=None, ylim=None, scale=0.5, ax=None):
         X, range=np.nanpercentile(X, [0, 100]), bins=bins, density=True
     )
     H = (H / H.max()) * (ylim[1] - ylim[0]) * scale + ylim[0]
-    ax.step(mavg(xedge), H, where="mid",
-            color="0.25", alpha=1, zorder=10, lw=1.5)
+    ax.step(mavg(xedge), H, where="mid", color="0.25", alpha=1, zorder=10, lw=1.5)
     return ax
 
 
