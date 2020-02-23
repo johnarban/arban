@@ -11,11 +11,13 @@ from importlib import reload
 import astropy.constants as const
 from astropy import units as u
 import astropy.convolution as convolution
-import colorcet # better colors (cet_*)
+import colorcet  # better colors (cet_*)
+import cmasher # more colors (cmr.*)
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+from tqdm import tqdm
 # import astropy stuff
 from astropy.convolution import (convolve, convolve_fft,
                                  interpolate_replace_nans, kernels)
