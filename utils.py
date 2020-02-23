@@ -53,6 +53,32 @@ def set_plot_opts(serif_fonts=True):
         mpl.rcParams["font.size"] = 14
     return None
 
+def check_iterable(arr):
+    return hasattr(arr,'__iter__')
+
+
+def invert_color(ml):
+    rgb = mpl.colors.to_rgb(ml)
+    hsv = mpl.colors.rgb_to_hsv(rgb)
+    h, s, v = hsv
+    h = 1 - h
+    s = 1 - s
+    v = 1 - v
+    return mpl.colors.to_hex(mpl.colors.hsv_to_rgb((h,s,v)))
+
+
+def icol(*rgs, **kwargs):
+    return invert_color(*args,**kwargs)
+
+def to64(arr):
+    # Convert numpy to 64-bit precision
+    if hasattr(arr, 'astype'):
+        return arr.astype('float64')
+    else:
+        if hasattr(arr, '__iter__'):
+            if isinstance(arr[0],u.quantity.Quantity):
+                return u.quantity.Quantity(arr,dtype=np.float64)
+        return np.float64(arr)
 
 def get_cax(ax=None, size=3):
     if ax is None:
@@ -122,6 +148,53 @@ def thermal_v(T, mu=None, mol=None):
     return np.sqrt(const.k_B * T * u.Kelvin / (mu * const.m_p)).to("km/s").value
 
 
+def virial(sig,mass, r):
+    s = 1.33*(sig*(u.km/u.s))**2
+    r = r*np.sqrt(area_per_pix)*u.pc
+    m = const.G * (mass*u.Msun)
+    return (s * r / m).si.value
+
+def numdens(mass, radius):
+    """number density from mass/radius
+    assuming spherical symmetry
+
+    Parameters
+    ----------
+    mass : float
+        in solar masses
+    radius : float
+        in parsecs
+
+    Returns
+    -------
+    float
+        in cm^-3
+    """
+    mass = mass * u.solMass
+    radius = radius * u.pc
+    volume = (4/3) * np.pi * (radius**3)
+    dens = (mass/volume)/(2.33 * const.m_p)
+    return dens.to(u.cm**-3).value
+
+
+def jeansmass(temp, numdens, mu=2.33): #12.03388 msun T=n=1
+    """
+    temp in K
+    numdens in cm^-3
+    mu is mean molecular weight [default: 2.33, ISM w/ Helium corr]
+    returns Mjeans in solar masses
+    .5 * (5 * kb / G)^3 * (3/4π) * (1/2.33 mp)^4 * T^3 / n
+    """
+    mj = ((5 * const.k_B / (const.G))**3)
+    mj *= (3/(4*np.pi))
+    mj *= ((1/(mu * const.m_p))**4)
+    mj = mj * (temp * u.K)**3
+    mj = mj * (u.cm**3/numdens)
+    mj = mj**0.5
+    return mj.to(u.solMass).value
+
+
+
 #############################
 #############################
 # Convenience math functions
@@ -159,20 +232,20 @@ def sigconf1d(n):
     cdf = (1 / 2.0) * (1 + special.erf(n / np.sqrt(2)))
     return (1 - cdf) * 100, 100 * cdf, 100 * special.erf(n / np.sqrt(2))
 
+def sort_bool(g, srt):
+    isrt = np.argsort(srt)
+    return srt[g[srt[isrt]]]
 
-def wcsaxis(wcs, N=6, ax=None, fmt="%0.2f", use_axes=False):
+def wcsaxis(wcs,header, N=6, ax=None, fmt="%0.2f", use_axes=False):
     if ax is None:
         ax = plt.gca()
     xlim = ax.axes.get_xlim()
     ylim = ax.axes.get_ylim()
-    try:
-        wcs = WCS(wcs)
-    except BaseException:
-        None
-    hdr = wcs.to_header()
-    naxis = wcs.naxis  # naxis
-    naxis1 = wcs._naxis1  # naxis1
-    naxis2 = wcs._naxis2  # naxis2
+
+
+    naxis = header['NAXIS'] # naxis
+    naxis1 = header['NAXIS1']  # naxis1
+    naxis2 = header['NAXIS2']  # naxis2
     # crpix1 = hdr['CRPIX1']
     # crpix2 = hdr['CRPIX2']
     # crval1 = hdr['CRVAL1']
@@ -211,7 +284,7 @@ def wcsaxis(wcs, N=6, ax=None, fmt="%0.2f", use_axes=False):
     plt.xticks(x, [fmt % i for i in x_tick])
     plt.yticks(y, [fmt % i for i in y_tick])
 
-    if hdr["CTYPE1"][0].lower() == "g":
+    if header["CTYPE1"][0].lower() == "g":
         plt.xlabel("Galactic Longitude (l)")
         plt.ylabel("Galactic Latitude (b)")
     else:
@@ -428,7 +501,7 @@ def rectangle2(c, w, h, angle=0, center=True):
 
 
 def plot_rectangle(c, w, h, angle=0, center=True, ax=None, n=10, m="-", **plot_kwargs):
-    if center is True:
+    if False:#center is True:
         print("Hey, did you know this is built into matplotlib")
         print("Yeah, just do  ax.add_patch(plt.Rectangle(xy=(cx,cy),height=h, width=w, angle=deg))"
               )
@@ -486,60 +559,54 @@ def mavg(arr, n=2, axis=-1):
 
 
 def weighted_std(x, w):
+
     SS = np.sum(w * (x - x.mean()) ** 2) / np.sum(w)
     quantile(x, w, 0.5)
     return np.sqrt(SS)
 
+def weighted_percentile(x, w, percentile, p=0):
+    k = ~np.isnan(x + w)
+    clean_x = np.asarray(x[k], dtype=np.float64)
+    clean_w = np.asarray(w[k], dtype=np.float64)
+    srt = np.argsort(clean_x)
+    sorted_w = w[srt]
+    sorted_x = x[srt]
+    Sn = np.cumsum(sorted_w)
+    Pn = (Sn - 0.5 * sorted_w) / Sn[-1]
+    return np.interp(percentile/100., Pn, sorted_x)
+
+def weighted_median(x,w):
+    return weighted_percentile(x,w,50)
 
 def weighted_mad(x, w, stddev=True):
-    def median(arr, wei): return quantile(arr, wei, 0.5)
+    def median(arr, wei): return weighted_median(arr, wei)
     if stddev:
         return 1.4826 * median(np.abs(x - median(x, w)), w)
     else:
         return median(np.abs(x - median(x, w)), w)
 
-
 def weighted_mean(x, w):
     return np.sum(x * w) / np.sum(w)
 
 
-def _mavg(arr, n=2, mode="valid"):
-    """
-    returns the moving average of an array.
-    returned array is shorter by (n-1)
-    """
-    # weigths = np.full((n,), 1 / n, dtype=float)
-    if len(arr) > 400:
-        return signal.fftconvolve(arr, [1.0 / float(n)] * n, mode=mode)
-    else:
-        return signal.convolve(arr, [1.0 / float(n)] * n, mode=mode)
-
 
 def mgeo(arr, n=2, axis=-1):
+    """rolling geometric mean
+
+    Arguments:
+        arr {no.array} -- array
+
+    Keyword Arguments:
+        n {int} -- window size (default: {2})
+        axis {int} -- axis to roll over (default: {-1})
+
+    Returns:
+        [type] -- [description]
     """
-    Returns array of lenth len(arr) - (n-1)
-
-    # # written by me
-    # # slower for short loops
-    # # faster for n ~ len(arr) and large arr
-    a = []
-    for i in xrange(len(arr)-(n-1)):
-        a.append(stats.gmean(arr[i:n+i]))
-
-    # # Original method# #
-    # # written by me ... ~10x faster for short arrays
-    b = np.array([np.roll(np.pad(arr,(0,n),mode='constant',constant_values=1),i)
-              for i in xrange(n)])
-    return np.product(b,axis=0)[n-1:-n]**(1./float(n))
-    """
-    # a = []
-    # for i in range(len(arr) - (n - 1)):
-    #    a.append(stats.gmean(arr[i:n + i]))
-
     return stats.gmean(rolling_window(arr, n), axis=axis)
 
 
-def avg(arr, n=2):
+def bin_center(arr, n=2):
     """
     NOT a general averaging function
     return bin centers (lin and log)
@@ -551,12 +618,6 @@ def avg(arr, n=2):
     else:
         return np.power(10.0, mavg(np.log10(arr), n=n))
         # return mgeo(arr, n=n) # equivalent methods, only easier
-
-
-def err_div(x, y, ex, ey):
-    Q = x / y
-    dQ = np.abs(Q) * np.sqrt((ex / x) ** 2 + (ey / y) ** 2)
-    return Q, dQ
 
 
 def shift_bins(arr, phase=0, nonneg=False):
@@ -576,6 +637,10 @@ def shift_bins(arr, phase=0, nonneg=False):
     else:
         return arr
 
+def err_div(x, y, ex, ey):
+    Q = x / y
+    dQ = np.abs(Q) * np.sqrt((ex / x) ** 2 + (ey / y) ** 2)
+    return Q, dQ
 
 def llspace(xmin, xmax, n=None, log=False, dx=None, dex=None):
     """
@@ -681,7 +746,7 @@ def pdf(values, bins=None, range=None):
     # is the correct form. It returns the correct
     # probabilities when tested
     pdf = h / (np.sum(h, dtype=float) * np.diff(x))
-    return pdf, avg(x)
+    return pdf, bin_center(x)
 
 
 def pdf2(values, bins=None, range=None):
@@ -703,7 +768,7 @@ def pdf2(values, bins=None, range=None):
 
     pdf, x = np.histogram(values, bins=bins, range=range, density=False)
     pdf = pdf.astype(float) / np.diff(x)
-    return pdf, avg(x)
+    return pdf, bin_center(x)
 
 
 def edf(data, pdf=False):
@@ -771,7 +836,7 @@ def diff_area_function(extmap, bins, scale=1):
     """
     s, bins = area_function(extmap, bins)
     dsdx = -np.diff(s) / np.diff(bins)
-    return dsdx * scale, avg(bins)
+    return dsdx * scale, bin_center(bins)
 
 
 def log_diff_area_function(extmap, bins):
@@ -781,7 +846,7 @@ def log_diff_area_function(extmap, bins):
     s, bins = diff_area_function(extmap, bins)
     g = s > 0
     dlnsdlnx = np.diff(np.log(s[g])) / np.diff(np.log(bins[g]))
-    return dlnsdlnx, avg(bins[g])
+    return dlnsdlnx, bin_center(bins[g])
 
 
 def mass_function(values, bins, scale=1, aktomassd=183):
@@ -821,6 +886,29 @@ def polyregress(X, Y, order=1, thru_origin=False):
 
 def linregress(X, Y, thru_origin=False):
     return polyregress(X, Y, order=1, thru_origin=thru_origin)
+
+
+def linregress_ppv(x, y):
+    """Where we perform linear regression
+    for ppv cube against a 1D x vector
+
+    Arguments:
+        y {array (M,Ny,Nx)} -- 3-D array of data
+
+    Returns:
+        f -- best fit least squares solution for whole cube
+    """
+    g = np.isfinite(x + y)
+    x = x[g]
+    y = y[g]
+    xbar = np.mean(x)
+    ybar = np.mean(y, axis=0)
+    m = np.sum((x - xbar)[:, np.newaxis, np.newaxis] * (y - ybar),
+               axis=0) / (np.sum((x - xbar) ** 2, axis=0))
+    b = ybar - m * xbar
+    f = m[np.newaxis, :, :] * x[:, np.newaxis,
+                                np.newaxis] + b[np.newaxis, :, :]
+    return f
 
 
 def polyregress_bootstrap(X, Y, order=1, iterations=10, thru_origin=False, return_errs=False):
@@ -868,8 +956,8 @@ class PolyRegress(object):
 
         g = np.isfinite(X + Y)
 
-        self.X = X[g]
-        self.Y = Y[g]
+        self.X = X[g].astype(np.float64)
+        self.Y = Y[g].astype(np.float64)
 
         self.N = len(self.X)
         self.P = P + 1
@@ -917,28 +1005,19 @@ class PolyRegress(object):
         self.err = np.sqrt(np.diag(self.cov))
         return self.b, self.err
 
+    def sample_covarariance(self, n=10000):
+        return np.random.multivariate_normal(self.b,self.cov,n)
 
-def linregress_ppv(x, y):
-    """Where we perform linear regression
-    for ppv cube against a 1D x vector
+def plot_covariances(p, cov, names=None):
+    p = np.random.multivariate_normal(p,cov,5000)
+    corner(p,smooth=1,names=names)
+    return plt.gca()
 
-    Arguments:
-        y {array (M,Ny,Nx)} -- 3-D array of data
-
-    Returns:
-        f -- best fit least squares solution for whole cube
-    """
-    g = np.isfinite(x + y)
-    x = x[g]
-    y = y[g]
-    xbar = np.mean(x)
-    ybar = np.mean(y, axis=0)
-    m = np.sum((x - xbar)[:, np.newaxis, np.newaxis] * (y - ybar),
-               axis=0) / (np.sum((x - xbar) ** 2, axis=0))
-    b = ybar - m * xbar
-    f = m[np.newaxis, :, :] * x[:, np.newaxis,
-                                np.newaxis] + b[np.newaxis, :, :]
-    return f
+def plot_fit_covariances(fit, fitter):
+    p = fit.parameters
+    cov = fitter.fit_info['param_cov']
+    ax = plot_covariances(p,cov,  names=fit.param_names)
+    return ax
 
 
 def mad(X, stddev=True, axis=None):
@@ -1317,6 +1396,8 @@ def data2rank(arr, clip=0, notadummy=True):
         return order[invsort].reshape(shape)
 
 
+
+
 def data2norm(H):
     H = np.array(H, copy=True)
     Hflat = H.flatten()
@@ -1421,8 +1502,8 @@ def contour_level_colors(cmap, levels, vmin=None, vmax=None, center=True):
         levels {list or array} -- desired levels
 
     Keyword Arguments:
-        vmin {number} -- min value (default: {None})
-        vmax {number} -- max value (default: {None})
+        vmin {number} -- min value (default: {0})
+        vmax {number} -- max value (default: {max(levels)})
         center {True} -- contourf uses center=True values.
                          False will produce a border effect (default: {True})
 
@@ -1493,7 +1574,7 @@ def stat_plot2d(
         debug=False,
         zorder=0,
         ax=None,
-        plot_datapoints=False):
+        plot_datapoints=None):
     """
     based on hist2d dfm's corner.py
     but so much prettier and so many more options
@@ -1520,7 +1601,10 @@ def stat_plot2d(
     if yscale == "log":
         y = np.log10(y)
 
-    if not (plot_data or plot_contour or plot_contourf or plot_datapoints):
+    if plot_datapoints is None:
+        plot_datapoints = plot_data
+
+    if not (plot_data or plot_contour or plot_contourf):
         # give the user a decent default plot
         plot_data = True
         plot_contour = True
@@ -1784,6 +1868,27 @@ def stat_plot2d(
 def jhist2d(*args, **kwargs):
     return stat_plot2d(*args, **kwargs)
 
+def corner(pos, names=None,smooth=1,bins=20, **kwargs):
+    fig, axs = plt.subplots(nrows=pos.shape[1],ncols=pos.shape[1],figsize=(12,12))
+    print(pos.shape)
+    for i in range(pos.shape[-1]):
+        for j in range(pos.shape[-1]):
+            if i==j:
+                stat_plot1d(pos[:,i],ax=axs[i,j])
+            if j < i:
+                ax = axs[i,j]
+                stat_plot2d(pos[:,j],pos[:,i],ax=ax,bins=bins,smooth=smooth,plot_datapoints=True,plot_contour=True,**kwargs)
+                if names is not None:
+                    try:
+                        ax.set_xlabel(names[j])
+                        ax.set_ylabel(names[i])
+                    except:
+                        pass
+            if j > i:
+                plt.delaxes(axs[i,j])
+    fig.tight_layout()
+    return 0
+
 
 def standardize(X, mean=True, std=True):
     if mean:
@@ -1797,8 +1902,22 @@ def standardize(X, mean=True, std=True):
 
     return (X - mean) / std
 
+def plotoneone(color='k',lw=2,scale = 1, offset=0, ax=None,**kwargs):
+    if ax is None:
+        ax = plt.gca()
+    xlim, ylim = ax.get_xlim(), ax.get_ylim()
+    b = np.min([xlim[0], ylim[0]])
+    t = np.max([xlim[1], ylim[1]])
+    xs = np.array([b,t])
+    ys = scale * xs + offset
+    ax.plot(xs, ys, '-', color=color, lw=lw, **kwargs)
 
-def oplot_hist(X, bins=None, ylim=None, scale=0.5, ax=None):
+    ax.set_xlim(*xlim)
+    ax.set_ylim(*ylim)
+
+
+
+def oplot_hist(X, bins=None, ylim=None, scale=0.5, ax=None, show_mean = False, show_median = False, show_percentiles = None):
     if ax is None:
         ax = plt.gca()
     if ylim is None:
@@ -1811,6 +1930,14 @@ def oplot_hist(X, bins=None, ylim=None, scale=0.5, ax=None):
     H = (H / H.max()) * (ylim[1] - ylim[0]) * scale + ylim[0]
     ax.step(mavg(xedge), H, where="mid",
             color="0.25", alpha=1, zorder=10, lw=1.5)
+
+    if show_mean:
+        ax.axvline(np.nanmean(X), 0, 1, color='0.45', ls = '--')
+    if show_median:
+        ax.axvline(np.nanmedian(X), 0, 1, color='0.45', ls = '--')
+    if not (show_percentiles is None):
+        for p in show_percentiles:
+            ax.axvline(p, 0, 1, color='0.45', ls = '--',alpha=0.5)
     return ax
 
 
@@ -1822,3 +1949,4 @@ def get_edges(x):
     else:
         dx = np.diff(np.log(x))[0]
         return np.exp(np.r_[np.log(x) - dx / 2, x[-1] + dx / 2])
+
