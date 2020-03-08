@@ -230,7 +230,7 @@ def sigconf1d(n):
     for a 1D gaussian
     """
     cdf = (1 / 2.0) * (1 + special.erf(n / np.sqrt(2)))
-    return (1 - cdf) * 100, 100 * cdf, 100 * special.erf(n / np.sqrt(2))
+    return (1 - cdf) * 100, 100 * cdf #, 100 * special.erf(n / np.sqrt(2))
 
 def sort_bool(g, srt):
     isrt = np.argsort(srt)
@@ -642,6 +642,22 @@ def err_div(x, y, ex, ey):
     dQ = np.abs(Q) * np.sqrt((ex / x) ** 2 + (ey / y) ** 2)
     return Q, dQ
 
+def nsode2resol(nside, ):
+    resol = 60 * (180 / np.pi) * np.sqrt(np.pi / 3) / nside
+    return resol * u.arcmin
+
+def lin_from_log(p, x, log10=False):
+    if log10:
+        return 10**(p[0]*np.log10(x) + p[1])
+    else:
+        return np.exp(p[0]*np.log(x) + p[1])
+
+def color_hue_shift(c, shift = 1):
+    c = mpl.colors.to_rgb(c)
+    h,s,v = mpl.colors.rgb_to_hsv(c)
+    h = h + shift % 1
+    return mpl.colors.to_hex(mpl.colors.hsv_to_rgb((h,s,v)))
+
 def llspace(xmin, xmax, n=None, log=False, dx=None, dex=None):
     """
     llspace(xmin, xmax, n = None, log = False, dx = None, dex = None)
@@ -898,9 +914,9 @@ def linregress_ppv(x, y):
     Returns:
         f -- best fit least squares solution for whole cube
     """
-    g = np.isfinite(x + y)
-    x = x[g]
-    y = y[g]
+    #g = np.isfinite(x + y)
+    #x = x[g]
+    #y = y[g]
     xbar = np.mean(x)
     ybar = np.mean(y, axis=0)
     m = np.sum((x - xbar)[:, np.newaxis, np.newaxis] * (y - ybar),
@@ -1862,8 +1878,29 @@ def stat_plot2d(
         return ax
 
 
-# alias only used becuase of old code
+def annotate(text, x, y,ax=None,
+            horizontalalignment='center',
+            verticalalignment='center',
+            transform='axes',
+            color='k',
+            fontsize=9,
+            bbox=dict(facecolor='y', alpha=0.5), **kwargs):
 
+    if ax is None:
+        ax = plt.gca()
+
+    if True:
+         transform = ax.transAxes
+    text = ax.text(x,y,text,horizontalalignment=horizontalalignment,
+                                verticalalignment=verticalalignment,
+                                transform=transform,
+                                color=color,
+                                fontsize=fontsize,
+                                bbox=bbox, **kwargs)
+    return text
+
+
+# alias only used becuase of old code
 
 def jhist2d(*args, **kwargs):
     return stat_plot2d(*args, **kwargs)
