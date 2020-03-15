@@ -236,11 +236,13 @@ def sort_bool(g, srt):
     isrt = np.argsort(srt)
     return srt[g[srt[isrt]]]
 
-def wcsaxis(wcs,header, N=6, ax=None, fmt="%0.2f", use_axes=False):
+def wcsaxis(header, N=6, ax=None, fmt="%0.2f", use_axes=False):
     if ax is None:
         ax = plt.gca()
     xlim = ax.axes.get_xlim()
     ylim = ax.axes.get_ylim()
+
+    wcs = WCS(header)
 
 
     naxis = header['NAXIS'] # naxis
@@ -258,11 +260,11 @@ def wcsaxis(wcs,header, N=6, ax=None, fmt="%0.2f", use_axes=False):
     #    cdelt2 = wcs['CD2_2']
 
     if not use_axes:
-        xoffset = (naxis1 / N) / 5
-        x = np.linspace(xoffset, naxis1 - xoffset, N)
+        xoffset = ((xlim[1]-xlim[0]) / N) / 5
+        x = np.linspace(xlim[0] + xoffset , xlim[1] - xoffset, N)
         if naxis >= 2:
-            yoffset = (naxis2 / N) / 5
-            y = np.linspace(yoffset, naxis2 - yoffset, N)
+            yoffset = ((ylim[1]-ylim[0]) / N) / 5
+            y = np.linspace(ylim[0] + yoffset, ylim[1] - yoffset, N)
     else:
         x = ax.get_xticks()
         if naxis >= 2:
@@ -1054,18 +1056,11 @@ def rms(X, axis=None):
     return np.sqrt(np.nanmean(X ** 2, axis=axis))
 
 
-def wcs_to_grid(wcs, index=False, verbose=False):
-    try:
-        wcs = WCS(wcs)
-    except BaseException:
-        None
-
-    wcs = wcs.dropaxis(2)
-    if verbose:
-        print(wcs)
-    naxis = wcs.naxis
-    naxis1 = wcs._naxis1  # naxis1
-    naxis2 = wcs._naxis2  # naxis2
+def wcs_to_grid(header, index=False, verbose=False):
+    wcs = WCS(header)
+    naxis = header['NAXIS'] # naxis
+    naxis1 = header['NAXIS1']  # naxis1
+    naxis2 = header['NAXIS2']  # naxis2
     x, y = np.arange(naxis1), np.arange(naxis2)
     if not index:
         # first FITS pixel is 1, numpy index is 0
@@ -1633,20 +1628,20 @@ def stat_plot2d(
     g = np.isfinite(x + y)
     x, y = np.asarray(x)[g], np.asarray(y)[g]
 
-    if np.isclose(x.var(), 0) & np.isclose(y.var(), 0):
+    if (x.var() == 0) & (y.var() == 0):
         print("Both variables have Variance=0. So no plot can be generated. Here is a plot to help"
               )
         print("First 10 (or less) elements of x", x[:10])
         print("First 10 (or less) elements of y", y[:10])
         ax.scatter(x, y)
         return 0
-    elif np.isclose(x.var(), 0):
+    elif x.var()==0:
         print("Variable X has variance=0. Instead of making an ugly plot, here is a histogram of the remaining variable"
               )
         stat_plot1d(y)
         return 0
-    elif np.isclose(y.var(), 0):
-        print("Variable X has variance=0. Instead of making an ugly plot, here is a histogram of the remaining variable"
+    elif y.var()==0:
+        print("Variable Y has variance=0. Instead of making an ugly plot, here is a histogram of the remaining variable"
               )
         stat_plot1d(x)
         return 0
@@ -1987,3 +1982,48 @@ def get_edges(x):
         dx = np.diff(np.log(x))[0]
         return np.exp(np.r_[np.log(x) - dx / 2, x[-1] + dx / 2])
 
+def find_minima(x,y,yer=-1,err_cut=False,cut=3):
+    #srt = np.argsort(x)
+    #y = y[srt]
+    #x = x[srt]
+    #dy = np.gradient(y,axis=0)#/np.gradient(x)
+    #dyy = np.gradient(dy,axis=0)#/np.gradient(x)
+    dy = np.diff(y,axis=0)
+    dy = np.insert(dy,0,0,axis=0)
+    dyy = np.diff(dy,axis=0)
+    dyy = np.insert(dyy,-1,0,axis=0)
+
+    dysign = np.sign(dy)
+    dyysign = np.sign(dyy)
+
+    dysignchange = ((np.roll(dysign, 1,axis=0) - dysign) != 0)
+    dysignchange[0:2]=False
+    dyysignchange = ((np.roll(dyysign, 1,axis=0) - dyysign) != 0)
+    dyysignchange[0:2]=False
+
+    if err_cut:
+        mins = dysignchange & (dyysign>=0) & (y > cut*yer)
+    else:
+        mins = dysignchange & (dyysign>=0) #& (np.abs(dy) < yer)
+    return np.roll(mins, -1, axis=0)
+
+def find_maxima(x,y,yer=-1,err_cut=False,cut=3):
+    #srt = np.argsort(x)
+    #y = y[srt,:,:]
+    #x = x[srt]
+    dy = np.gradient(y,axis=0)#/np.gradient(x)
+    dyy = np.gradient(dy,axis=0)#/np.gradient(x)
+
+    dysign = np.sign(dy)
+    dyysign = np.sign(dyy)
+
+    dysignchange = ((np.roll(dysign, 1,axis=0) - dysign) != 0)
+    dysignchange[0]=False
+    dyysignchange = ((np.roll(dyysign, 1,axis=0) - dyysign) != 0)
+    dyysignchange[0]=False
+
+    if err_cut:
+        mins = dysignchange & (dyysign<=0) & (y > cut*yer)
+    else:
+        mins = dysignchange & (dyysign<=0) #& (np.abs(dy) < yer)
+    return np.roll(mins,-1,axis=0)
