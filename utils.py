@@ -27,6 +27,7 @@ from scipy import integrate, interpolate
 from scipy import ndimage as nd
 from scipy import signal, special, stats
 from weighted import quantile
+import pandas as pd
 
 
 __location__ = os.path.realpath(os.path.join(
@@ -35,6 +36,8 @@ __location__ = os.path.realpath(os.path.join(
 __filtertable__ = Table.read(os.path.join(
     __location__, "FilterSpecs.tsv"), format="ascii")
 
+def nice_pandas(format='{:3.3g}'):
+    pd.set_option("display.float_format",lambda x: format.format(x))
 
 #############################
 #############################
@@ -87,6 +90,13 @@ def get_cax(ax=None, size=3):
     cax = divider.append_axes("right", size="%f%%" % (size * 1.0), pad=0.05)
     plt.sca(ax)
     return cax
+
+def colorbar(mappable=None, cax=None, ax=None, size=3, **kw):
+    if ax is None:
+        ax = plt.gca()
+    if cax is None:
+        cax = get_cax(ax=ax,size=size)
+    return plt.colorbar(mappable=None,cax=cax,ax=ax,**kw)
 
 
 # Plot the KDE for a set of x,y values. No weighting code modified from
@@ -456,6 +466,19 @@ def rectangle(c, w, h, angle=0, center=True):
         c.append((cx + xr, cy + yr))
     # print (cx,cy)
     return c
+
+def rot_mask(img, pivot=None,angle=0):
+    ### https://stackoverflow.com/a/25459080/11594175
+    if pivot is None:
+        pivot = list(map(int,nd.center_of_mass(img)))[::-1]
+
+    img = img*1
+    padX = [img.shape[1] - (pivot[0]), pivot[0]]
+    padY = [img.shape[0] - pivot[1], pivot[1]]
+    imgP = np.pad(img, [padY, padX], 'constant')
+    imgR = nd.rotate(imgP, angle, reshape=False)
+    imgC = imgR[padY[0]: - padY[1], padX[0]: - padX[1]]
+    return imgC
 
 
 def rectangle2(c, w, h, angle=0, center=True):
@@ -970,8 +993,10 @@ class PolyRegress(object):
     # but did not use their weird definition for "R^2"
     # reference for R^2: https://en.wikipedia.org/wiki/Coefficient_of_determination
     ###
-    def __init__(self, X, Y, P=1, fit=False, pass_through_origin=False):
-
+    def __init__(self, X, Y, P=1, fit=False, pass_through_origin=False,log=False):
+        if log:
+            X, Y = np.log10(X),np.log10(Y)
+        self.log = log
         g = np.isfinite(X + Y)
 
         self.X = X[g].astype(np.float64)
@@ -1022,6 +1047,13 @@ class PolyRegress(object):
         self.cov = self.norm_resid * np.linalg.pinv(self.XX)
         self.err = np.sqrt(np.diag(self.cov))
         return self.b, self.err
+
+    def func(self, x):
+        p = self.b[::-1]
+        if self.log:
+            return 10**np.polyval(p, np.log10(x))
+        else:
+            return np.polyval(p, x)
 
     def sample_covarariance(self, n=10000):
         return np.random.multivariate_normal(self.b,self.cov,n)
