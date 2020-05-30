@@ -1,15 +1,28 @@
 import numpy as np
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+from scipy import ndimage
+
+
 from astropy.io import fits
 from astropy.convolution import convolve, kernels
 from astropy.table import Table
 from astropy.wcs import WCS
+
 import pandas as pd
 import glob
 import os
 import utils as ju
 import sys
-import matplotlib.pyplot as plt
 
+import skimage.morphology as skmorph
+from fastkde import fastKDE as fk
+fastKDE = fk.fastKDE
+
+import plfit
+import powerlaw
+
+np.seterr(divide='ignore')
 
 def header3dto2d(hdr):
     """convert DAME CO Survey header from
@@ -56,9 +69,9 @@ def getheader2d(filen):
     return 0
 
 
-def get_mass_over_av(
-    akmap, wco, df=None, pixel_scale=0.125, dist=450, lim=0.1, scale=183, alpha_co=4.383
-):
+def get_mass_over_av(akmap, wco, df=None,
+                     pixel_scale=0.125, dist=450, lim=0.1,
+                     scale=183, alpha_co=4.389):
 
     above_lim = akmap >= lim
     good = np.isfinite(akmap) & above_lim
@@ -106,8 +119,13 @@ def get_mass_over_av(
     return 0
 
 
-def mass(surfd, mask, scale, pixscale):
-    return np.sum(surfd[mask] * scale * (pixscale ** 2))
+def mass(surfd, mask, scale, pixscale, err=None):
+    if err is None:
+        return np.sum(surfd[mask] * scale * (pixscale ** 2))
+    else:
+        m = np.sum(surfd[mask] * scale * (pixscale ** 2))
+        e = np.sum((err[mask] * scale * pixscale ** 2))** 0.5
+        return m,e
 
 
 def radius(mask, pixscale):
@@ -118,18 +136,34 @@ def radius(mask, pixscale):
 def sigma(mass, radius):
     return mass / (np.pi * (radius ** 2))
 
+def mass_radius(surfd, mask, scale, pixscale, err = None):
+    N = np.sum(mask)
+    m = np.sum(surfd[mask] * scale * (pixscale ** 2))
+    r = np.sqrt(N * (pixscale ** 2) / np.pi)
+    if err is None:
+        return m, r
+    else:
+        merr = np.sqrt(np.sum((err[mask] * scale * pixscale)** 2))
+        return m, r, merr
+
+
 
 def getmaps(objec, make_global=False, vmin=0, vmax=0):
     dirs = "/Users/johnlewis/dameco"
     file = glob.glob(f"{dirs}/co_survey/*{objec}*mom.fits")[0]
-    print("getmaps::", file)
-    if make_global:
-        global planck, header, co, co_raw, wco, peakv, header3d, survey, obj, noise, N
+    print("getmaps::", objec)
+    #if make_global:
+    #    global planck, header, co, co_raw, wco, peakv, header3d, survey, obj, noise, N
 
-    survey, obj, *mid, = os.path.basename(file).split("_")
+    survey, obj, *_, = os.path.basename(file).split("_")
+    print("getmaps::", survey)
 
     planck = 3233 * fits.getdata(f"{dirs}/{obj}/{obj}_TAU353.fits")
     header = fits.getheader(f"{dirs}/{obj}/{obj}_TAU353.fits")
+    tdust = fits.getdata(f"{dirs}/{obj}/{obj}_TEMP.fits")
+    planck_err = 3233 * fits.getdata(f"{dirs}/{obj}/{obj}_ERR_TAU.fits")
+    planck_fullres = 3233 * fits.getdata(f"{dirs}/{obj}/{obj}_TAU353_full.fits")
+    header_fullres = fits.getheader(f"{dirs}/{obj}/{obj}_TAU353_full.fits")
 
     momfile = glob.glob(f"{dirs}/co_survey/{survey}*mom.fits")
     rawfile = glob.glob(f"{dirs}/co_survey/{survey}*raw.fits")
@@ -143,50 +177,35 @@ def getmaps(objec, make_global=False, vmin=0, vmax=0):
         frac = 1
         offwco = wco * 0
     else:
-        wco = np.nansum(co[:, :, vmin:vmax], axis=2) * np.abs(header3d["CDELT1"])
+        wco = np.nansum(co[:, :, vmin:vmax], axis=2) * \
+            np.abs(header3d["CDELT1"])
         offwco = np.nansum(co[:, :, 0:vmin], axis=2) + np.nansum(
-            co[:, :, vmax:], axis=2
-        )
-        peakv = np.argmax(np.nan_to_num(co[:, :, vmin:vmax]), axis=2)
-        frac = (wco) / (wco + offwco)  # (np.nansum(co,axis=2)*.65)
+            co[:,:, vmax:], axis=2)
+
+        peakv = np.argmax(np.nan_to_num(co[:,:, vmin:vmax]), axis=2)
+        with np.errstate(all='ignore'):
+            frac = (wco) / (wco + offwco)  # (np.nansum(co,axis=2)*.65)
         frac[np.isclose(offwco, 0, atol=0.31)] = 1
         frac[np.isclose(wco, 0, atol=0.31)] = 0
         frac[wco < 0] = 0
         frac[offwco < 0] = 1
 
-    if co_raw.shape == co.shape:
-        _, noise, N = mask_dame_wco(co, co_raw)
-        print("getmaps::", obj, noise)
+    # if co_raw.shape == co.shape:
+    #     _, noise, N = mask_dame_wco(co, co_raw)
+    noise = np.nan
+    bad = dame_bad(co)
+    N = np.nansum(~bad, axis=-1)
+
     return (
-        planck * frac,
-        header,
-        co,
-        co_raw,
-        wco,
-        peakv,
-        header3d,
-        survey,
-        obj,
-        noise,
-        N,
-    )
+        planck*frac, header, co, co_raw,
+        wco, peakv, header3d, survey,
+         obj, noise, N, planck_fullres,
+         header_fullres, tdust, planck_err,frac)
 
 
-def analysis(
-    ak,
-    wco,
-    boundary,
-    noise_mask,
-    co_mask=None,
-    df=None,
-    pixel_scale=0.125,
-    dist=1000,
-    lim=0.1,
-    ak_scale=183,
-    ak_nh2=83.5e20,
-    alpha_co=4.383,
-    name="Cloud",
-):
+def analysis(ak, wco, boundary, noise_mask, co_mask=None,
+            df=None, pixel_scale=0.125, dist=1000, lim=0.1,
+            ak_scale=183, ak_nh2=83.5e20, alpha_co=4.389, name="Cloud", ):
     """
 
     boundary: rectangular cloud boundary
@@ -200,15 +219,16 @@ def analysis(
     if co_mask is None:
         co_mask = noise_mask
     comask = co_mask & noise_mask & np.isfinite(ak + wco) & boundary
-
-    print("analysis:: N(Ak)", np.sum(akmask))
-    print("analysis:: N(CO)", np.sum(comask))
-    print("analysis:: N(CO & Ak)", np.sum(comask & akmask))
-    print("analysis:: alpha_co", alpha_co)
-    print("analysis:: ak_scale", ak_scale)
+    print(f"analysis:: {name}")
+    print("analysis:: N(Ak): ", np.sum(akmask))
+    print("analysis:: N(CO): ", np.sum(comask))
+    print("analysis:: N(CO & Ak): ", np.sum(comask & akmask))
+    print("analysis:: alpha_co: ", alpha_co)
+    print("analysis:: ak_scale: ", ak_scale)
 
     mass_ak_ak = mass(ak, akmask, ak_scale, pixel_pc)  # AK MASS, AK BOUNDARIES
-    mass_co_ak = mass(wco, akmask, alpha_co, pixel_pc)  # CO MASS, AK BOUNDARIES
+    # CO MASS, AK BOUNDARIES
+    mass_co_ak = mass(wco, akmask, alpha_co, pixel_pc)
     mass_co_noise_ak = mass(
         wco, noise_mask & akmask, alpha_co, pixel_pc
     )  # CO MASS, AK BOUNDARIES, NOISE CUT
@@ -216,32 +236,22 @@ def analysis(
     sigma_ak_ak = sigma(mass_ak_ak, radius_ak)
     sigma_co_ak = sigma(mass_co_ak, radius_ak)
 
-    mass_co_co = mass(wco, comask, alpha_co, pixel_pc)  # CO MASS, CO BOUNDARIES
+    # CO MASS, CO BOUNDARIES
+    mass_co_co = mass(wco, comask, alpha_co, pixel_pc)
     mass_ak_co = mass(ak, comask, ak_scale, pixel_pc)  # CO MASS, CO BOUNDARIES
     radius_co = radius(comask, pixel_pc)
     sigma_co_co = sigma(mass_co_co, radius_co)
     sigma_ak_co = sigma(mass_ak_co, radius_co)
-    columns = [
-        "mass_ak_ak",
-        "mass_co_ak",
-        "mass_co_xco_ak",
-        "mass_co_co",
-        "mass_ak_co",
-        "mass_co_xco",
-        "mass_co_noise_ak",
-        "radius_co",
-        "radius_ak",
-        "sigma_ak_ak",
-        "sigma_co_ak",
-        "sigma_co_co",
-        "sigma_ak_co",
-        "sigma_co_xco",
-        "sigma_co_xco_ak",
-        "xco",
-        "xco2",
-        "xcolog",
-        "Apix",
-    ]
+    columns = ["mass_ak_ak", "mass_co_ak",
+               "mass_co_xco_ak", "mass_co_co",
+                "mass_ak_co", "mass_co_xco",
+                "mass_co_noise_ak", "radius_co",
+                "radius_ak", "sigma_ak_ak",
+                "sigma_co_ak", "sigma_co_co",
+                "sigma_ak_co", "sigma_co_xco",
+                "sigma_co_xco_ak",
+                "xco", "xco2", "xcolog", "Aperpix",
+                'Area_ak','Area_co','distance' ]
     row = [name]
     df = pd.DataFrame(index=row, columns=columns)
 
@@ -252,13 +262,16 @@ def analysis(
     df.mass_co_noise_ak = mass_co_noise_ak
     df.radius_co = radius_co
     df.radius_ak = radius_ak
+    df.Area_ak = np.pi * radius_ak ** 2
+    df.Area_co = np.pi * radius_co**2
     df.sigma_ak_ak = sigma_ak_ak
     df.sigma_co_ak = sigma_co_ak
     df.sigma_co_co = sigma_co_co
     df.sigma_ak_co = sigma_ak_co
+    df.distance = dist
 
-    df.Apix = pixel_pc ** 2
-    print(f"Map total pixels: {np.sum(np.isfinite(boundary))}")
+    df.Aperpix = pixel_pc ** 2
+    print(f"analysis:: Map total pixels: {np.sum(np.isfinite(boundary))}")
 
     # measure Xco
     xco = (ak * ak_nh2) / wco
@@ -288,155 +301,10 @@ def analysis(
     df.sigma_co_xco = sigma_co_xco
     df.mass_co_xco_ak = mass_co_xco_ak
     df.sigma_co_xco_ak = sigma_co_xco_ak
-
+    print('\n')
     return df, akmask, comask
 
 
-class DameMap(object):
-    def __init__(self, name, distance=1000):
-        cat = Table.read("mycat.csv").to_pandas()
-        cat.set_index("Name", inplace=True)
-        self.name = cat.loc[name].name
-        self.survey = cat.loc[name].survey
-        self.vmin = cat.loc[name].vmin
-        self.vmax = cat.loc[name].vmax
-        self.noise = cat.loc[name].noise
-        allvar = getmaps(self.survey, make_global=False, vmin=self.vmin, vmax=self.vmax)
-        # planck, header, co, co_raw, wco, peakv, header3d, survey, obj, noise, N
-        self.planck = allvar[0]
-        self.header = allvar[1]
-        self.co = allvar[2]
-        self.co_raw = allvar[3]
-        self.wco = allvar[4]
-        self.peakv = allvar[5]
-        self.header3d = allvar[6]
-        self.survey2 = allvar[7]
-        self.obj = allvar[8]
-        # self.noise = allvar[9]
-        self.N = allvar[10]
-        self.distance = cat.loc[name].distance
-        self.survey_noise = cat.loc[name].noise
-        self.shape = self.planck
-
-        l, b = getlb(self.header, self.wco)
-        self.l = l
-        self.b = b
-        self.v = getv(self.header3d)
-        self.dv = self.header3d["CDELT1"]  # km/s
-
-        self.boundary = get_bounds(l, b, self.name)
-        co_mask, _, N = mask_dame_wco(co, co_raw, level=3, noise=self.noise)
-        self.co_mask = co_mask
-        self.N = N
-
-        # co_mask = noise_mask
-        self.pixelscale = np.abs(self.header["CDELT2"])
-        self.pixel_pc = np.tan(self.pixelscale * np.pi / 180) * self.distance
-
-        self.df = None
-
-    def analysis(
-        self,
-        ak_limit=0.1,
-        co_limit=None,
-        snr=3,
-        wco_limit=None,
-        save=True,
-        ak_scale=183,
-        alpha_co=4.383,
-    ):
-        if wco_limit is None:
-            co_mask = mask_dame_wco(co, co_raw, level=snr, noise=self.noise)[0]
-        else:
-            co_mask = wco > wco_limit
-        df, akmask, comask = analysis(
-            self.planck,
-            self.wco,
-            self.boundary,
-            co_mask,
-            pixel_scale=self.pixelscale,
-            dist=self.distance,
-            lim=ak_limit,
-            ak_scale=ak_scale,
-            alpha_co=alpha_co,
-            name=self.name,
-        )
-        if save:
-            self.df = df
-
-        return df, akmask, comask
-
-    def mass_ak(self, ak_lim=0.1, ak_scale=183):
-        if ju.check_iterable(ak_lim):
-            return list(zip(*[self.mass_ak(i, ak_scale=ak_scale) for i in ak_lim]))
-        mask = self.boundary
-        mask = mask & (self.planck > ak_lim)
-        m = mass(self.planck, mask, ak_scale, self.pixel_pc)
-        r = radius(mask, self.pixel_pc)
-        return m, r
-
-    def mass_co(
-        self, snr_lim=None, wco_lim=None, alpha_co=4.383,
-    ):
-
-        mask = self.boundary
-        if snr_lim is not None:
-            if ju.check_iterable(snr_lim):
-                f = lambda x: self.mass_co(snr_lim=x, alpha_co=alpha_co)
-                return list(zip(*[f(i) for i in snr_lim]))
-
-            noise = np.sqrt(self.N) * self.noise * self.dv
-            mask = mask & ((wco > snr_lim * noise) & (self.N > 0))
-
-        elif wco_lim is not None:
-            if ju.check_iterable(wco_lim):
-                f = lambda x: self.mass_co(wco_lim=x, alpha_co=alpha_co)
-                return list(zip(*[f(i) for i in wco_lim]))
-
-            mask = mask & (wco > wco_lim)
-        else:
-            snr_lim = 3
-            noise = np.sqrt(self.N) * self.noise * self.dv
-            mask = mask & ((wco > snr_lim * noise) & (self.N > 0))
-
-        m = mass(self.wco, mask, alpha_co, self.pixel_pc)
-        r = radius(mask, self.pixel_pc)
-        return m, r
-
-    def mass(
-        self,
-        ak=None,
-        co=None,
-        ak_limit=None,
-        snr_limit=None,
-        wco_limit=None,
-        ak_scale=183,
-        alpha_co=4.383,
-    ):
-        co_mask = self.boundary
-        if ak_limit is not None:
-            pass
-            # mask = mask & (self.planck > ak_limit)
-        else:
-            ak_limit = 0.1
-        if snr_limit is not None:
-            noise = np.sqrt(self.N) * self.noise * self.dv
-            mask = mask & ((wco > snr_limit * noise) & (self.N > 0))
-        if wco_limit is not None:
-            mask = mask & (wco > wco_limit)
-        df, *_ = analysis(
-            self.planck,
-            self.wco,
-            self.boundary,
-            co_mask,
-            pixel_scale=self.pixelscale,
-            dist=self.distance,
-            lim=ak_limit,
-            ak_scale=ak_scale,
-            alpha_co=alpha_co,
-            name=self.name,
-        )
-        return df
 
 
 
@@ -463,34 +331,44 @@ def get_bounds(l=None, b=None, obj=None):
     Herc: Hercules
 
     """
-    TA = (l <= 180) & (l >= 165) & (b <= -10) & (b >= -20)
+    with np.errstate(all='ignore'):
+        # TA = (l <= 180) & (l >= 165) & (b <= -10) & (b >= -20)
+        TA = (l <= 180) & (l >= 165) & (b <= -10.5) & (b >= -19.75)
 
-    CA1 = (l >= 155) & (l <= 169) & (b >= -10) & (b <= -5)
-    CA2 = (l > 155) & (l < 162) & (b > -15) & (b < -10)
-    CA = CA1 | CA2
-    # remove L1434
-    newCA = CA & ~(b < -13)
-    # remove 200 pc foreground
-    newCA = newCA & ~((l >= 167.5) & (b < -8.75))
-    # remove 1kpc background
-    newCA = newCA & ~((l <= 166) & (b >= -6.5))
+        #CA1 = (l >= 155) & (l <= 169) & (b >= -10) & (b <= -5)
+        CA1 = (l >= 155) & (l <= 169.5) & (b >= -10) & (b <= -5)
+        CA2 = (l > 155) & (l < 162) & (b > -15) & (b < -10)
+        CA = CA1 | CA2
+        # remove L1434
+        newCA = CA & ~(b < -13)
+        # remove 200 pc foreground
+        newCA = newCA & ~((l >= 167.5) & (b < -8.7))
+        # remove 1kpc background
+        newCA = newCA & ~((l <= 166) & (b >= -6.5))
 
-    PR = (l >= 155) & (l <= 165) & (b >= -25) & (b <= -15)
+        PR = (l >= 155) & (l <= 165) & (b >= -25) & (b <= -15)
 
-    monob = (l >= 198) & (l <= 205) & (b >= -0.5) & (b <= 3.25)
-    W3 = (l >= 132) & (l <= 135) & (b >= -0.5) & (b <= 2)
+        monob = (l >= 198) & (l <= 205) & (b >= -0.5) & (b <= 3.25)
+        W3 = (l >= 132) & (l <= 135) & (b >= -0.5) & (b <= 2)
 
-    # Oph = (l >= 350) & (l <= 358) & (b >= 12) & (b <= 20)
-    Oph = ((l >= 350) | (l <= 11)) & (b >= 12) & (b <= 25)
-    Herc = (l >= 41.25) & (l <= 48) & (b >= 7.0) & (b <= 10.75)
+        # Oph = (l >= 350) & (l <= 358) & (b >= 12) & (b <= 20)
+        Oph = ((l >= 350) | (l <= 11)) & (b >= 12) & (b <= 25)
+        Herc = (l >= 41.25) & (l <= 48) & (b >= 7.0) & (b <= 10.75)
 
-    OriA = (l >= 203) & (l <= 217) & (b >= -21) & (b <= -17)
-    OriB = (l >= 204) & (l <= 208) & (b >= -18) & (b <= -10)
-    if obj == "OriB":
-        OriB = (ju.rot_mask(OriB, angle=30)) & (b >= -17)
-    MonR2 = (l >= 210) & (l <= 218) & (b >= -14.5) & (b <= -10)
+        OriA = (l >= 203) & (l <= 217) & (b >= -21) & (b <= -17)
+        OriB = (l >= 204) & (l <= 208) & (b >= -18) & (b <= -10)
+        if obj == "OriB":
+            OriB = (ju.rot_mask(OriB, angle=30)) & (b >= -17)
+        MonR2 = (l >= 210) & (l <= 218) & (b >= -14.5) & (b <= -10)
 
-    RCrA = np.full_like(l, True).astype(bool)
+        RCrA = np.full_like(l, True).astype(bool)
+
+        Rose = (l>= 205) & (l<=209) & (b>=  -4) & (b<= 0)
+
+        Pol = (l>=117) & (l<=127) & (b>=20) & (b<=32)
+        notPol = (b < 22) & (l > 123)
+        Pol = Pol & ~notPol
+
 
     if obj == "Tau":
         return TA.astype(bool)
@@ -504,7 +382,7 @@ def get_bounds(l=None, b=None, obj=None):
         return W3.astype(bool)
     elif obj == "Oph":
         return Oph.astype(bool)
-    elif obj == "MonOB":
+    elif obj == "MonOB1":
         return monob.astype(bool)
     elif obj == "OriA":
         return OriA.astype(bool)
@@ -514,6 +392,10 @@ def get_bounds(l=None, b=None, obj=None):
         return MonR2.astype(bool)
     elif obj == "RCrA":
         return RCrA.astype(bool)
+    elif obj == 'Rose':
+        return Rose.astype(bool)
+    elif obj == 'Pol':
+        return Pol.astype(bool)
     else:
         return None
 
@@ -529,24 +411,33 @@ def getv(header3d):
     return v
 
 
-def dame_bad(arr, bad_val=2 ** (-20)):
-    return (arr == bad_val) | np.isnan(arr) | (arr == -32768) | (np.log2(arr) < -10)
+def dame_bad(arr, bad_val=20):
+    with np.errstate(all='ignore'):
+        c1 = -np.log2(np.abs(arr)) > bad_val  - 5
+        c2 = np.isnan(arr)
+        c3 = arr == -32768
+        c4 = arr == 0
+    #with np.errstate(invalid='ignore'):
+    #    c4 = np.log2(arr) < -10
+    return c1 | c2 | c3 | c4
 
 
 def mask_dame_wco(co, co_raw, noise=None, level=3):
-    bad = dame_bad(co)
-    if noise is None:
-        noise = np.nanstd(co_raw[bad])
-    N = np.nansum(~bad, axis=-1)
-    sqrtN = np.sqrt(N)
-    wco = np.nansum(co, axis=-1)
-    return ((wco / (sqrtN * noise)) > level) & (N > 0), noise, N
+    with np.errstate(all='ignore'):
+        bad = dame_bad(co)
+        if noise is None:
+            noise = np.nanstd(co_raw[bad])
+        N = np.nansum(~bad, axis=-1)
+        sqrtN = np.sqrt(N)
+        wco = np.nansum(co, axis=-1)
+        return ((wco / (sqrtN * noise)) > level) & (N > 0), noise, N
 
 
-def channel_maps(chmap, v, start=0, stop=-1, step=1):
+def channel_maps(chmap, v, start=0, stop=-1, step=1,vmin=-0.2,vmax=10,xlim=None,ylim=None,**kwargs):
     if stop == -1:
         stop = chmap.shape[-1]
     chan = np.arange(start, stop + step, step)
+    chan[-1] = len(v)-1
     N = len(chan)
     sN = np.sqrt(N)
     nrow = int(np.ceil(sN))
@@ -560,23 +451,157 @@ def channel_maps(chmap, v, start=0, stop=-1, step=1):
         ac = 1
         ar = 1  # nx/ny
     fig, axs = plt.subplots(
-        nrows=nrow,
-        ncols=ncol,
-        figsize=(4.0 * nrow * ar, 4.0 * ncol * ac),
-        sharex=True,
-        sharey=True,
-    )
+        nrows=nrow, ncols=ncol, figsize=(4.0 * nrow * ar, 4.0 * ncol * ac), sharex=True, sharey=True, )
     for i, ax in enumerate(axs.flatten()):
         if i < N - 1:
-            summed = np.nansum(chmap[:, :, chan[i] : chan[i + 1]], axis=-1)
-            ax.imshow(summed, vmin=-0.2, vmax=2)
+            summed = np.nansum(chmap[:, :, chan[i]: chan[i + 1]], axis=-1)
+            ax.imshow(summed, vmin=vmin, vmax=vmax,**kwargs)
             ju.annotate(
                 f"{v[chan[i]]:0.1f}:{v[chan[i+1]]:0.1f}", 0.8, 0.9, ax=ax, fontsize=25
             )
-            plt.xlim(580, 630)
-            plt.ylim(15, 45)
+            if xlim is not None:
+                ax.set_xlim(*xlim)
+            if ylim is not None:
+                ax.set_ylim(*ylim)
+            #plt.ylim(15, 45)
         else:
             plt.delaxes(ax)
 
     return fig, axs
 
+def iscontained(bound,labels,label_id,lim=1):
+        good = labels==label_id
+        if lim==1:
+            return np.all(bound[labels==label_id])
+        else:
+            min_frac = np.sum(bound) / bound.size
+            if lim < min_frac:
+                lim = 1
+            return np.sum(bound[good]) >= lim * np.sum(good)
+
+
+def closed_contour(field, bound, steps, lim=1, min_size=0):
+    """[summary]
+
+    Parameters
+    ----------
+    field : [type]
+        [description]
+    bound : [type]
+        [description]
+    steps : [type]
+        [description]
+    lim : int, optional
+        [description], by default 1
+    min_size : int, optional
+        [description], by default 0
+
+    Returns
+    -------
+    [largest_contour, largest_contour_level, labels]
+        largest_contour: map of largest object
+        largest_contour_level: largest closed contour level
+        labels: map of objects at the contour level
+    """
+    if bound is None:
+            bound = np.full(field.shape, True, dtype=bool)
+
+    min_frac = np.sum(bound) / field.size
+    if lim < min_frac:
+        lim = 1
+    if min_frac == 1:
+        bound[0,:] = False
+        bound[:, 0] = False
+        bound[-1,:] = False
+        bound[:, -1] = False
+        lim = 1
+    field = np.nan_to_num(field)
+
+    steps = np.sort(steps)[::-1]
+
+    out_contour=steps[0]
+    for i in steps:
+        shed = field >= i
+        label = skmorph.label(shed)
+        good = np.unique(label[shed & bound])
+        good_labels = np.isin(label,good)
+        # find contours contained within boundary
+        #good_contained = [iscontained(bound,label,g,lim=1) for g in good]
+
+        if np.sum(good_labels&bound)>=lim*np.sum(good_labels):
+        #if np.all(good_contained):
+            out_contour = i
+            out_good_labels = good_labels.copy()
+            out_label = label * 1
+            continue
+        else:
+            break
+
+    return out_good_labels, out_contour, out_label
+
+
+def largest_closed_contour(field, bound, steps, lim=1, min_size=0):
+    """[summary]
+
+    Parameters
+    ----------
+    field : [type]
+        [description]
+    bound : [type]
+        [description]
+    steps : [type]
+        [description]
+    lim : int, optional
+        [description], by default 1
+    min_size : int, optional
+        [description], by default 0
+
+    Returns
+    -------
+    [largest_contour, largest_contour_level, labels]
+        largest_contour: map of largest object
+        largest_contour_level: largest closed contour level
+        labels: map of objects at the contour level
+    """
+    if bound is None:
+            bound = np.full(field.shape, True, dtype=bool)
+
+    min_frac = np.sum(bound) / field.size
+    if lim < min_frac:
+        lim = 1
+    if min_frac == 1:
+        bound[0,:] = False
+        bound[:, 0] = False
+        bound[-1,:] = False
+        bound[:, -1] = False
+        lim = 1
+    field = np.nan_to_num(field)
+
+    largest_old = min_size
+    for i in steps:
+        shed = field >= i
+        label = skmorph.label(shed)
+        good = np.unique(label[shed & bound])
+        #good_labels = np.isin(label,good)
+        # find contours contained within boundary
+        contained = [iscontained(bound,label,g,lim=lim) for g in good]
+
+        if np.any(contained):
+            #print('contained',i)
+            contained = good[contained]
+
+            # get contained contour sizes
+            sizes = [np.sum(label == l) for l in contained]
+            argmax = np.argmax(sizes)
+            largest_new = max(sizes)
+            largest_label = label == contained[argmax]
+
+            # stop once contour size stops increasing
+            if largest_new >= largest_old:
+                if largest_new > largest_old:
+                    largest_contour = largest_label
+                    largest_contour_level = i
+                    labels = label.copy()
+
+            largest_old = largest_new
+    return largest_contour, largest_contour_level, labels
