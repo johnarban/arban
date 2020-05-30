@@ -19,12 +19,13 @@ import numpy as np
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.table import Table
-import astropy.constants as const
-import astropy.units as u
+from astropy import constants as constants
+from astropy import units as u
 from astropy.wcs import WCS
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy import integrate, interpolate
-from scipy import ndimage as nd
+from scipy import ndimage
+nd = ndimage
 from scipy import signal, special, stats
 from weighted import quantile
 import pandas as pd
@@ -60,7 +61,7 @@ def check_iterable(arr):
     return hasattr(arr,'__iter__')
 
 
-def invert_color(ml):
+def invert_color(ml,*args, **kwargs):
     rgb = mpl.colors.to_rgb(ml)
     hsv = mpl.colors.rgb_to_hsv(rgb)
     h, s, v = hsv
@@ -70,7 +71,7 @@ def invert_color(ml):
     return mpl.colors.to_hex(mpl.colors.hsv_to_rgb((h,s,v)))
 
 
-def icol(*rgs, **kwargs):
+def icol(*args, **kwargs):
     return invert_color(*args,**kwargs)
 
 def to64(arr):
@@ -155,13 +156,14 @@ def thermal_v(T, mu=None, mol=None):
         else:
             mu = 1
 
-    return np.sqrt(const.k_B * T * u.Kelvin / (mu * const.m_p)).to("km/s").value
+    return np.sqrt(constants.k_B * T * u.Kelvin / (mu * constants.m_p)).to("km/s").value
+
 
 
 def virial(sig,mass, r):
     s = 1.33*(sig*(u.km/u.s))**2
-    r = r*np.sqrt(area_per_pix)*u.pc
-    m = const.G * (mass*u.Msun)
+    r = r*u.pc
+    m = constants.G * (mass*u.Msun)
     return (s * r / m).si.value
 
 def numdens(mass, radius):
@@ -183,7 +185,7 @@ def numdens(mass, radius):
     mass = mass * u.solMass
     radius = radius * u.pc
     volume = (4/3) * np.pi * (radius**3)
-    dens = (mass/volume)/(2.33 * const.m_p)
+    dens = (mass/volume)/(2.33 * constants.m_p)
     return dens.to(u.cm**-3).value
 
 
@@ -195,9 +197,9 @@ def jeansmass(temp, numdens, mu=2.33): #12.03388 msun T=n=1
     returns Mjeans in solar masses
     .5 * (5 * kb / G)^3 * (3/4π) * (1/2.33 mp)^4 * T^3 / n
     """
-    mj = ((5 * const.k_B / (const.G))**3)
+    mj = ((5 * constants.k_B / (constants.G))**3)
     mj *= (3/(4*np.pi))
-    mj *= ((1/(mu * const.m_p))**4)
+    mj *= ((1/(mu * constants.m_p))**4)
     mj = mj * (temp * u.K)**3
     mj = mj * (u.cm**3/numdens)
     mj = mj**0.5
@@ -561,6 +563,8 @@ def rolling_window(arr, window):
     strides = arr.strides + (arr.strides[-1],)
     return np.lib.stride_tricks.as_strided(arr, shape=shape, strides=strides)
 
+def minmax(arr,axis=None):
+    return np.nanmin(arr, axis=axis),np.nanmax(arr,axis=axis)
 
 def comp(arr):
     """
@@ -590,12 +594,12 @@ def weighted_std(x, w):
     return np.sqrt(SS)
 
 def weighted_percentile(x, w, percentile, p=0):
-    k = ~np.isnan(x + w)
+    k = np.isfinite(x + w)
     clean_x = np.asarray(x[k], dtype=np.float64)
     clean_w = np.asarray(w[k], dtype=np.float64)
     srt = np.argsort(clean_x)
-    sorted_w = w[srt]
-    sorted_x = x[srt]
+    sorted_w = clean_w[srt]
+    sorted_x = clean_x[srt]
     Sn = np.cumsum(sorted_w)
     Pn = (Sn - 0.5 * sorted_w) / Sn[-1]
     return np.interp(percentile/100., Pn, sorted_x)
@@ -613,6 +617,13 @@ def weighted_mad(x, w, stddev=True):
 def weighted_mean(x, w):
     return np.sum(x * w) / np.sum(w)
 
+
+def sigmoid(x, a, a0, k, b):
+    '''
+    return a * ( (1 + np.exp(-k*(x-a0)))**-1 - b)
+    '''
+    #a, a0, k, b = p
+    return a * ( (1 + np.exp(-k*(x-a0)))**-1 - b)
 
 
 def mgeo(arr, n=2, axis=-1):
@@ -661,6 +672,19 @@ def shift_bins(arr, phase=0, nonneg=False):
             return np.power(10.0, arr)
     else:
         return arr
+
+def get_bin_edges(x):
+    diff = np.diff(x)
+    if diff[0] == diff[-1]:
+        dx = diff[0]
+        return np.r_[x - dx / 2, x[-1] + dx / 2]
+    else:
+        dx = np.diff(np.log(x))[0]
+        return np.exp(np.r_[np.log(x) - dx / 2, x[-1] + dx / 2])
+
+def get_bin_widths(x):
+    return np.diff(get_bin_edges(x))
+
 
 def err_div(x, y, ex, ey):
     Q = x / y
@@ -862,13 +886,13 @@ def cdf2(values, bins):
     return np.append(0.0, c), bins
 
 
-def area_function(extmap, bins):
+def area_function(extmap, bins,scale=1):
     """
     Complimentary CDF for cdf2 (not normalized to 1)
     Value at b is total amount above b.
     """
     c, bins = cdf2(extmap, bins)
-    return c.max() - c, bins
+    return scale * (c.max() - c), bins
 
 
 def diff_area_function(extmap, bins, scale=1):
@@ -898,6 +922,9 @@ def mass_function(values, bins, scale=1, aktomassd=183):
         range = (np.nanmin(bins), np.nanmax(bins))
     else:
         range = None
+
+    if scale != 1:
+        aktomassd = scale
 
     h, bins = np.histogram(values, bins=bins, range=range,
                            density=False, weights=values * aktomassd * scale, )
@@ -985,6 +1012,14 @@ def polyregress_bootstrap(X, Y, order=1, iterations=10, thru_origin=False, retur
     else:
         return np.array(coeff)
 
+def ortho_dist(x, y, m, b):
+    '''
+    get the orthogonal distance
+    from a point to a line
+    '''
+    ortho_dist = (y - m * x - b) / np.sqrt(1 + m ** 2)
+    return ortho_dist
+
 
 class PolyRegress(object):
     ###
@@ -993,14 +1028,16 @@ class PolyRegress(object):
     # but did not use their weird definition for "R^2"
     # reference for R^2: https://en.wikipedia.org/wiki/Coefficient_of_determination
     ###
-    def __init__(self, X, Y, P=1, fit=False, pass_through_origin=False,log=False):
+    def __init__(self, X, Y, P=1, fit=False, pass_through_origin=False,log=False,dtype=np.float64):
         if log:
-            X, Y = np.log10(X),np.log10(Y)
+            X, Y = np.log10(X).ravel(),np.log10(Y).ravel()
+        else:
+            X, Y = np.array(X).ravel(), np.array(Y).ravel()
         self.log = log
         g = np.isfinite(X + Y)
 
-        self.X = X[g].astype(np.float64)
-        self.Y = Y[g].astype(np.float64)
+        self.X = X[g].astype(dtype)
+        self.Y = Y[g].astype(dtype)
 
         self.N = len(self.X)
         self.P = P + 1
@@ -1014,12 +1051,36 @@ class PolyRegress(object):
         self.y_bar = np.mean(self.Y)
 
         self.b, self.cov, self.err = None, None, None
+        self.scatter = None
         self.norm_resid = None
         self.y_hat = None
         self.R2, self.R2_a = None, None
 
         if fit:
             self.fit()
+
+    def __str__(self):
+        if self.b is not None:
+            b = self.b
+            e = self.err
+            s = self.scatter
+            term = lambda i: f'({self.b[i]:0.3g}+/-{e[i]:0.3g}) * x^{i}'
+            out1 = ' + '.join([term(i) for i in range(self.P)])
+            if not self.log:
+                #out=f'm:{b[1]:0.3g}+/-{e[1]:0.3g}, b:{b[0]:0.3g}+/-{e[0]:0.3g}, scatter:{s:0.3g}'
+                out = out1 + f' , scatter:{s:0.3g}'
+            else:
+                #out=f'm:{b[1]:0.3g}+/-{e[1]:0.3g}, b:{b[0]:0.3g}+/-{e[0]:0.3g}, scatter:{s:0.3g}'
+                out = out1 + f' , scatter:{s:0.3g}'
+                out=f'{out}\n+10^b:{10**b[0]:0.3g}'
+        else:
+            out='\nERROR::Has not been run. run model.fit() now\n'
+        return '\n'+out+'\n'
+
+    def __repr__(self):
+        out1 = f'\norder={self.P-1} regression'
+        out2 = self.__str__()
+        return out1+out2
 
     def fit(self):
         if np.linalg.det(self.XX) != 0:
@@ -1038,6 +1099,9 @@ class PolyRegress(object):
         SS_exp = np.sum((self.y_hat - self.y_bar) ** 2)
         R2 = 1 - SS_res / SS_tot
 
+        self.residual = self.y_hat - self.Y
+
+
         # R squared and adjusted R-squared
         self.R2 = R2  # Use more general definition SS_exp / SS_tot
         self.R2_a = (self.R2 * (self.N - 1) - self.P) / (self.N - self.P - 1)
@@ -1046,6 +1110,17 @@ class PolyRegress(object):
         self.norm_resid = SS_res / (self.N - self.P - 1)
         self.cov = self.norm_resid * np.linalg.pinv(self.XX)
         self.err = np.sqrt(np.diag(self.cov))
+
+
+        #ortho_dist = (self.Y - self.b[1] * self.X - self.b[0])/np.sqrt(1 + self.b[1]**2)
+        #self.scatter = np.std(ortho_dist)/np.cos(np.arctan(self.b[1]))
+        self.scatter = np.std(self.residual)
+
+        if self.log:
+            self.percent_scatter = np.mean( np.abs(10**self.y_hat - 10**self.Y)/10**self.Y)
+        else:
+            self.percent_scatter = np.mean(self.residual/self.Y)
+
         return self.b, self.err
 
     def func(self, x):
@@ -1056,19 +1131,60 @@ class PolyRegress(object):
             return np.polyval(p, x)
 
     def sample_covarariance(self, n=10000):
-        return np.random.multivariate_normal(self.b,self.cov,n)
+        return np.random.multivariate_normal(self.b, self.cov, n)
 
-def plot_covariances(p, cov, names=None):
-    p = np.random.multivariate_normal(p,cov,5000)
-    corner(p,smooth=1,names=names)
-    return plt.gca()
+    def plot(self, ax=None,color='',data=False,marker='o',ms=5,mec='none',unlog=False,**kwargs):
+        if ax is None:
+            ax = plt.gca()
 
-def plot_fit_covariances(fit, fitter):
+        if self.log or unlog:
+            x = 10 ** self.X
+            y = 10 ** self.Y
+            xx = np.logspace(self.X.min(), self.X.max(), 30)
+        else:
+            x = self.X
+            y = self.Y
+            xx = np.linspace(self.X.min(), self.X.max(),30)
+
+        if color == '':
+            c = ('k','r')
+
+        if isinstance(color,tuple):
+            c_data = color[0]
+            c_line = color[1]
+            data = True
+        elif color == '':
+            if data:
+                c_data = plt.plot([],[],'-')[0].get_color()
+                c_line = 'k'
+            else:
+                c_line = 'k'
+        else:
+            c_line = color
+            if data:
+                c_data = plt.plot([],[],'-')[0].get_color()
+
+        if data:
+            p=ax.plot(x, y, color=c_data,ms=ms,mec=mec,marker=marker,ls='')
+
+        ax.plot(xx, self.func(xx), '-', color=c_line,**kwargs)
+
+        if self.log:
+            ax.set_xscale('log')
+            ax.set_yscale('log')
+
+
+
+def plot_covariances(p, cov, names=None,figsize=(12,12),nsamps=5000,smooth=1):
+    p = np.random.multivariate_normal(p,cov,nsamps)
+    fig,axs=corner(p,smooth=smooth,names=names,figsize=figsize)
+    return fig,axs
+
+def plot_astropy_fit_covariances(fit, fitter):
     p = fit.parameters
     cov = fitter.fit_info['param_cov']
     ax = plot_covariances(p,cov,  names=fit.param_names)
     return ax
-
 
 def mad(X, stddev=True, axis=None):
     if stddev:
@@ -1651,7 +1767,6 @@ def stat_plot2d(
         # give the user a decent default plot
         plot_data = True
         plot_contour = True
-        bins = 'auto'
         smooth = 2
 
     if smooth is None:
@@ -1916,8 +2031,10 @@ def annotate(text, x, y,ax=None,
     if ax is None:
         ax = plt.gca()
 
-    if True:
+    if transform=='axes':
          transform = ax.transAxes
+    elif transform == 'data':
+        transform = ax.transData
     text = ax.text(x,y,text,horizontalalignment=horizontalalignment,
                                 verticalalignment=verticalalignment,
                                 transform=transform,
@@ -1932,26 +2049,26 @@ def annotate(text, x, y,ax=None,
 def jhist2d(*args, **kwargs):
     return stat_plot2d(*args, **kwargs)
 
-def corner(pos, names=None,smooth=1,bins=20, **kwargs):
-    fig, axs = plt.subplots(nrows=pos.shape[1],ncols=pos.shape[1],figsize=(12,12))
+def corner(pos, names=None,smooth=1,bins=20,figsize=(12,12),**kwargs):
+    fig, axs = plt.subplots(nrows=pos.shape[1],ncols=pos.shape[1],sharex=False,sharey=False,figsize=figsize)
     print(pos.shape)
     for i in range(pos.shape[-1]):
         for j in range(pos.shape[-1]):
-            if i==j:
+            if i == j:
                 stat_plot1d(pos[:,i],ax=axs[i,j])
             if j < i:
                 ax = axs[i,j]
                 stat_plot2d(pos[:,j],pos[:,i],ax=ax,bins=bins,smooth=smooth,plot_datapoints=True,plot_contour=True,**kwargs)
                 if names is not None:
                     try:
-                        ax.set_xlabel(names[j])
-                        ax.set_ylabel(names[i])
+                        if i==pos.shape[1]-1: ax.set_xlabel(names[j])
+                        if j==pos.shape[1]-1: ax.set_ylabel(names[i])
                     except:
                         pass
             if j > i:
                 plt.delaxes(axs[i,j])
     fig.tight_layout()
-    return 0
+    return fig,axs
 
 
 def standardize(X, mean=True, std=True):
@@ -2005,14 +2122,6 @@ def oplot_hist(X, bins=None, ylim=None, scale=0.5, ax=None, show_mean = False, s
     return ax
 
 
-def get_edges(x):
-    diff = np.diff(x)
-    if diff[0] == diff[-1]:
-        dx = diff[0]
-        return np.r_[x - dx / 2, x[-1] + dx / 2]
-    else:
-        dx = np.diff(np.log(x))[0]
-        return np.exp(np.r_[np.log(x) - dx / 2, x[-1] + dx / 2])
 
 def find_minima(x,y,yer=-1,err_cut=False,cut=3):
     #srt = np.argsort(x)
@@ -2059,3 +2168,68 @@ def find_maxima(x,y,yer=-1,err_cut=False,cut=3):
     else:
         mins = dysignchange & (dyysign<=0) #& (np.abs(dy) < yer)
     return np.roll(mins,-1,axis=0)
+
+
+
+def multi_colored_line_plot(x,y,z=None,cmap='viridis',norm=None,
+                            vmin=None,vmax=None,ax=None,**kwargs):
+    '''
+    adapted from matplotlib gallery
+    '''
+    if ax is None:
+        ax = plt.gca()
+    # Create a set of line segments so that we can color them individually
+    # This creates the points as a N x 1 x 2 array so that we can stack points
+    # together easily to get the segments. The segments array for line collection
+    # needs to be (numlines) x (points per line) x 2 (for x and y)
+    points = np.array([x, y]).T.reshape(-1, 1, 2)
+    segments = np.concatenate([points[:-1], points[1:]], axis=1)
+    if z is None:
+        z = y
+
+    # Create a continuous norm to map from data points to colors
+    if vmin is None:
+        vmin = np.nanmin(z)
+    if vmax is None:
+        vmax = np.nanmax(z)
+    if norm is None:
+        norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
+    lc = mpl.collections.LineCollection(segments, cmap=cmap, norm=norm,**kwargs)
+    # Set the values used for colormapping
+
+    lc.set_array(z)
+
+    line = ax.add_collection(lc)
+    #fig.colorbar(line, ax=axs[0])
+    return line
+
+
+def errorbar_fill(x=None, y=None, yerr=None, *args, ax=None, mid=True, \
+                    color=None,alpha=1,lw=1,ls='-',**kwargs):
+    if ax is None:
+        ax = plt.gca()
+
+    if mid:
+        alpha_fill = alpha * 2
+        if alpha_fill >= 1:
+            alpha_fill = 1
+    ax.fill_between(x, y - yerr, y + yerr, color=color, alpha=alpha)
+    if mid:
+        ax.plot(x,y,'-',color=color,alpha=alpha,lw=lw,ls=ls)
+    return None
+
+
+def confidence_bands(x, p, func, cov, N=1000, ci=90,ucb=None,lcb=None):
+    '''
+    x, inputs
+    p, parameters
+    func - function called f(x,*p)
+    '''
+    ps = np.random.multivariate_normal(mean=p, cov=cov, size=N)
+    out = np.array([func(x,*pi) for pi in ps])
+    if ucb is None:
+        ucb = 50 + ci / 2
+    if lcb is None:
+        lcb = 50 - ci / 2
+    upper,lower=np.percentile(out,[lcb,ucb],axis=0)
+    return lower,upper
