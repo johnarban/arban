@@ -8,9 +8,9 @@ import warnings
 from importlib import reload
 
 #get astrophysical constants
-import astropy.constants as const
+from astropy import constants as constants
 from astropy import units as u
-import astropy.convolution as convolution
+from astropy import convolution as convolution
 import colorcet  # better colors (cet_*)
 import cmasher # more colors (cmr.*)
 import matplotlib as mpl
@@ -33,6 +33,7 @@ from mpl_toolkits.mplot3d import Axes3D
 #import scipy stuff
 from scipy import integrate, interpolate
 from scipy import ndimage as nd
+
 from scipy import optimize, signal, special, stats
 from scipy.ndimage import morphology
 from scipy.optimize import curve_fit, minimize
@@ -78,4 +79,6 @@ mpl.cm.register_cmap(name='turbo', data=mpl_data, lut=turbo_colormap_data.shape[
 mpl_data_r = RGBToPyCmap(turbo_colormap_data[::-1,:])
 mpl.cm.register_cmap(name='turbo_r', data=mpl_data_r, lut=turbo_colormap_data.shape[0])
 
-
+# do some ipython configuring # we want sharp figures
+from IPython.display import set_matplotlib_formats
+set_matplotlib_formats('retina')
