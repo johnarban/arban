@@ -691,7 +691,7 @@ def err_div(x, y, ex, ey):
     dQ = np.abs(Q) * np.sqrt((ex / x) ** 2 + (ey / y) ** 2)
     return Q, dQ
 
-def nsode2resol(nside, ):
+def nside2resol(nside, ):
     resol = 60 * (180 / np.pi) * np.sqrt(np.pi / 3) / nside
     return resol * u.arcmin
 
