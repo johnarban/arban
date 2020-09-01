@@ -16,19 +16,18 @@ import matplotlib.cm as cm
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+from astropy import constants as constants
+from astropy import units as u
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.table import Table
-from astropy import constants as constants
-from astropy import units as u
 from astropy.wcs import WCS
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-from scipy import integrate, interpolate
-from scipy import ndimage
-nd = ndimage
-from scipy import signal, special, stats
+from scipy import integrate, interpolate, ndimage, signal, special, stats
 from weighted import quantile
-import pandas as pd
+
+nd = ndimage
 
 
 __location__ = os.path.realpath(os.path.join(
