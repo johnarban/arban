@@ -23,7 +23,7 @@ from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.table import Table
 from astropy.wcs import WCS
-from mpl_toolkits.axes_grid1 import make_axes_locatable
+from mpl_toolkits.axes_grid1 import make_axes_locatable, axes_size
 from scipy import integrate, interpolate, ndimage, signal, special, stats
 from weighted import quantile
 
@@ -83,20 +83,84 @@ def to64(arr):
                 return u.quantity.Quantity(arr,dtype=np.float64)
         return np.float64(arr)
 
-def get_cax(ax=None, size=3):
+def get_xylim(ax=None):
     if ax is None:
         ax = plt.gca()
+    xlim, ylim = ax.get_xlim(), ax.get_ylim()
+    return xlim, ylim
+
+def set_xylim(xlim=None, ylim=None, ax=None, origin=None):
+    """set xylims with tuples
+    xlim: tuple of x axis limits
+    ylim: tuple of y axis limits
+    origin: sometimes you just want to change the origin
+            so you can keep the axis limits the same
+            but just change origin
+
+
+    """
+    if ax is None:
+        ax = plt.gca()
+
+    if xlim is None:
+        xlim = ax.get_xlim()
+    if ylim is None:
+        ylim = ax.get_ylim()
+
+    if origin is not None:
+        if origin is True:
+            if ax.get_xaxis().get_scale()[:3] != 'log':
+                xlim[0] = 0
+            if ax.get_yaxis().get_scale()[:3] != 'log':
+                ylim[0] = 0
+        else:
+            xlim[0] = origin[0]
+            ylim[0] = origin[1]
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+    return xlim, ylim
+
+def _normalize_location_orientation(location, orientation):
+    loc_settings = {
+        "left":   {"location": "left", "orientation": "vertical",
+                   "anchor": (1.0, 0.5), "panchor": (0.0, 0.5), "pad": 0.10},
+        "right":  {"location": "right", "orientation": "vertical",
+                   "anchor": (0.0, 0.5), "panchor": (1.0, 0.5), "pad": 0.05},
+        "top":    {"location": "top", "orientation": "horizontal",
+                   "anchor": (0.5, 0.0), "panchor": (0.5, 1.0), "pad": 0.05},
+        "bottom": {"location": "bottom", "orientation": "horizontal",
+                   "anchor": (0.5, 1.0), "panchor": (0.5, 0.0), "pad": 0.15},
+    }
+
+    return loc_settings
+
+def get_cax(ax=None, position="right", frac=.03, pad = 0.05):
+    """get a colorbar axes of the same height as current axes
+    position: "left" "right" ( vertical | )
+              "top"  "bottom"  (horizontal --- )
+
+    """
+    if ax is None:
+        ax = plt.gca()
+
+    size = f'{frac*100}%'
     divider = make_axes_locatable(ax)
-    cax = divider.append_axes("right", size="%f%%" % (size * 1.0), pad=0.05)
+    cax = divider.append_axes(position, size = size, pad = pad)
     plt.sca(ax)
     return cax
 
-def colorbar(mappable=None, cax=None, ax=None, size=3, **kw):
+def colorbar(mappable=None, cax=None, ax=None, size=0.03, pad = 0.05, **kw):
+    """wrapper for pyplot.colorbar.
+
+    """
     if ax is None:
         ax = plt.gca()
+
     if cax is None:
-        cax = get_cax(ax=ax,size=size)
-    return plt.colorbar(mappable=None,cax=cax,ax=ax,**kw)
+        cax = get_cax(ax=ax, frac=size, pad = pad)
+
+    ret = plt.colorbar(mappable, cax=cax, ax=ax, **kw)
+    return ret
 
 
 # Plot the KDE for a set of x,y values. No weighting code modified from
@@ -586,11 +650,25 @@ def mavg(arr, n=2, axis=-1):
     return np.mean(rolling_window(arr, n), axis=axis)
 
 
-def weighted_std(x, w):
+def weighted_generic_moment(x, k, w = None):
+    x = np.asarray(x, dtype=np.float64)
+    if w is not None:
+        w = np.asarray(w, dtype=np.float64)
+    else:
+        w = np.ones_like(x)
 
-    SS = np.sum(w * (x - x.mean()) ** 2) / np.sum(w)
-    quantile(x, w, 0.5)
+    return np.sum(x**k * w)/np.sum(w)
+
+def weighted_mean(x, w):
+    return np.sum(x * w) / np.sum(w)
+
+def weighted_std(x, w):
+    x = np.asarray(x, dtype=np.float64)
+    w = np.asarray(w, dtype=np.float64)
+    SS = np.sum(w * (x - weighted_mean(x,w)) ** 2) / np.sum(w)
+    #quantile(x, w, 0.5)
     return np.sqrt(SS)
+
 
 def weighted_percentile(x, w, percentile, p=0):
     k = np.isfinite(x + w)
@@ -601,20 +679,20 @@ def weighted_percentile(x, w, percentile, p=0):
     sorted_x = clean_x[srt]
     Sn = np.cumsum(sorted_w)
     Pn = (Sn - 0.5 * sorted_w) / Sn[-1]
-    return np.interp(percentile/100., Pn, sorted_x)
+    return np.interp(np.asarray(percentile)/100., Pn, sorted_x)
 
 def weighted_median(x,w):
     return weighted_percentile(x,w,50)
 
 def weighted_mad(x, w, stddev=True):
-    def median(arr, wei): return weighted_median(arr, wei)
-    if stddev:
-        return 1.4826 * median(np.abs(x - median(x, w)), w)
-    else:
-        return median(np.abs(x - median(x, w)), w)
+    x = np.asarray(x, dtype=np.float64)
+    w = np.asarray(w, dtype=np.float64)
 
-def weighted_mean(x, w):
-    return np.sum(x * w) / np.sum(w)
+    if stddev:
+        return 1.4826 * weighted_median(np.abs(x - weighted_median(x, w)), w)
+    else:
+        return weighted_median(np.abs(x - weighted_median(x, w)), w)
+
 
 
 def sigmoid(x, a, a0, k, b):
@@ -674,7 +752,7 @@ def shift_bins(arr, phase=0, nonneg=False):
 
 def get_bin_edges(x):
     diff = np.diff(x)
-    if diff[0] == diff[-1]:
+    if np.isclose(diff[0] , diff[-1]):
         dx = diff[0]
         return np.r_[x - dx / 2, x[-1] + dx / 2]
     else:
@@ -690,11 +768,40 @@ def err_div(x, y, ex, ey):
     dQ = np.abs(Q) * np.sqrt((ex / x) ** 2 + (ey / y) ** 2)
     return Q, dQ
 
-def nside2resol(nside, ):
+def nside2resol(nside,):
+    """nside2resol: get healpix resolution from Nsides
+
+    Parameters
+    ----------
+    nside : int
+        Nsides
+
+    Returns
+    -------
+    Astropy Quantity [arcmin]
+        resolution in arcmin
+    """
     resol = 60 * (180 / np.pi) * np.sqrt(np.pi / 3) / nside
     return resol * u.arcmin
 
 def lin_from_log(p, x, log10=False):
+    """Convert linear function to exponential
+    take log(y) = m log(x) + b  ----> y = exp(b) x^m
+
+    Parameters
+    ----------
+    p : [type]
+        [description]
+    x : [type]
+        [description]
+    log10 : bool, optional
+        [description], by default False
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
     if log10:
         return 10**(p[0]*np.log10(x) + p[1])
     else:
@@ -1940,8 +2047,9 @@ def stat_plot2d(
         contour_kwargs["alpha"] = alpha
 
     if contourf_kwargs.get("levels") is None:
-        contourf_kwargs["levels"] = np.hstack(
-            [[0], levels])  # close top contour
+        new_levels = np.hstack([[0], levels])
+
+        contourf_kwargs["levels"] =  np.unique(new_levels) # close top contour
 
     if contourf_kwargs.get("alpha") is None:
         contourf_kwargs["alpha"] = alpha
@@ -2022,6 +2130,8 @@ def stat_plot2d(
 def annotate(text, x, y,ax=None,
             horizontalalignment='center',
             verticalalignment='center',
+            ha = None,
+            va = None,
             transform='axes',
             color='k',
             fontsize=9,
@@ -2029,6 +2139,9 @@ def annotate(text, x, y,ax=None,
 
     if ax is None:
         ax = plt.gca()
+
+    horizontalalignment = ha or horizontalalignment
+    verticalalignment = va or verticalalignment
 
     if transform=='axes':
          transform = ax.transAxes
@@ -2064,6 +2177,7 @@ def corner(pos, names=None,smooth=1,bins=20,figsize=(12,12),**kwargs):
                         if j==pos.shape[1]-1: ax.set_ylabel(names[i])
                     except:
                         pass
+
             if j > i:
                 plt.delaxes(axs[i,j])
     fig.tight_layout()
@@ -2082,15 +2196,20 @@ def standardize(X, mean=True, std=True):
 
     return (X - mean) / std
 
-def plotoneone(color='k',lw=2,scale = 1, offset=0, ax=None,**kwargs):
+def plotoneone(color='k',lw=2,scale = 1, offset=0, p=None, invert=False, ax=None,**kwargs):
     if ax is None:
         ax = plt.gca()
     xlim, ylim = ax.get_xlim(), ax.get_ylim()
     b = np.min([xlim[0], ylim[0]])
     t = np.max([xlim[1], ylim[1]])
-    xs = np.array([b,t])
+    xs = np.array([b, t])
+    if p is not None:
+        scale, offset = p
     ys = scale * xs + offset
-    ax.plot(xs, ys, '-', color=color, lw=lw, **kwargs)
+    if invert:
+        ax.plot(ys, xs, '-', color=color, lw=lw, **kwargs)
+    else:
+        ax.plot(xs, ys, '-', color=color, lw=lw, **kwargs)
 
     ax.set_xlim(*xlim)
     ax.set_ylim(*ylim)
@@ -2232,3 +2351,116 @@ def confidence_bands(x, p, func, cov, N=1000, ci=90,ucb=None,lcb=None):
         lcb = 50 - ci / 2
     upper,lower=np.percentile(out,[lcb,ucb],axis=0)
     return lower,upper
+
+
+
+def detrend_iter_single_mod(t,f,p=1, low=3,high=3,cutboth=False):
+    '''
+     My iterative detrending algorithm, based on the concept in Vandenberg & Johnson 2015
+     borrowed clipping portion from scipy.stats.sigmaclip
+     with substantial modifications.
+    '''
+    clip = 1
+    c = np.asarray(f).ravel()
+    #mask = np.full(c.shape,True,dtype=np.bool)
+    mask = np.isfinite(c)
+    outmask = np.copy(mask) #np.full(c.shape,True, dtype=np.bool)
+    i = 0
+    while clip:
+        i+=1
+        c_trend = ju.PolyRegress(t[mask], c[mask],P=p,fit=True).y_hat
+        c_detrend = (c[mask] - c_trend + 1) #get masked detreneded lighcurve
+        c_mean = np.median(c_detrend) # use median for mean
+        c_std = c_detrend.std()
+        size = c_detrend.size
+        critlower = c_mean - c_std*low
+        critupper = c_mean + c_std*high
+        newmask = (c_detrend >= critlower) #& (c_detrend <= critupper)
+        outmask[mask] = c_detrend <= critupper
+        mask[mask] = newmask
+        clip = size - c[mask].size
+        print(i,clip, np.sum(mask), len(t))
+        #plt.plot(x[mask],c_trend[newmask])
+        if i > 50:
+            clip = 0
+    if cutboth:
+        outmask = mask
+    return t, c_trend, outmask
+
+
+def plot_to_origin(ax=None):
+    if ax is None:
+        ax = plt.gca()
+
+    ax.set_xlim(0,ax.get_xlim()[1])
+    ax.set_ylim(0,ax.get_ylim()[1])
+
+
+def jconvolve(h1, h2, x1, x2 = None, mode = 'math', normed = None):
+    """convolve two functions with equal sample spacing
+
+    mode: 'math' (default), 'average'
+           math: corresonds to simply doing the convolution of two functions
+           average: corresponds to averaging random variables
+           sum: correspondss to sum of random variables. same as 'math'
+    normed: None (default), 'density', 'max', float or int, 'none'
+            if a float or in, it will scale the peak to that value
+            density makes integral = 1
+            max scales to peak = 1
+            'none' = forces don't rescale (good for mode = math)
+
+    written for dealing with PDFs,
+
+    """
+    if mode=='sum':
+        mode = 'math'
+
+    if isinstance(normed,int):
+        normed = float(normed)
+
+    if x2 is None:
+        x2 = x1
+
+    # get sample spacing
+    delta = np.diff(x1)[0]
+
+    # get convolution #multiply by sample spacing (integral needs dx)
+    # numpy just uses the sum, not the integral
+    hconv = np.convolve(h1, h2) * delta
+
+    # math mode should'nt be scaled
+    # average mode should return density
+    if (mode=='math') & (normed is None):
+        normed = None
+    elif (mode=='average') & (normed is None):
+        normed = 'density'
+
+
+    # the starting point is x1[0] + x2[0]
+    Xconv = ((x1[0]+x2[0])/delta + np.arange(len(hconv))) * delta
+    if mode=='math':
+        pass
+    elif mode=='average':
+        #when computing the average, the x-axis is down-weighted
+        # by a factor of 2. this is accomplished, by rescaling
+        # the x-axis
+        Xconv = Xconv / 2 #np.linspace(b[0],b[-1],len(hconv))
+
+
+    # return properly scaled functions
+    if (normed is None) or (normed=='none'):
+        return hconv, Xconv
+
+    elif normed == 'density':
+        hconv /= np.sum(hconv * np.diff(Xconv)[0])
+        return hconv, Xconv
+
+    elif (normed == 'max') | (normed == 1):
+        hconv /= np.max(hconv)
+        return hconv, Xconv
+
+    elif isinstance(normed,float):
+        hconv /= np.max(hconv)
+        hconv *= normed
+        return hconv, Xconv
+

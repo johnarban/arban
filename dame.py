@@ -168,6 +168,7 @@ def getmaps(objec, make_global=False, vmin=0, vmax=0):
     momfile = glob.glob(f"{dirs}/co_survey/{survey}*mom.fits")
     rawfile = glob.glob(f"{dirs}/co_survey/{survey}*raw.fits")
     header3d = fits.getheader(momfile[0])
+    header3d_raw = fits.getheader(rawfile[0])
 
     co = fits.getdata(momfile[0])
     co_raw = fits.getdata(rawfile[0])
@@ -200,7 +201,7 @@ def getmaps(objec, make_global=False, vmin=0, vmax=0):
         planck*frac, header, co, co_raw,
         wco, peakv, header3d, survey,
          obj, noise, N, planck_fullres,
-         header_fullres, tdust, planck_err,frac)
+         header_fullres, tdust, planck_err,frac, header3d_raw)
 
 
 def analysis(ak, wco, boundary, noise_mask, co_mask=None,
@@ -405,9 +406,10 @@ def getlb(header, amap, origin=0):
     return WCS(header).all_pix2world(xs, ys, origin)
 
 
-def getv(header3d):
-    x = np.arange(header3d["NAXIS1"])
-    v = header3d["CRVAL1"] + x * header3d["CDELT1"]
+def getv(header3d, naxis=1):
+    naxis = int(naxis)
+    x = np.arange(header3d[f"NAXIS{naxis}"])
+    v = header3d[f"CRVAL{naxis}"] + x * header3d[f"CDELT{naxis}"]
     return v
 
 
@@ -480,7 +482,7 @@ def iscontained(bound,labels,label_id,lim=1):
             return np.sum(bound[good]) >= lim * np.sum(good)
 
 
-def closed_contour(field, bound, steps, lim=1, min_size=0):
+def closed_contour(field, bound, steps, lim=1, min_size=0, nan_value = 0):
     """[summary]
 
     Parameters
@@ -506,6 +508,7 @@ def closed_contour(field, bound, steps, lim=1, min_size=0):
     if bound is None:
             bound = np.full(field.shape, True, dtype=bool)
 
+    # we need a external border for the contour
     min_frac = np.sum(bound) / field.size
     if lim < min_frac:
         lim = 1
@@ -515,10 +518,15 @@ def closed_contour(field, bound, steps, lim=1, min_size=0):
         bound[-1,:] = False
         bound[:, -1] = False
         lim = 1
-    field = np.nan_to_num(field)
 
+    # get rid of nans (set to zero by default for positivily valued fields)
+    field = np.nan_to_num(field, nan = nan_value)
+
+    # want to search from highest to lowest
+    # like a dendrogram
     steps = np.sort(steps)[::-1]
 
+    #out_contour :: track largest contour so far
     out_contour=steps[0]
     for i in steps:
         shed = field >= i
