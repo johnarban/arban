@@ -2,12 +2,15 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from scipy import ndimage
+from scipy.stats import rv_histogram
 
 
 from astropy.io import fits
 from astropy.convolution import convolve, kernels
 from astropy.table import Table
 from astropy.wcs import WCS
+from astropy.constants import G as Ggrav
+import astropy.units as u
 
 import pandas as pd
 import glob
@@ -21,6 +24,8 @@ fastKDE = fk.fastKDE
 
 import plfit
 import powerlaw
+
+from tqdm import tqdm
 
 np.seterr(divide='ignore')
 
@@ -136,6 +141,11 @@ def radius(mask, pixscale):
 def sigma(mass, radius):
     return mass / (np.pi * (radius ** 2))
 
+def virial_mass(sigma, radius):
+    sigma_3d_sq = 3 * (sigma * u.km/u.s) ** 2
+    r = radius * u.pc
+    return  (sigma_3d_sq * r / Ggrav).to('Msun')
+
 def mass_radius(surfd, mask, scale, pixscale, err = None):
     N = np.sum(mask)
     m = np.sum(surfd[mask] * scale * (pixscale ** 2))
@@ -148,7 +158,7 @@ def mass_radius(surfd, mask, scale, pixscale, err = None):
 
 
 
-def getmaps(objec, make_global=False, vmin=0, vmax=0):
+def getmaps(objec, make_global=False, imin=0, imax=0):
     dirs = "/Users/johnlewis/dameco"
     file = glob.glob(f"{dirs}/co_survey/*{objec}*mom.fits")[0]
     print("getmaps::", objec)
@@ -172,24 +182,31 @@ def getmaps(objec, make_global=False, vmin=0, vmax=0):
 
     co = fits.getdata(momfile[0])
     co_raw = fits.getdata(rawfile[0])
-    if vmin == vmax:
+    if (imin == imax):
         wco = np.nansum(co, axis=2) * np.abs(header3d["CDELT1"])
         peakv = np.argmax(np.nan_to_num(co), axis=2)
         frac = 1
         offwco = wco * 0
     else:
-        wco = np.nansum(co[:, :, vmin:vmax], axis=2) * \
-            np.abs(header3d["CDELT1"])
-        offwco = np.nansum(co[:, :, 0:vmin], axis=2) + np.nansum(
-            co[:,:, vmax:], axis=2)
+        wco = np.nansum(co[:, :, imin:imax], axis=2) * np.abs(header3d["CDELT1"])
+        offwco = np.nansum(co[:, :, 0:imin], axis=2) + np.nansum(
+            co[:,:, imax:], axis=2)
+        offwco *= np.abs(header3d["CDELT1"])
+        # total = np.nansum(co,axis=2) * np.abs(header3d["CDELT1"])
 
-        peakv = np.argmax(np.nan_to_num(co[:,:, vmin:vmax]), axis=2)
+        peakv = np.argmax(np.nan_to_num(co[:,:, imin:imax]), axis=2)
         with np.errstate(all='ignore'):
-            frac = (wco) / (wco + offwco)  # (np.nansum(co,axis=2)*.65)
-        frac[np.isclose(offwco, 0, atol=0.31)] = 1
-        frac[np.isclose(wco, 0, atol=0.31)] = 0
-        frac[wco < 0] = 0
-        frac[offwco < 0] = 1
+            frac = wco / (wco + offwco)  # (np.nansum(co,axis=2)*.65)
+        #frac[np.isclose(offwco, 0, atol=0.31)] = 1
+        #frac[np.isclose(wco, 0, atol=0.31)] = 0
+        # frac[((wco + offwco) < wco) & (wco < 0)] = 0
+        # frac[((wco + offwco) < wco) & (wco > 0)] = 1
+        # frac[wco < 0] = 0
+        # frac[offwco < 0] = 1
+        frac[(wco < 0) & (offwco>0) ] = 0
+        #frac[(wco < 0) & (offwco<=0) ] = 1
+        frac[(wco==0) & (offwco==0)] = 1
+        frac[offwco <= 0]=1
 
     # if co_raw.shape == co.shape:
     #     _, noise, N = mask_dame_wco(co, co_raw)
@@ -243,6 +260,7 @@ def analysis(ak, wco, boundary, noise_mask, co_mask=None,
     radius_co = radius(comask, pixel_pc)
     sigma_co_co = sigma(mass_co_co, radius_co)
     sigma_ak_co = sigma(mass_ak_co, radius_co)
+
     columns = ["mass_ak_ak", "mass_co_ak",
                "mass_co_xco_ak", "mass_co_co",
                 "mass_ak_co", "mass_co_xco",
@@ -519,6 +537,8 @@ def closed_contour(field, bound, steps, lim=1, min_size=0, nan_value = 0):
         bound[:, -1] = False
         lim = 1
 
+
+
     # get rid of nans (set to zero by default for positivily valued fields)
     field = np.nan_to_num(field, nan = nan_value)
 
@@ -527,6 +547,7 @@ def closed_contour(field, bound, steps, lim=1, min_size=0, nan_value = 0):
     steps = np.sort(steps)[::-1]
 
     #out_contour :: track largest contour so far
+    out_good_labels = None
     out_contour=steps[0]
     for i in steps:
         shed = field >= i
@@ -537,18 +558,23 @@ def closed_contour(field, bound, steps, lim=1, min_size=0, nan_value = 0):
         #good_contained = [iscontained(bound,label,g,lim=1) for g in good]
 
         if np.sum(good_labels&bound)>=lim*np.sum(good_labels):
-        #if np.all(good_contained):
+        #if np.any(good_contained):
             out_contour = i
             out_good_labels = good_labels.copy()
+            #out_good_labels = np.isin(label,good[good_contained])
             out_label = label * 1
             continue
         else:
+            if out_good_labels is None:
+                out_good_labels = good_labels.copy()
+                #out_good_labels = np.isin(label,good[good_contained])
+                out_label = label * 1
             break
 
     return out_good_labels, out_contour, out_label
 
 
-def largest_closed_contour(field, bound, steps, lim=1, min_size=0):
+def largest_closed_contour(field, bound, steps, lim=1, min_size=0,progress=False):
     """[summary]
 
     Parameters
@@ -575,9 +601,10 @@ def largest_closed_contour(field, bound, steps, lim=1, min_size=0):
             bound = np.full(field.shape, True, dtype=bool)
 
     min_frac = np.sum(bound) / field.size
+    h,w = bound.shape
     if lim < min_frac:
         lim = 1
-    if min_frac == 1:
+    if min_frac ==1:
         bound[0,:] = False
         bound[:, 0] = False
         bound[-1,:] = False
@@ -586,6 +613,9 @@ def largest_closed_contour(field, bound, steps, lim=1, min_size=0):
     field = np.nan_to_num(field)
 
     largest_old = min_size
+
+    if progress:
+        steps = tqdm(steps)
     for i in steps:
         shed = field >= i
         label = skmorph.label(shed)
@@ -604,7 +634,7 @@ def largest_closed_contour(field, bound, steps, lim=1, min_size=0):
             largest_new = max(sizes)
             largest_label = label == contained[argmax]
 
-            # stop once contour size stops increasing
+            # dont't change if contour size stops increasing
             if largest_new >= largest_old:
                 if largest_new > largest_old:
                     largest_contour = largest_label
@@ -613,3 +643,4 @@ def largest_closed_contour(field, bound, steps, lim=1, min_size=0):
 
             largest_old = largest_new
     return largest_contour, largest_contour_level, labels
+
