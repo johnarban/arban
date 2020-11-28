@@ -59,6 +59,15 @@ def set_plot_opts(serif_fonts=True):
 def check_iterable(arr):
     return hasattr(arr,'__iter__')
 
+def color_array(arr,alpha=1):
+    img = np.zeros(arr.shape + (4,))
+    for row in range(arr.shape[0]):
+        for col in range(arr.shape[1]):
+            c = mpl.colors.to_rgb(arr[row,col])
+            img[row,col,0:3] = c
+            img[row,col,3] = alpha
+    return img
+
 
 def invert_color(ml,*args, **kwargs):
     rgb = mpl.colors.to_rgb(ml)
@@ -107,6 +116,10 @@ def set_xylim(xlim=None, ylim=None, ax=None, origin=None):
     if ylim is None:
         ylim = ax.get_ylim()
 
+    if isinstance(xlim, tuple):
+        xlim = list(xlim)
+    if isinstance(ylim, tuple):
+        ylim = list(ylim)
     if origin is not None:
         if origin is True:
             if ax.get_xaxis().get_scale()[:3] != 'log':
@@ -118,7 +131,7 @@ def set_xylim(xlim=None, ylim=None, ax=None, origin=None):
             ylim[0] = origin[1]
     ax.set_xlim(xlim)
     ax.set_ylim(ylim)
-    return xlim, ylim
+    return tuple(xlim), tuple(ylim)
 
 def _normalize_location_orientation(location, orientation):
     loc_settings = {
@@ -312,8 +325,10 @@ def sort_bool(g, srt):
     return srt[g[srt[isrt]]]
 
 def wcsaxis(header, N=6, ax=None, fmt="%0.2f", use_axes=False):
+    oldax = plt.gca()
     if ax is None:
         ax = plt.gca()
+    plt.sca(ax)
     xlim = ax.axes.get_xlim()
     ylim = ax.axes.get_ylim()
 
@@ -370,6 +385,8 @@ def wcsaxis(header, N=6, ax=None, fmt="%0.2f", use_axes=False):
 
     ax.axes.set_xlim(xlim[0], xlim[1])
     ax.axes.set_ylim(ylim[0], ylim[1])
+
+    plt.sca(oldax)
     return ax
 
 
@@ -750,9 +767,9 @@ def shift_bins(arr, phase=0, nonneg=False):
     else:
         return arr
 
-def get_bin_edges(x):
+def get_bin_edges(x,log=False):
     diff = np.diff(x)
-    if np.isclose(diff[0] , diff[-1]):
+    if not log:
         dx = diff[0]
         return np.r_[x - dx / 2, x[-1] + dx / 2]
     else:
@@ -1126,6 +1143,13 @@ def ortho_dist(x, y, m, b):
     ortho_dist = (y - m * x - b) / np.sqrt(1 + m ** 2)
     return ortho_dist
 
+from scipy.optimize import curve_fit
+def curve_fit_line(x,y,yerr=None):
+    def model(xdata, m, b):
+        return m * xdata + b
+    p0 = np.polyfit(x,y,1)
+    out = curve_fit(model, x, y, p0 = p0, sigma=yerr )
+    return out
 
 class PolyRegress(object):
     ###
@@ -1311,18 +1335,31 @@ def rms(X, axis=None):
 
 
 def wcs_to_grid(header, index=False, verbose=False):
+    """wcs_to_grid creates grids (lon,lat) for a given WCS header
+
+    Parameters
+    ----------
+    header : astropy fits header
+        and astropy fits header
+    index : bool, optional
+        just return indices, by default False
+    verbose : bool, optional
+        [unused input], by default False
+
+    Returns
+    -------
+    [tuple]
+        (longitude, latitude)
+    """
+
     wcs = WCS(header)
-    naxis = header['NAXIS'] # naxis
     naxis1 = header['NAXIS1']  # naxis1
     naxis2 = header['NAXIS2']  # naxis2
-    x, y = np.arange(naxis1), np.arange(naxis2)
+    ij = np.indices(wcs.array_shape)
     if not index:
-        # first FITS pixel is 1, numpy index is 0
-        xc, _ = wcs.all_pix2world(x, x * 0, 0)
-        _, yc = wcs.all_pix2world(y * 0, y, 0)
-        coord_grid = np.meshgrid(xc, yc)
+        coord_grid = wcs.low_level_wcs.array_index_to_world_values(*ij)
     else:
-        coord_grid = np.meshgrid(x, y)
+        coord_grid = ij
 
     return coord_grid
 
@@ -1470,6 +1507,38 @@ def plot_walkers(sampler, limits=None, bad=None):
 # Make it scale properly
 # How does matplotlib
 # scaling work
+def combine_cmap(cmaps, lower, upper, name = 'custom', N = None, register=True):
+
+    n = len(cmaps)
+
+    for ic,c in enumerate(cmaps):
+        if isinstance(c, str):
+            cmaps[ic] = mpl.cm.get_cmap(c)
+
+    if N is None:
+        N = [256] * n
+
+    values = np.array([])
+    colors = np.empty((0,4))
+
+    for i in range(n):
+        step = (upper[i] - lower[i])/N[i]
+        xcols = np.arange(lower[i],upper[i],step)
+        values = np.append(values,xcols)
+        xcols -= xcols.min()
+        xcols /= xcols.max()
+        cols = cmaps[i](xcols)
+        colors = np.vstack([colors,cols])
+    values -= values.min()
+    values /= values.max()
+
+    arr = list(zip(values,colors))
+    cmap = mpl.colors.LinearSegmentedColormap.from_list(name,arr)
+
+    if (name!='custom') & register:
+        mpl.cm.register_cmap(name=name,cmap=cmap)
+
+    return cmap
 
 
 def custom_cmap(colormaps, lower, upper, log=(0, 0)):
@@ -1498,6 +1567,10 @@ def custom_cmap(colormaps, lower, upper, log=(0, 0)):
         lower = lower
         upper = upper
         norm = upper[-1:][0]
+
+    for ic,c in enumerate(colormaps):
+        if isinstance(c, str):
+            colormaps[ic] = mpl.cm.get_cmap(c)
 
     cdict = {"red": [], "green": [], "blue": []}
 
@@ -1701,7 +1774,7 @@ def extend_hist(H, X1, Y1, fill=0, padn=2):
     return H2, X2, Y2
 
 
-def hist2d(x, y, range=None, bins=20, smooth=False, clip=False):
+def hist2d(x, y, range=None, bins=20, smooth=False, clip=False, pad=True, normed=True, weights=None):
     if bins is not None:
         xedges = np.histogram_bin_edges(x, bins=bins)
         yedges = np.histogram_bin_edges(y, bins=bins)
@@ -1714,19 +1787,23 @@ def hist2d(x, y, range=None, bins=20, smooth=False, clip=False):
         range = None
     else:
         range = list(map(np.sort, range))
-    H, X, Y = np.histogram2d(x, y, bins=bins, range=range)
+    H, X, Y = np.histogram2d(x, y, bins=bins, range=range, weights=weights)
 
     X1, Y1 = 0.5 * (X[1:] + X[:-1]), 0.5 * (Y[1:] + Y[:-1])
 
-    padn = np.max([2, int(smooth * 2 // 1)])
-    H, X1, Y1 = extend_hist(H, X1, Y1, fill=0, padn=padn)
+    if pad:
+        padn = np.max([2, int(smooth * 2 // 1)])
+        H, X1, Y1 = extend_hist(H, X1, Y1, fill=0, padn=padn)
 
     if smooth:
         if clip:
             oldH = H == 0
         H = nd.gaussian_filter(H, smooth)
 
-    sm = data2norm(H)
+    if normed:
+        sm = data2norm(H)
+    else:
+        sm = H
 
     return sm.T, X1, Y1
 
@@ -2135,7 +2212,9 @@ def annotate(text, x, y,ax=None,
             transform='axes',
             color='k',
             fontsize=9,
-            bbox=dict(facecolor='y', alpha=0.5), **kwargs):
+            facecolor='w',
+            alpha=0.75,
+            bbox=dict(), **kwargs):
 
     if ax is None:
         ax = plt.gca()
@@ -2147,6 +2226,8 @@ def annotate(text, x, y,ax=None,
          transform = ax.transAxes
     elif transform == 'data':
         transform = ax.transData
+    bbox1 = dict(facecolor=facecolor, alpha=alpha)
+    bbox.update(bbox1)
     text = ax.text(x,y,text,horizontalalignment=horizontalalignment,
                                 verticalalignment=verticalalignment,
                                 transform=transform,
@@ -2342,9 +2423,15 @@ def confidence_bands(x, p, func, cov, N=1000, ci=90,ucb=None,lcb=None):
     x, inputs
     p, parameters
     func - function called f(x,*p)
+
+    if linear then p, should be in the order returned
+    by np.polyfit. If used PolyRegress then pass p=PolyRegress.b[::-1]
     '''
     ps = np.random.multivariate_normal(mean=p, cov=cov, size=N)
-    out = np.array([func(x,*pi) for pi in ps])
+    if isinstance(func,str):
+        if (func=='line')|(func=='lin'):
+            func = lambda x,p: np.polyval(p,x)
+    out = np.array([func(x,pi) for pi in ps])
     if ucb is None:
         ucb = 50 + ci / 2
     if lcb is None:
@@ -2368,14 +2455,15 @@ def detrend_iter_single_mod(t,f,p=1, low=3,high=3,cutboth=False):
     i = 0
     while clip:
         i+=1
-        c_trend = ju.PolyRegress(t[mask], c[mask],P=p,fit=True).y_hat
+        m = PolyRegress(t[mask], c[mask],P=p,fit=True)
+        c_trend = m.y_hat
         c_detrend = (c[mask] - c_trend + 1) #get masked detreneded lighcurve
         c_mean = np.median(c_detrend) # use median for mean
         c_std = c_detrend.std()
         size = c_detrend.size
         critlower = c_mean - c_std*low
         critupper = c_mean + c_std*high
-        newmask = (c_detrend >= critlower) #& (c_detrend <= critupper)
+        newmask = (c_detrend >= critlower) & (c_detrend <= critupper)
         outmask[mask] = c_detrend <= critupper
         mask[mask] = newmask
         clip = size - c[mask].size
@@ -2385,7 +2473,7 @@ def detrend_iter_single_mod(t,f,p=1, low=3,high=3,cutboth=False):
             clip = 0
     if cutboth:
         outmask = mask
-    return t, c_trend, outmask
+    return t, c_trend, outmask, m
 
 
 def plot_to_origin(ax=None):
@@ -2464,3 +2552,203 @@ def jconvolve(h1, h2, x1, x2 = None, mode = 'math', normed = None):
         hconv *= normed
         return hconv, Xconv
 
+def jconvolve_funcs(x1, y1, x2, y2, outx,interp_kind='nearest',fill_value=0,**kwargs):
+    """
+    convolve 2 arrays on different x-axes using interpolated functions
+    jconvolve_funcs(x1, y1, x2, y2, outx,interp_kind='nearest',fill_value=0)
+    fill_value is how the arrays will be extended.
+
+    """
+    # take two array and find the c
+    # for now assume x1 == x2
+    f = interpolate.interp1d(x1,y1,fill_value=fill_value,kind=interp_kind,**kwargs)
+    g = interpolate.interp1d(x2,y2,fill_value=fill_value,kind=interp_kind,**kwargs)
+    xmin, xmax = ju.minmax(np.append(x1,x2))
+    func = lambda tau: f(tau) * g(outx-tau)
+    ht = integrate.quad_vec(func,xmin,xmax)[0]
+    return ht,outx
+
+def arr_to_rgb(arr,rgb = (0,0,0),alpha=1,invert=False,ax=None):
+    """
+    arr to be made a mask
+    rgb:assumed using floats (0..1,0..1,0..1)
+
+    """
+    # arr should be scaled to 1
+    img = np.asarray(arr,dtype=np.float64)
+    img = img - np.nanmin(img)
+    img = img / np.nanmax(img)
+    im2 = np.zeros(img.shape + (4,))
+
+    if isinstance(rgb,str):
+        rgb = mpl.colors.to_rgb(rgb)
+
+    if invert:
+        img = 1 - img
+    im2[:, :, 3] = img * alpha
+    r,g,b = rgb
+    im2[:,:,0] = r
+    im2[:,:,1] = g
+    im2[:,:,2] = b
+
+#     if ax is None:
+#         ax = plt.gca()
+#     plt.sca(ax)
+#     plt.imshow(im2)
+
+    return im2
+
+
+def pdf_pareto(t, a, k, xmax=None):
+    """PDF of Pareto distribution
+
+    Parameters
+    ----------
+    t : input
+        array
+    a : power-law power (a = alpha-1 from real Pareto)
+        array
+    k : minimum value for power law
+        array
+    xmax : max value for, optional, by default None
+
+    Returns
+    -------
+    PDF(t|a,k,xmax)
+        numpy array
+    """
+    if xmax is None:
+        out = ((a-1)/k) * (t/k)**(-a)
+        out[(t<k)] = 0
+        return out
+    else:
+        out = ((a-1)/(k**(1-a) - xmax**(1-a))) * t**(-a)
+        out[(t<=k)|(t>xmax)] = 0
+        return out
+
+def cdf_pareto(t, a, k, xmax=None):
+    """CDF of Pareto distribution
+
+    Parameters
+    ----------
+    t : input
+        array
+    a : power-law power (a = alpha-1 from real Pareto)
+        array
+    k : minimum value for power law
+        array
+    xmax : max value for, optional, by default None
+
+    Returns
+    -------
+    CDF(t|a,k,xmax)
+        numpy array
+    """
+    if xmax is None:
+        out = 1 - (k/t)**(a-1)
+        out[t<k] = 0
+        return out
+    else:
+        out = (1 - (t/k)**(1 - a))/(1 - (xmax/k)**(1 - a))
+        out[t<=k] = 0
+        out[t>xmax] = 1
+        return out
+
+
+
+def lvp(x,p,v):
+    return p + v * x[:,np.newaxis]
+
+def eigen_decomp(A, b=[0, 0], return_slope=True):
+    eVa, eVe = np.linalg.eig(A)
+
+
+    P, D = eVe, np.diag(eVa)
+    S = D**.5
+
+    T = P @ S # transform from real to eigenspace
+    # Columns of T are scaled eigenvectors
+
+    # for eigenvector in T
+
+
+    m = P[1]/P[0]
+    y_int = -m * b[0] + b[1]
+    major = np.argmax(eVa)
+
+    if return_slope:
+        return m[major], y_int[major]
+    else:
+        return P, D, T
+
+def eigenplot(A, b=[0, 0], n=3, data=False, vec_c='r', ell_c='b', ell_lw=2, **kwargs):
+    # https://janakiev.com/blog/covariance-matrix/
+    eVa, eVe = np.linalg.eig(A)
+
+    #print(eVe.T[0].dot(eVe.T[1]))
+
+    if data:
+        data = data = np.random.multivariate_normal(b,A,2000)
+
+        plt.plot(*data.T,'k.')
+
+    P, D = eVe, np.diag(eVa)
+    S = D**.5
+
+    T = P @ S # transform from real to eigenspace
+    # Columns of T are scaled eigenvectors
+
+    # for eigenvector in T
+
+
+    for i in T.T:
+        i = b + n*i
+        plt.plot([b[0], i[0]], [b[1], i[1]], c=vec_c, zorder=100,**kwargs)
+
+
+    # for e, v in zip(eVa, eVe.T):
+    #     plt.plot([0, 3*np.sqrt(e)*v[0]], [0, 3*np.sqrt(e)*v[1]], 'k-', lw=2)
+
+    #plt.axis('equal')
+
+
+    m = P[1]/P[0]
+    y_int = -m * b[0] + b[1]
+    major = np.argmax(eVa)
+    angle = np.arctan(m)[major] * 180/np.pi
+    #print(angle)
+    # get the norm of the
+    #a1 = 2 * n * np.linalg.norm(T, axis=0)
+    a1 = 2 * n * np.sqrt(eVa)
+    h, w = a1[np.argsort(eVa)]
+
+    pat = mpl.patches.Ellipse(angle=angle, xy=b, width=w, height=h,
+            zorder=100, facecolor='none',
+            edgecolor=ell_c,lw=ell_lw)
+    plt.gca().add_artist(pat)
+
+    #print(m[major], y_int[major])
+    return m[major], y_int[major]
+
+def eigenplot_from_data(x,y,n=3,data=False,vec_c='r',ell_c='b',ell_lw=2):
+    g = np.isfinite(x+y)
+    cov = np.cov(x[g],y[g])
+    b = np.mean(x[g]),np.mean(y[g])
+    if data:
+        plt.plot(x,y,'k.',zorder=0)
+    out = eigenplot(cov,b,data=False,n=n,vec_c=vec_c,ell_c=ell_c,ell_lw=ell_lw)
+    return out
+
+
+def print_bces(bc):
+    a,b,erra,errb,covab=bc
+    types = ['y/x','x/y','bisec','ortho']
+
+    for i,t in enumerate(types):
+        print(f'{t}: \t m:{a[i]:6.3g} +/- {erra[i]:6.3g} \t b:{b[i]:6.3g} +/- {errb[i]:6.3g}')
+
+def figsize(arr, default=[6, 6]):
+    arr = np.array(arr)
+    norm = np.array(arr.shape)/np.max(arr.shape)
+    figsize = (np.array(default) * norm)[::-1]
+    return figsize
