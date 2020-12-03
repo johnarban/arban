@@ -1776,10 +1776,22 @@ def extend_hist(H, X1, Y1, fill=0, padn=2):
 
 def hist2d(x, y, range=None, bins=20, smooth=False, clip=False, pad=True, normed=True, weights=None):
     if bins is not None:
-        xedges = np.histogram_bin_edges(x, bins=bins)
-        yedges = np.histogram_bin_edges(y, bins=bins)
-        bins = [xedges, yedges]
-        range = None
+        if range is None:
+            if len(bins) == 2:
+                xedges = np.histogram_bin_edges(x, bins=bins[0])
+                yedges = np.histogram_bin_edges(y, bins=bins[1])
+            else:
+                xedges = np.histogram_bin_edges(x, bins=bins)
+                yedges = np.histogram_bin_edges(y, bins=bins)
+            bins = [xedges, yedges]
+        else:
+            if len(list(sum(range,())))==4:
+                xedges = np.histogram_bin_edges(x, bins=bins, range=range[0])
+                yedges = np.histogram_bin_edges(y, bins=bins, range=range[1])
+            else:
+                xedges = np.histogram_bin_edges(x, bins=bins, range=range)
+                yedges = np.histogram_bin_edges(y, bins=bins, range=range)
+            bins = [xedges, yedges]
     elif range is None:
         xedges = np.histogram_bin_edges(x, bins=bins)
         yedges = np.histogram_bin_edges(y, bins=bins)
@@ -2418,7 +2430,7 @@ def errorbar_fill(x=None, y=None, yerr=None, *args, ax=None, mid=True, \
     return None
 
 
-def confidence_bands(x, p, func, cov, N=1000, ci=90,ucb=None,lcb=None):
+def confidence_bands(x, p, cov, func, N=1000, ci=90,ucb=None,lcb=None):
     '''
     x, inputs
     p, parameters

@@ -48,12 +48,12 @@ thresholds = np.linspace(m,n,k)
 def get_turnovers(x, y, thresholds, k = 100, use_aic = False,
                   plot_line=False, plot_features=False,plot_data=False,
                   ax=None,unlogx=False,unlogy=False,unlog=False,zorder=100):
-    
+
     g = np.isfinite(1/x + 1/y)
     x = x[g]
     y = y[g]
-    
-    basis = np.hstack([x[:, np.newaxis],  np.maximum(0,  np.column_stack([x]*k)-thresholds)]) 
+
+    basis = np.hstack([x[:, np.newaxis],  np.maximum(0,  np.column_stack([x]*k)-thresholds)])
     if use_aic:
         model = LassoLarsIC().fit(basis, y)
     else:
@@ -61,10 +61,10 @@ def get_turnovers(x, y, thresholds, k = 100, use_aic = False,
 
     if ax is None:
         ax = plt.gca()
-       
+
     fx = lambda z: z
     fy = lambda z: z
-    
+
     if unlogx:
         fx = lambda z: 10**z
         fy = lambda z: z
@@ -74,10 +74,10 @@ def get_turnovers(x, y, thresholds, k = 100, use_aic = False,
     if unlog:
         fx = lambda z: 10**z
         fy = lambda z: 10**z
-    
-   
-        
-    
+
+
+
+
     if plot_data:
         ax.plot(fx(x),fx(y),'k.',zorder=zorder)
     if plot_line:
@@ -88,3 +88,17 @@ def get_turnovers(x, y, thresholds, k = 100, use_aic = False,
             ax.axvline(fx(th),0,1,color='r',alpha=0.5,zorder=zorder)
 
     return model, thresholds
+
+
+
+def pwl_w2brks(x, x1, x2, k1, k2, k3, b1):
+    c1 = x < x1
+    c2 = (x>= x1) & (x<x2)
+    c3 = x>=x2
+
+    f1 = lambda x: x * k1 + b1
+    b2 = (k1-k2) * x1 + b1
+    f2 = lambda x: x * k2 + b2
+    b3 = (k2 - k3) * x2 + b2
+    f3 = lambda x: x * k3 + b3
+    return np.piecewise(x, [c1,c2,c3], [f1,f2,f3])
