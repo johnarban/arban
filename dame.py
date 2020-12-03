@@ -20,6 +20,7 @@ import sys
 
 import skimage.morphology as skmorph
 from fastkde import fastKDE as fk
+
 fastKDE = fk.fastKDE
 
 import plfit
@@ -27,7 +28,8 @@ import powerlaw
 
 from tqdm import tqdm
 
-np.seterr(divide='ignore')
+np.seterr(divide="ignore")
+
 
 def header3dto2d(hdr):
     """convert DAME CO Survey header from
@@ -74,9 +76,9 @@ def getheader2d(filen):
     return 0
 
 
-def get_mass_over_av(akmap, wco, df=None,
-                     pixel_scale=0.125, dist=450, lim=0.1,
-                     scale=183, alpha_co=4.389):
+def get_mass_over_av(
+    akmap, wco, df=None, pixel_scale=0.125, dist=450, lim=0.1, scale=183, alpha_co=4.389
+):
 
     above_lim = akmap >= lim
     good = np.isfinite(akmap) & above_lim
@@ -129,8 +131,8 @@ def mass(surfd, mask, scale, pixscale, err=None):
         return np.sum(surfd[mask] * scale * (pixscale ** 2))
     else:
         m = np.sum(surfd[mask] * scale * (pixscale ** 2))
-        e = np.sum((err[mask] * scale * pixscale ** 2))** 0.5
-        return m,e
+        e = np.sum((err[mask] * scale * pixscale ** 2)) ** 0.5
+        return m, e
 
 
 def radius(mask, pixscale):
@@ -141,28 +143,29 @@ def radius(mask, pixscale):
 def sigma(mass, radius):
     return mass / (np.pi * (radius ** 2))
 
-def virial_mass(sigma, radius):
-    sigma_3d_sq = 3 * (sigma * u.km/u.s) ** 2
-    r = radius * u.pc
-    return  (sigma_3d_sq * r / Ggrav).to('Msun')
 
-def mass_radius(surfd, mask, scale, pixscale, err = None):
+def virial_mass(sigma, radius):
+    sigma_3d_sq = 3 * (sigma * u.km / u.s) ** 2
+    r = radius * u.pc
+    return (sigma_3d_sq * r / Ggrav).to("Msun")
+
+
+def mass_radius(surfd, mask, scale, pixscale, err=None):
     N = np.sum(mask)
     m = np.sum(surfd[mask] * scale * (pixscale ** 2))
     r = np.sqrt(N * (pixscale ** 2) / np.pi)
     if err is None:
         return m, r
     else:
-        merr = np.sqrt(np.sum((err[mask] * scale * pixscale)** 2))
+        merr = np.sqrt(np.sum((err[mask] * scale * pixscale) ** 2))
         return m, r, merr
-
 
 
 def getmaps(objec, make_global=False, imin=0, imax=0):
     dirs = "/Users/johnlewis/dameco"
     file = glob.glob(f"{dirs}/co_survey/*{objec}*mom.fits")[0]
     print("getmaps::", objec)
-    #if make_global:
+    # if make_global:
     #    global planck, header, co, co_raw, wco, peakv, header3d, survey, obj, noise, N
 
     survey, obj, *_, = os.path.basename(file).split("_")
@@ -171,8 +174,10 @@ def getmaps(objec, make_global=False, imin=0, imax=0):
     planck = 3233 * fits.getdata(f"{dirs}/{obj}/{obj}_TAU353.fits")
     header = fits.getheader(f"{dirs}/{obj}/{obj}_TAU353.fits")
     tdust = fits.getdata(f"{dirs}/{obj}/{obj}_TEMP.fits")
+    beta = fits.getdata(f"{dirs}/{obj}/{obj}_BETA.fits")
     planck_err = 3233 * fits.getdata(f"{dirs}/{obj}/{obj}_ERR_TAU.fits")
     planck_fullres = 3233 * fits.getdata(f"{dirs}/{obj}/{obj}_TAU353_full.fits")
+    planck_errfullres = 3233 * fits.getdata(f"{dirs}/{obj}/{obj}_ERR_TAU_full.fits")
     header_fullres = fits.getheader(f"{dirs}/{obj}/{obj}_TAU353_full.fits")
 
     momfile = glob.glob(f"{dirs}/co_survey/{survey}*mom.fits")
@@ -180,9 +185,19 @@ def getmaps(objec, make_global=False, imin=0, imax=0):
     header3d = fits.getheader(momfile[0])
     header3d_raw = fits.getheader(rawfile[0])
 
+    tmass = glob.glob(f"{dirs}/{obj}/nicest_reproj_smooth125.fits")[0]
+    tmass = fits.getdata(tmass)
+    etmass = glob.glob(f"{dirs}/{obj}/nicest_ivar_reproj_smooth125.fits")[0]
+    etmass = fits.getdata(etmass)
+
+    tmass_full = glob.glob(f"{dirs}/{obj}/nicest_reproj_full.fits")[0]
+    tmass_full = fits.getdata(tmass_full)
+    etmass_full = glob.glob(f"{dirs}/{obj}/nicest_ivar_reproj_full.fits")[0]
+    etmass_full = fits.getdata(etmass_full) ** -0.5
+
     co = fits.getdata(momfile[0])
     co_raw = fits.getdata(rawfile[0])
-    if (imin == imax):
+    if imin == imax:
         wco = np.nansum(co, axis=2) * np.abs(header3d["CDELT1"])
         peakv = np.argmax(np.nan_to_num(co), axis=2)
         frac = 1
@@ -190,23 +205,24 @@ def getmaps(objec, make_global=False, imin=0, imax=0):
     else:
         wco = np.nansum(co[:, :, imin:imax], axis=2) * np.abs(header3d["CDELT1"])
         offwco = np.nansum(co[:, :, 0:imin], axis=2) + np.nansum(
-            co[:,:, imax:], axis=2)
+            co[:, :, imax:], axis=2
+        )
         offwco *= np.abs(header3d["CDELT1"])
         # total = np.nansum(co,axis=2) * np.abs(header3d["CDELT1"])
 
-        peakv = np.argmax(np.nan_to_num(co[:,:, imin:imax]), axis=2)
-        with np.errstate(all='ignore'):
+        peakv = np.argmax(np.nan_to_num(co[:, :, imin:imax]), axis=2)
+        with np.errstate(all="ignore"):
             frac = wco / (wco + offwco)  # (np.nansum(co,axis=2)*.65)
-        #frac[np.isclose(offwco, 0, atol=0.31)] = 1
-        #frac[np.isclose(wco, 0, atol=0.31)] = 0
+        # frac[np.isclose(offwco, 0, atol=0.31)] = 1
+        # frac[np.isclose(wco, 0, atol=0.31)] = 0
         # frac[((wco + offwco) < wco) & (wco < 0)] = 0
         # frac[((wco + offwco) < wco) & (wco > 0)] = 1
         # frac[wco < 0] = 0
         # frac[offwco < 0] = 1
-        frac[(wco < 0) & (offwco>0) ] = 0
-        #frac[(wco < 0) & (offwco<=0) ] = 1
-        frac[(wco==0) & (offwco==0)] = 1
-        frac[offwco <= 0]=1
+        frac[(wco < 0) & (offwco > 0)] = 0
+        # frac[(wco < 0) & (offwco<=0) ] = 1
+        frac[(wco == 0) & (offwco == 0)] = 1
+        frac[offwco <= 0] = 1
 
     # if co_raw.shape == co.shape:
     #     _, noise, N = mask_dame_wco(co, co_raw)
@@ -215,15 +231,47 @@ def getmaps(objec, make_global=False, imin=0, imax=0):
     N = np.nansum(~bad, axis=-1)
 
     return (
-        planck*frac, header, co, co_raw,
-        wco, peakv, header3d, survey,
-         obj, noise, N, planck_fullres,
-         header_fullres, tdust, planck_err,frac, header3d_raw)
+        planck * frac,
+        header,
+        co,
+        co_raw,
+        wco,
+        peakv,
+        header3d,
+        survey,
+        obj,
+        noise,
+        N,
+        planck_fullres,
+        header_fullres,
+        tdust,
+        planck_err,
+        frac,
+        header3d_raw,
+        tmass,
+        etmass,
+        tmass_full,
+        etmass_full,
+        planck_errfullres,
+        beta,
+    )
 
 
-def analysis(ak, wco, boundary, noise_mask, co_mask=None,
-            df=None, pixel_scale=0.125, dist=1000, lim=0.1,
-            ak_scale=183, ak_nh2=83.5e20, alpha_co=4.389, name="Cloud", ):
+def analysis(
+    ak,
+    wco,
+    boundary,
+    noise_mask,
+    co_mask=None,
+    df=None,
+    pixel_scale=0.125,
+    dist=1000,
+    lim=0.1,
+    ak_scale=183,
+    ak_nh2=83.5e20,
+    alpha_co=4.389,
+    name="Cloud",
+):
     """
 
     boundary: rectangular cloud boundary
@@ -261,16 +309,30 @@ def analysis(ak, wco, boundary, noise_mask, co_mask=None,
     sigma_co_co = sigma(mass_co_co, radius_co)
     sigma_ak_co = sigma(mass_ak_co, radius_co)
 
-    columns = ["mass_ak_ak", "mass_co_ak",
-               "mass_co_xco_ak", "mass_co_co",
-                "mass_ak_co", "mass_co_xco",
-                "mass_co_noise_ak", "radius_co",
-                "radius_ak", "sigma_ak_ak",
-                "sigma_co_ak", "sigma_co_co",
-                "sigma_ak_co", "sigma_co_xco",
-                "sigma_co_xco_ak",
-                "xco", "xco2", "xcolog", "Aperpix",
-                'Area_ak','Area_co','distance' ]
+    columns = [
+        "mass_ak_ak",
+        "mass_co_ak",
+        "mass_co_xco_ak",
+        "mass_co_co",
+        "mass_ak_co",
+        "mass_co_xco",
+        "mass_co_noise_ak",
+        "radius_co",
+        "radius_ak",
+        "sigma_ak_ak",
+        "sigma_co_ak",
+        "sigma_co_co",
+        "sigma_ak_co",
+        "sigma_co_xco",
+        "sigma_co_xco_ak",
+        "xco",
+        "xco2",
+        "xcolog",
+        "Aperpix",
+        "Area_ak",
+        "Area_co",
+        "distance",
+    ]
     row = [name]
     df = pd.DataFrame(index=row, columns=columns)
 
@@ -282,7 +344,7 @@ def analysis(ak, wco, boundary, noise_mask, co_mask=None,
     df.radius_co = radius_co
     df.radius_ak = radius_ak
     df.Area_ak = np.pi * radius_ak ** 2
-    df.Area_co = np.pi * radius_co**2
+    df.Area_co = np.pi * radius_co ** 2
     df.sigma_ak_ak = sigma_ak_ak
     df.sigma_co_ak = sigma_co_ak
     df.sigma_co_co = sigma_co_co
@@ -320,11 +382,8 @@ def analysis(ak, wco, boundary, noise_mask, co_mask=None,
     df.sigma_co_xco = sigma_co_xco
     df.mass_co_xco_ak = mass_co_xco_ak
     df.sigma_co_xco_ak = sigma_co_xco_ak
-    print('\n')
+    print("\n")
     return df, akmask, comask
-
-
-
 
 
 def get_bounds(l=None, b=None, obj=None):
@@ -350,11 +409,11 @@ def get_bounds(l=None, b=None, obj=None):
     Herc: Hercules
 
     """
-    with np.errstate(all='ignore'):
+    with np.errstate(all="ignore"):
         # TA = (l <= 180) & (l >= 165) & (b <= -10) & (b >= -20)
         TA = (l <= 180) & (l >= 165) & (b <= -10.5) & (b >= -19.75)
 
-        #CA1 = (l >= 155) & (l <= 169) & (b >= -10) & (b <= -5)
+        # CA1 = (l >= 155) & (l <= 169) & (b >= -10) & (b <= -5)
         CA1 = (l >= 155) & (l <= 169.5) & (b >= -10) & (b <= -5)
         CA2 = (l > 155) & (l < 162) & (b > -15) & (b < -10)
         CA = CA1 | CA2
@@ -382,12 +441,11 @@ def get_bounds(l=None, b=None, obj=None):
 
         RCrA = np.full_like(l, True).astype(bool)
 
-        Rose = (l>= 205) & (l<=209) & (b>=  -4) & (b<= 0)
+        Rose = (l >= 205) & (l <= 209) & (b >= -4) & (b <= 0)
 
-        Pol = (l>=117) & (l<=127) & (b>=20) & (b<=32)
+        Pol = (l >= 117) & (l <= 127) & (b >= 20) & (b <= 32)
         notPol = (b < 22) & (l > 123)
         Pol = Pol & ~notPol
-
 
     if obj == "Tau":
         return TA.astype(bool)
@@ -411,9 +469,9 @@ def get_bounds(l=None, b=None, obj=None):
         return MonR2.astype(bool)
     elif obj == "RCrA":
         return RCrA.astype(bool)
-    elif obj == 'Rose':
+    elif obj == "Rose":
         return Rose.astype(bool)
-    elif obj == 'Pol':
+    elif obj == "Pol":
         return Pol.astype(bool)
     else:
         return None
@@ -432,18 +490,18 @@ def getv(header3d, naxis=1):
 
 
 def dame_bad(arr, bad_val=20):
-    with np.errstate(all='ignore'):
-        c1 = -np.log2(np.abs(arr)) > bad_val  - 5
+    with np.errstate(all="ignore"):
+        c1 = -np.log2(np.abs(arr)) > bad_val - 5
         c2 = np.isnan(arr)
         c3 = arr == -32768
         c4 = arr == 0
-    #with np.errstate(invalid='ignore'):
+    # with np.errstate(invalid='ignore'):
     #    c4 = np.log2(arr) < -10
     return c1 | c2 | c3 | c4
 
 
 def mask_dame_wco(co, co_raw, noise=None, level=3):
-    with np.errstate(all='ignore'):
+    with np.errstate(all="ignore"):
         bad = dame_bad(co)
         if noise is None:
             noise = np.nanstd(co_raw[bad])
@@ -453,11 +511,22 @@ def mask_dame_wco(co, co_raw, noise=None, level=3):
         return ((wco / (sqrtN * noise)) > level) & (N > 0), noise, N
 
 
-def channel_maps(chmap, v, start=0, stop=-1, step=1,vmin=-0.2,vmax=10,xlim=None,ylim=None,**kwargs):
+def channel_maps(
+    chmap,
+    v,
+    start=0,
+    stop=-1,
+    step=1,
+    vmin=-0.2,
+    vmax=10,
+    xlim=None,
+    ylim=None,
+    **kwargs,
+):
     if stop == -1:
         stop = chmap.shape[-1]
     chan = np.arange(start, stop + step, step)
-    chan[-1] = len(v)-1
+    chan[-1] = len(v) - 1
     N = len(chan)
     sN = np.sqrt(N)
     nrow = int(np.ceil(sN))
@@ -471,11 +540,16 @@ def channel_maps(chmap, v, start=0, stop=-1, step=1,vmin=-0.2,vmax=10,xlim=None,
         ac = 1
         ar = 1  # nx/ny
     fig, axs = plt.subplots(
-        nrows=nrow, ncols=ncol, figsize=(4.0 * nrow * ar, 4.0 * ncol * ac), sharex=True, sharey=True, )
+        nrows=nrow,
+        ncols=ncol,
+        figsize=(4.0 * nrow * ar, 4.0 * ncol * ac),
+        sharex=True,
+        sharey=True,
+    )
     for i, ax in enumerate(axs.flatten()):
         if i < N - 1:
-            summed = np.nansum(chmap[:, :, chan[i]: chan[i + 1]], axis=-1)
-            ax.imshow(summed, vmin=vmin, vmax=vmax,**kwargs)
+            summed = np.nansum(chmap[:, :, chan[i] : chan[i + 1]], axis=-1)
+            ax.imshow(summed, vmin=vmin, vmax=vmax, **kwargs)
             ju.annotate(
                 f"{v[chan[i]]:0.1f}:{v[chan[i+1]]:0.1f}", 0.8, 0.9, ax=ax, fontsize=25
             )
@@ -483,24 +557,25 @@ def channel_maps(chmap, v, start=0, stop=-1, step=1,vmin=-0.2,vmax=10,xlim=None,
                 ax.set_xlim(*xlim)
             if ylim is not None:
                 ax.set_ylim(*ylim)
-            #plt.ylim(15, 45)
+            # plt.ylim(15, 45)
         else:
             plt.delaxes(ax)
 
     return fig, axs
 
-def iscontained(bound,labels,label_id,lim=1):
-        good = labels==label_id
-        if lim==1:
-            return np.all(bound[labels==label_id])
-        else:
-            min_frac = np.sum(bound) / bound.size
-            if lim < min_frac:
-                lim = 1
-            return np.sum(bound[good]) >= lim * np.sum(good)
+
+def iscontained(bound, labels, label_id, lim=1):
+    good = labels == label_id
+    if lim == 1:
+        return np.all(bound[labels == label_id])
+    else:
+        min_frac = np.sum(bound) / bound.size
+        if lim < min_frac:
+            lim = 1
+        return np.sum(bound[good]) >= lim * np.sum(good)
 
 
-def closed_contour(field, bound, steps, lim=1, min_size=0, nan_value = 0):
+def closed_contour(field, bound, steps, lim=1, min_size=0, nan_value=0):
     """[summary]
 
     Parameters
@@ -524,57 +599,55 @@ def closed_contour(field, bound, steps, lim=1, min_size=0, nan_value = 0):
         labels: map of objects at the contour level
     """
     if bound is None:
-            bound = np.full(field.shape, True, dtype=bool)
+        bound = np.full(field.shape, True, dtype=bool)
 
     # we need a external border for the contour
     min_frac = np.sum(bound) / field.size
     if lim < min_frac:
         lim = 1
     if min_frac == 1:
-        bound[0,:] = False
+        bound[0, :] = False
         bound[:, 0] = False
-        bound[-1,:] = False
+        bound[-1, :] = False
         bound[:, -1] = False
         lim = 1
 
-
-
     # get rid of nans (set to zero by default for positivily valued fields)
-    field = np.nan_to_num(field, nan = nan_value)
+    field = np.nan_to_num(field, nan=nan_value)
 
     # want to search from highest to lowest
     # like a dendrogram
     steps = np.sort(steps)[::-1]
 
-    #out_contour :: track largest contour so far
+    # out_contour :: track largest contour so far
     out_good_labels = None
-    out_contour=steps[0]
+    out_contour = steps[0]
     for i in steps:
         shed = field >= i
         label = skmorph.label(shed)
         good = np.unique(label[shed & bound])
-        good_labels = np.isin(label,good)
+        good_labels = np.isin(label, good)
         # find contours contained within boundary
-        #good_contained = [iscontained(bound,label,g,lim=1) for g in good]
+        # good_contained = [iscontained(bound,label,g,lim=1) for g in good]
 
-        if np.sum(good_labels&bound)>=lim*np.sum(good_labels):
-        #if np.any(good_contained):
+        if np.sum(good_labels & bound) >= lim * np.sum(good_labels):
+            # if np.any(good_contained):
             out_contour = i
             out_good_labels = good_labels.copy()
-            #out_good_labels = np.isin(label,good[good_contained])
+            # out_good_labels = np.isin(label,good[good_contained])
             out_label = label * 1
             continue
         else:
             if out_good_labels is None:
                 out_good_labels = good_labels.copy()
-                #out_good_labels = np.isin(label,good[good_contained])
+                # out_good_labels = np.isin(label,good[good_contained])
                 out_label = label * 1
             break
 
     return out_good_labels, out_contour, out_label
 
 
-def largest_closed_contour(field, bound, steps, lim=1, min_size=0,progress=False):
+def largest_closed_contour(field, bound, steps, lim=1, min_size=0, progress=False):
     """[summary]
 
     Parameters
@@ -598,16 +671,16 @@ def largest_closed_contour(field, bound, steps, lim=1, min_size=0,progress=False
         labels: map of objects at the contour level
     """
     if bound is None:
-            bound = np.full(field.shape, True, dtype=bool)
+        bound = np.full(field.shape, True, dtype=bool)
 
     min_frac = np.sum(bound) / field.size
-    h,w = bound.shape
+    h, w = bound.shape
     if lim < min_frac:
         lim = 1
-    if min_frac ==1:
-        bound[0,:] = False
+    if min_frac == 1:
+        bound[0, :] = False
         bound[:, 0] = False
-        bound[-1,:] = False
+        bound[-1, :] = False
         bound[:, -1] = False
         lim = 1
     field = np.nan_to_num(field)
@@ -620,12 +693,12 @@ def largest_closed_contour(field, bound, steps, lim=1, min_size=0,progress=False
         shed = field >= i
         label = skmorph.label(shed)
         good = np.unique(label[shed & bound])
-        #good_labels = np.isin(label,good)
+        # good_labels = np.isin(label,good)
         # find contours contained within boundary
-        contained = [iscontained(bound,label,g,lim=lim) for g in good]
+        contained = [iscontained(bound, label, g, lim=lim) for g in good]
 
         if np.any(contained):
-            #print('contained',i)
+            # print('contained',i)
             contained = good[contained]
 
             # get contained contour sizes
