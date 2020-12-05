@@ -1777,12 +1777,12 @@ def extend_hist(H, X1, Y1, fill=0, padn=2):
 def hist2d(x, y, range=None, bins=20, smooth=False, clip=False, pad=True, normed=True, weights=None):
     if bins is not None:
         if range is None:
-            if len(bins) == 2:
-                xedges = np.histogram_bin_edges(x, bins=bins[0])
-                yedges = np.histogram_bin_edges(y, bins=bins[1])
-            else:
+            if  isinstance(bins,int) or (bins=='auto'):
                 xedges = np.histogram_bin_edges(x, bins=bins)
                 yedges = np.histogram_bin_edges(y, bins=bins)
+            elif check_iterable(bins) & (len(bins)==2):
+                xedges = np.histogram_bin_edges(x, bins=bins[0])
+                yedges = np.histogram_bin_edges(y, bins=bins[1])
             bins = [xedges, yedges]
         else:
             if len(list(sum(range,())))==4:
@@ -2239,7 +2239,7 @@ def annotate(text, x, y,ax=None,
     elif transform == 'data':
         transform = ax.transData
     bbox1 = dict(facecolor=facecolor, alpha=alpha)
-    bbox.update(bbox1)
+    bbox1.update(bbox)
     text = ax.text(x,y,text,horizontalalignment=horizontalalignment,
                                 verticalalignment=verticalalignment,
                                 transform=transform,
@@ -2254,9 +2254,31 @@ def annotate(text, x, y,ax=None,
 def jhist2d(*args, **kwargs):
     return stat_plot2d(*args, **kwargs)
 
-def corner(pos, names=None,smooth=1,bins=20,figsize=(12,12),**kwargs):
+def corner(pos, names=None, smooth=1, bins=20, figsize=None, **kwargs):
+    """produce a corner plot
+
+    Parameters
+    ----------
+    pos : np.array
+        each item should be a row. pos.size = MxN, N items, M
+    names : list of strings, optional
+        names of variables to be plotted, must have N elements, by default None
+    smooth : int, optional
+        how much to smooth the contours/histogram, by default 1
+    bins : int, optional
+        number of bins for histogram, by default 20
+    figsize : tuple, optional
+        [description], by default 2 * pos.shape[1] + 0.5
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
+    if figsize is None:
+        dim = 2 * pos.shape[1] + 0.5
+        figsize = (dim,dim)
     fig, axs = plt.subplots(nrows=pos.shape[1],ncols=pos.shape[1],sharex=False,sharey=False,figsize=figsize)
-    print(pos.shape)
     for i in range(pos.shape[-1]):
         for j in range(pos.shape[-1]):
             if i == j:
@@ -2277,12 +2299,12 @@ def corner(pos, names=None,smooth=1,bins=20,figsize=(12,12),**kwargs):
     return fig,axs
 
 
-def standardize(X, mean=True, std=True):
-    if mean:
+def standardize(X, remove_mean=True, remove_std=True):
+    if remove_mean:
         mean = np.nanmean(X)
     else:
         mean = 0
-    if std:
+    if remove_std:
         std = np.nanstd(X)
     else:
         std = 1
