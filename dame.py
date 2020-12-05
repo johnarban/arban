@@ -171,13 +171,13 @@ def getmaps(objec, make_global=False, imin=0, imax=0):
     survey, obj, *_, = os.path.basename(file).split("_")
     print("getmaps::", survey)
 
-    planck = 3233 * fits.getdata(f"{dirs}/{obj}/{obj}_TAU353.fits")
+    planck = fits.getdata(f"{dirs}/{obj}/{obj}_TAU353.fits")
     header = fits.getheader(f"{dirs}/{obj}/{obj}_TAU353.fits")
     tdust = fits.getdata(f"{dirs}/{obj}/{obj}_TEMP.fits")
     beta = fits.getdata(f"{dirs}/{obj}/{obj}_BETA.fits")
-    planck_err = 3233 * fits.getdata(f"{dirs}/{obj}/{obj}_ERR_TAU.fits")
-    planck_fullres = 3233 * fits.getdata(f"{dirs}/{obj}/{obj}_TAU353_full.fits")
-    planck_errfullres = 3233 * fits.getdata(f"{dirs}/{obj}/{obj}_ERR_TAU_full.fits")
+    planck_err = fits.getdata(f"{dirs}/{obj}/{obj}_ERR_TAU.fits")
+    planck_fullres = fits.getdata(f"{dirs}/{obj}/{obj}_TAU353_full.fits")
+    planck_errfullres = fits.getdata(f"{dirs}/{obj}/{obj}_ERR_TAU_full.fits")
     header_fullres = fits.getheader(f"{dirs}/{obj}/{obj}_TAU353_full.fits")
 
     momfile = glob.glob(f"{dirs}/co_survey/{survey}*mom.fits")
