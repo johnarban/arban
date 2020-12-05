@@ -2311,20 +2311,27 @@ def standardize(X, remove_mean=True, remove_std=True):
 
     return (X - mean) / std
 
-def plotoneone(color='k',lw=2,scale = 1, offset=0, p=None, invert=False, ax=None,**kwargs):
+def plotoneone(color='k', lw = 2, scale = 1, offset=0, p=None, invert=False, n=50, start=None,end=None,ax=None,**kwargs):
     if ax is None:
         ax = plt.gca()
     xlim, ylim = ax.get_xlim(), ax.get_ylim()
-    b = np.min([xlim[0], ylim[0]])
-    t = np.max([xlim[1], ylim[1]])
-    xs = np.array([b, t])
+
+    if start is None:
+        start = np.min([xlim[0], ylim[0]])
+    if end is None:
+        end = np.max([xlim[1], ylim[1]])
+    scale = ax.get_xscale()
+    if scale=='linear':
+        xs = np.linspace(start, end, n)
+    else:
+        xs = np.logspace(np.log10(start),np.log10(end),n)
     if p is not None:
         scale, offset = p
     ys = scale * xs + offset
     if invert:
-        ax.plot(ys, xs, '-', color=color, lw=lw, **kwargs)
+        ax.plot(ys, xs, color=color, lw=lw, **kwargs)
     else:
-        ax.plot(xs, ys, '-', color=color, lw=lw, **kwargs)
+        ax.plot(xs, ys, color=color, lw=lw, **kwargs)
 
     ax.set_xlim(*xlim)
     ax.set_ylim(*ylim)
