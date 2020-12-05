@@ -2321,10 +2321,11 @@ def plotoneone(color='k', lw = 2, scale = 1, offset=0, p=None, invert=False, n=5
     if end is None:
         end = np.max([xlim[1], ylim[1]])
     scale = ax.get_xscale()
-    if scale=='linear':
-        xs = np.linspace(start, end, n)
-    else:
+    if scale=='log':
         xs = np.logspace(np.log10(start),np.log10(end),n)
+    else:
+        xs = np.linspace(start, end, n)
+
     if p is not None:
         scale, offset = p
     ys = scale * xs + offset
