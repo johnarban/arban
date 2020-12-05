@@ -30,14 +30,16 @@ from weighted import quantile
 nd = ndimage
 
 
-__location__ = os.path.realpath(os.path.join(
-    os.getcwd(), os.path.dirname(__file__)))
+__location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
 
-__filtertable__ = Table.read(os.path.join(
-    __location__, "FilterSpecs.tsv"), format="ascii")
+__filtertable__ = Table.read(
+    os.path.join(__location__, "FilterSpecs.tsv"), format="ascii"
+)
 
-def nice_pandas(format='{:3.3g}'):
-    pd.set_option("display.float_format",lambda x: format.format(x))
+
+def nice_pandas(format="{:3.3g}"):
+    pd.set_option("display.float_format", lambda x: format.format(x))
+
 
 #############################
 #############################
@@ -56,47 +58,52 @@ def set_plot_opts(serif_fonts=True):
         mpl.rcParams["font.size"] = 14
     return None
 
-def check_iterable(arr):
-    return hasattr(arr,'__iter__')
 
-def color_array(arr,alpha=1):
+def check_iterable(arr):
+    return hasattr(arr, "__iter__")
+
+
+def color_array(arr, alpha=1):
     img = np.zeros(arr.shape + (4,))
     for row in range(arr.shape[0]):
         for col in range(arr.shape[1]):
-            c = mpl.colors.to_rgb(arr[row,col])
-            img[row,col,0:3] = c
-            img[row,col,3] = alpha
+            c = mpl.colors.to_rgb(arr[row, col])
+            img[row, col, 0:3] = c
+            img[row, col, 3] = alpha
     return img
 
 
-def invert_color(ml,*args, **kwargs):
+def invert_color(ml, *args, **kwargs):
     rgb = mpl.colors.to_rgb(ml)
     hsv = mpl.colors.rgb_to_hsv(rgb)
     h, s, v = hsv
     h = 1 - h
     s = 1 - s
     v = 1 - v
-    return mpl.colors.to_hex(mpl.colors.hsv_to_rgb((h,s,v)))
+    return mpl.colors.to_hex(mpl.colors.hsv_to_rgb((h, s, v)))
 
 
 def icol(*args, **kwargs):
-    return invert_color(*args,**kwargs)
+    return invert_color(*args, **kwargs)
+
 
 def to64(arr):
     # Convert numpy to 64-bit precision
-    if hasattr(arr, 'astype'):
-        return arr.astype('float64')
+    if hasattr(arr, "astype"):
+        return arr.astype("float64")
     else:
-        if hasattr(arr, '__iter__'):
-            if isinstance(arr[0],u.quantity.Quantity):
-                return u.quantity.Quantity(arr,dtype=np.float64)
+        if hasattr(arr, "__iter__"):
+            if isinstance(arr[0], u.quantity.Quantity):
+                return u.quantity.Quantity(arr, dtype=np.float64)
         return np.float64(arr)
+
 
 def get_xylim(ax=None):
     if ax is None:
         ax = plt.gca()
     xlim, ylim = ax.get_xlim(), ax.get_ylim()
     return xlim, ylim
+
 
 def set_xylim(xlim=None, ylim=None, ax=None, origin=None):
     """set xylims with tuples
@@ -122,9 +129,9 @@ def set_xylim(xlim=None, ylim=None, ax=None, origin=None):
         ylim = list(ylim)
     if origin is not None:
         if origin is True:
-            if ax.get_xaxis().get_scale()[:3] != 'log':
+            if ax.get_xaxis().get_scale()[:3] != "log":
                 xlim[0] = 0
-            if ax.get_yaxis().get_scale()[:3] != 'log':
+            if ax.get_yaxis().get_scale()[:3] != "log":
                 ylim[0] = 0
         else:
             xlim[0] = origin[0]
@@ -133,21 +140,43 @@ def set_xylim(xlim=None, ylim=None, ax=None, origin=None):
     ax.set_ylim(ylim)
     return tuple(xlim), tuple(ylim)
 
+
 def _normalize_location_orientation(location, orientation):
     loc_settings = {
-        "left":   {"location": "left", "orientation": "vertical",
-                   "anchor": (1.0, 0.5), "panchor": (0.0, 0.5), "pad": 0.10},
-        "right":  {"location": "right", "orientation": "vertical",
-                   "anchor": (0.0, 0.5), "panchor": (1.0, 0.5), "pad": 0.05},
-        "top":    {"location": "top", "orientation": "horizontal",
-                   "anchor": (0.5, 0.0), "panchor": (0.5, 1.0), "pad": 0.05},
-        "bottom": {"location": "bottom", "orientation": "horizontal",
-                   "anchor": (0.5, 1.0), "panchor": (0.5, 0.0), "pad": 0.15},
+        "left": {
+            "location": "left",
+            "orientation": "vertical",
+            "anchor": (1.0, 0.5),
+            "panchor": (0.0, 0.5),
+            "pad": 0.10,
+        },
+        "right": {
+            "location": "right",
+            "orientation": "vertical",
+            "anchor": (0.0, 0.5),
+            "panchor": (1.0, 0.5),
+            "pad": 0.05,
+        },
+        "top": {
+            "location": "top",
+            "orientation": "horizontal",
+            "anchor": (0.5, 0.0),
+            "panchor": (0.5, 1.0),
+            "pad": 0.05,
+        },
+        "bottom": {
+            "location": "bottom",
+            "orientation": "horizontal",
+            "anchor": (0.5, 1.0),
+            "panchor": (0.5, 0.0),
+            "pad": 0.15,
+        },
     }
 
     return loc_settings
 
-def get_cax(ax=None, position="right", frac=.03, pad = 0.05):
+
+def get_cax(ax=None, position="right", frac=0.03, pad=0.05):
     """get a colorbar axes of the same height as current axes
     position: "left" "right" ( vertical | )
               "top"  "bottom"  (horizontal --- )
@@ -156,13 +185,14 @@ def get_cax(ax=None, position="right", frac=.03, pad = 0.05):
     if ax is None:
         ax = plt.gca()
 
-    size = f'{frac*100}%'
+    size = f"{frac*100}%"
     divider = make_axes_locatable(ax)
-    cax = divider.append_axes(position, size = size, pad = pad)
+    cax = divider.append_axes(position, size=size, pad=pad)
     plt.sca(ax)
     return cax
 
-def colorbar(mappable=None, cax=None, ax=None, size=0.03, pad = 0.05, **kw):
+
+def colorbar(mappable=None, cax=None, ax=None, size=0.03, pad=0.05, **kw):
     """wrapper for pyplot.colorbar.
 
     """
@@ -170,7 +200,7 @@ def colorbar(mappable=None, cax=None, ax=None, size=0.03, pad = 0.05, **kw):
         ax = plt.gca()
 
     if cax is None:
-        cax = get_cax(ax=ax, frac=size, pad = pad)
+        cax = get_cax(ax=ax, frac=size, pad=pad)
 
     ret = plt.colorbar(mappable, cax=cax, ax=ax, **kw)
     return ret
@@ -181,8 +211,7 @@ def colorbar(mappable=None, cax=None, ax=None, size=0.03, pad = 0.05, **kw):
 def kdeplot(xp, yp, filled=False, ax=None, grid=None, bw=None, *args, **kwargs):
     if ax is None:
         ax = plt.gca()
-    rvs = np.append(xp.reshape((xp.shape[0], 1)), yp.reshape(
-        (yp.shape[0], 1)), axis=1)
+    rvs = np.append(xp.reshape((xp.shape[0], 1)), yp.reshape((yp.shape[0], 1)), axis=1)
 
     kde = stats.kde.gaussian_kde(rvs.T)
     # kde.covariance_factor = lambda: 0.3
@@ -191,11 +220,11 @@ def kdeplot(xp, yp, filled=False, ax=None, grid=None, bw=None, *args, **kwargs):
 
     # Regular grid to evaluate kde upon
     if grid is None:
-        x_flat = np.r_[rvs[:, 0].min(): rvs[:, 0].max(): 256j]
-        y_flat = np.r_[rvs[:, 1].min(): rvs[:, 1].max(): 256j]
+        x_flat = np.r_[rvs[:, 0].min() : rvs[:, 0].max() : 256j]
+        y_flat = np.r_[rvs[:, 1].min() : rvs[:, 1].max() : 256j]
     else:
-        x_flat = np.r_[0: grid[0]: complex(0, grid[0])]
-        y_flat = np.r_[0: grid[1]: complex(0, grid[1])]
+        x_flat = np.r_[0 : grid[0] : complex(0, grid[0])]
+        y_flat = np.r_[0 : grid[1] : complex(0, grid[1])]
     x, y = np.meshgrid(x_flat, y_flat)
     grid_coords = np.append(x.reshape(-1, 1), y.reshape(-1, 1), axis=1)
 
@@ -209,8 +238,7 @@ def kdeplot(xp, yp, filled=False, ax=None, grid=None, bw=None, *args, **kwargs):
     return cs
 
 
-AtomicMass = {"H2": 2, "12CO": 12 + 16,
-              "13CO": 13 + 18, "C18O": 12 + 18, "ISM": 2.33}
+AtomicMass = {"H2": 2, "12CO": 12 + 16, "13CO": 13 + 18, "C18O": 12 + 18, "ISM": 2.33}
 
 
 def thermal_v(T, mu=None, mol=None):
@@ -235,12 +263,12 @@ def thermal_v(T, mu=None, mol=None):
     return np.sqrt(constants.k_B * T * u.Kelvin / (mu * constants.m_p)).to("km/s").value
 
 
-
-def virial(sig,mass, r):
-    s = 1.33*(sig*(u.km/u.s))**2
-    r = r*u.pc
-    m = constants.G * (mass*u.Msun)
+def virial(sig, mass, r):
+    s = 1.33 * (sig * (u.km / u.s)) ** 2
+    r = r * u.pc
+    m = constants.G * (mass * u.Msun)
     return (s * r / m).si.value
+
 
 def numdens(mass, radius):
     """number density from mass/radius
@@ -260,12 +288,12 @@ def numdens(mass, radius):
     """
     mass = mass * u.solMass
     radius = radius * u.pc
-    volume = (4/3) * np.pi * (radius**3)
-    dens = (mass/volume)/(2.33 * constants.m_p)
-    return dens.to(u.cm**-3).value
+    volume = (4 / 3) * np.pi * (radius ** 3)
+    dens = (mass / volume) / (2.33 * constants.m_p)
+    return dens.to(u.cm ** -3).value
 
 
-def jeansmass(temp, numdens, mu=2.33): #12.03388 msun T=n=1
+def jeansmass(temp, numdens, mu=2.33):  # 12.03388 msun T=n=1
     """
     temp in K
     numdens in cm^-3
@@ -273,14 +301,13 @@ def jeansmass(temp, numdens, mu=2.33): #12.03388 msun T=n=1
     returns Mjeans in solar masses
     .5 * (5 * kb / G)^3 * (3/4π) * (1/2.33 mp)^4 * T^3 / n
     """
-    mj = ((5 * constants.k_B / (constants.G))**3)
-    mj *= (3/(4*np.pi))
-    mj *= ((1/(mu * constants.m_p))**4)
-    mj = mj * (temp * u.K)**3
-    mj = mj * (u.cm**3/numdens)
-    mj = mj**0.5
+    mj = (5 * constants.k_B / (constants.G)) ** 3
+    mj *= 3 / (4 * np.pi)
+    mj *= (1 / (mu * constants.m_p)) ** 4
+    mj = mj * (temp * u.K) ** 3
+    mj = mj * (u.cm ** 3 / numdens)
+    mj = mj ** 0.5
     return mj.to(u.solMass).value
-
 
 
 #############################
@@ -318,11 +345,13 @@ def sigconf1d(n):
     for a 1D gaussian
     """
     cdf = (1 / 2.0) * (1 + special.erf(n / np.sqrt(2)))
-    return (1 - cdf) * 100, 100 * cdf #, 100 * special.erf(n / np.sqrt(2))
+    return (1 - cdf) * 100, 100 * cdf  # , 100 * special.erf(n / np.sqrt(2))
+
 
 def sort_bool(g, srt):
     isrt = np.argsort(srt)
     return srt[g[srt[isrt]]]
+
 
 def wcsaxis(header, N=6, ax=None, fmt="%0.2f", use_axes=False):
     oldax = plt.gca()
@@ -334,10 +363,9 @@ def wcsaxis(header, N=6, ax=None, fmt="%0.2f", use_axes=False):
 
     wcs = WCS(header)
 
-
-    naxis = header['NAXIS'] # naxis
-    naxis1 = header['NAXIS1']  # naxis1
-    naxis2 = header['NAXIS2']  # naxis2
+    naxis = header["NAXIS"]  # naxis
+    naxis1 = header["NAXIS1"]  # naxis1
+    naxis2 = header["NAXIS2"]  # naxis2
     # crpix1 = hdr['CRPIX1']
     # crpix2 = hdr['CRPIX2']
     # crval1 = hdr['CRVAL1']
@@ -350,10 +378,10 @@ def wcsaxis(header, N=6, ax=None, fmt="%0.2f", use_axes=False):
     #    cdelt2 = wcs['CD2_2']
 
     if not use_axes:
-        xoffset = ((xlim[1]-xlim[0]) / N) / 5
-        x = np.linspace(xlim[0] + xoffset , xlim[1] - xoffset, N)
+        xoffset = ((xlim[1] - xlim[0]) / N) / 5
+        x = np.linspace(xlim[0] + xoffset, xlim[1] - xoffset, N)
         if naxis >= 2:
-            yoffset = ((ylim[1]-ylim[0]) / N) / 5
+            yoffset = ((ylim[1] - ylim[0]) / N) / 5
             y = np.linspace(ylim[0] + yoffset, ylim[1] - yoffset, N)
     else:
         x = ax.get_xticks()
@@ -401,12 +429,10 @@ def writefits(filename, data, header=None, wcs=None, clobber=True):
 
 
 def grid_data(
-        x,
-        y,
-        z,
-        nxy=(
-            512,
-            512),
+    x,
+    y,
+    z,
+    nxy=(512, 512),
     interp="linear",
     plot=False,
     cmap="Greys",
@@ -439,8 +465,7 @@ def grid_data(
             cont = ax.contourf
         else:
             cont = ax.contour
-        cont(xi, yi, zi / np.max(zi[np.isfinite(zi)]),
-             cmap=cmap, levels=levels)
+        cont(xi, yi, zi / np.max(zi[np.isfinite(zi)]), cmap=cmap, levels=levels)
 
     return xi, yi, zi
 
@@ -469,8 +494,7 @@ def convert_flux(mag=None, emag=None, filt=None, return_wavelength=False):
             print("Filter %s not found" % filt.lower())
             print("Please select one of the following")
             print(tab["fname"].data)
-            filt = eval(
-                input("Include quotes in answer (example ('johnsonK')): "))
+            filt = eval(input("Include quotes in answer (example ('johnsonK')): "))
 
         f0 = tab["F0_Jy"][np.where(filt.lower() == tab["fname"])][0]
     else:
@@ -481,7 +505,11 @@ def convert_flux(mag=None, emag=None, filt=None, return_wavelength=False):
     if emag is not None:
         eflux = 1.08574 * emag * flux
         if return_wavelength:
-            return (flux, eflux, tab["Wavelength"][np.where(filt.lower() == tab["fname"])], )
+            return (
+                flux,
+                eflux,
+                tab["Wavelength"][np.where(filt.lower() == tab["fname"])],
+            )
         else:
             return flux, eflux
     else:
@@ -549,17 +577,18 @@ def rectangle(c, w, h, angle=0, center=True):
     # print (cx,cy)
     return c
 
-def rot_mask(img, pivot=None,angle=0):
+
+def rot_mask(img, pivot=None, angle=0):
     ### https://stackoverflow.com/a/25459080/11594175
     if pivot is None:
-        pivot = list(map(int,nd.center_of_mass(img)))[::-1]
+        pivot = list(map(int, nd.center_of_mass(img)))[::-1]
 
-    img = img*1
+    img = img * 1
     padX = [img.shape[1] - (pivot[0]), pivot[0]]
     padY = [img.shape[0] - pivot[1], pivot[1]]
-    imgP = np.pad(img, [padY, padX], 'constant')
+    imgP = np.pad(img, [padY, padX], "constant")
     imgR = nd.rotate(imgP, angle, reshape=False)
-    imgC = imgR[padY[0]: - padY[1], padX[0]: - padX[1]]
+    imgC = imgR[padY[0] : -padY[1], padX[0] : -padX[1]]
     return imgC
 
 
@@ -608,12 +637,14 @@ def rectangle2(c, w, h, angle=0, center=True):
 
 
 def plot_rectangle(c, w, h, angle=0, center=True, ax=None, n=10, m="-", **plot_kwargs):
-    if False:#center is True:
+    if False:  # center is True:
         print("Hey, did you know this is built into matplotlib")
-        print("Yeah, just do  ax.add_patch(plt.Rectangle(xy=(cx,cy),height=h, width=w, angle=deg))"
-              )
-        print("of course this one will work even if grid is not rectilinear and can use points"
-              )
+        print(
+            "Yeah, just do  ax.add_patch(plt.Rectangle(xy=(cx,cy),height=h, width=w, angle=deg))"
+        )
+        print(
+            "of course this one will work even if grid is not rectilinear and can use points"
+        )
         print("defined w.r.t. a corner")
     if ax is None:
         ax = plt.gca()
@@ -621,10 +652,10 @@ def plot_rectangle(c, w, h, angle=0, center=True, ax=None, n=10, m="-", **plot_k
     ax.plot(x, y, **plot_kwargs)
     n = n * 1j
     # interpolate each linear segment
-    leg1 = np.r_[x[0]: x[1]: n], np.r_[y[0]: y[1]: n]
-    leg2 = np.r_[x[1]: x[2]: n], np.r_[y[1]: y[2]: n]
-    leg3 = np.r_[x[2]: x[3]: n], np.r_[y[2]: y[3]: n]
-    leg4 = np.r_[x[3]: x[4]: n], np.r_[y[3]: y[4]: n]
+    leg1 = np.r_[x[0] : x[1] : n], np.r_[y[0] : y[1] : n]
+    leg2 = np.r_[x[1] : x[2] : n], np.r_[y[1] : y[2] : n]
+    leg3 = np.r_[x[2] : x[3] : n], np.r_[y[2] : y[3] : n]
+    leg4 = np.r_[x[3] : x[4] : n], np.r_[y[3] : y[4] : n]
     ax.plot(*leg1, m, *leg2, m, *leg3, m, *leg4, m, **plot_kwargs)
     return ax
 
@@ -638,13 +669,17 @@ def rolling_window(arr, window):
         out -- array s.t. np.mean(arr,axis=-1) gives the running mean along rows (or -1 axis of a)
             out.shape = arr.shape[:-1] + (arr.shape[-1] - window + 1, window)
     """
-    shape = arr.shape[:-1] + (arr.shape[-1] - window + 1,
-                              window, )  # the new shape (a.shape)
+    shape = arr.shape[:-1] + (
+        arr.shape[-1] - window + 1,
+        window,
+    )  # the new shape (a.shape)
     strides = arr.strides + (arr.strides[-1],)
     return np.lib.stride_tricks.as_strided(arr, shape=shape, strides=strides)
 
-def minmax(arr,axis=None):
-    return np.nanmin(arr, axis=axis),np.nanmax(arr,axis=axis)
+
+def minmax(arr, axis=None):
+    return np.nanmin(arr, axis=axis), np.nanmax(arr, axis=axis)
+
 
 def comp(arr):
     """
@@ -667,23 +702,25 @@ def mavg(arr, n=2, axis=-1):
     return np.mean(rolling_window(arr, n), axis=axis)
 
 
-def weighted_generic_moment(x, k, w = None):
+def weighted_generic_moment(x, k, w=None):
     x = np.asarray(x, dtype=np.float64)
     if w is not None:
         w = np.asarray(w, dtype=np.float64)
     else:
         w = np.ones_like(x)
 
-    return np.sum(x**k * w)/np.sum(w)
+    return np.sum(x ** k * w) / np.sum(w)
+
 
 def weighted_mean(x, w):
     return np.sum(x * w) / np.sum(w)
 
+
 def weighted_std(x, w):
     x = np.asarray(x, dtype=np.float64)
     w = np.asarray(w, dtype=np.float64)
-    SS = np.sum(w * (x - weighted_mean(x,w)) ** 2) / np.sum(w)
-    #quantile(x, w, 0.5)
+    SS = np.sum(w * (x - weighted_mean(x, w)) ** 2) / np.sum(w)
+    # quantile(x, w, 0.5)
     return np.sqrt(SS)
 
 
@@ -696,10 +733,12 @@ def weighted_percentile(x, w, percentile, p=0):
     sorted_x = clean_x[srt]
     Sn = np.cumsum(sorted_w)
     Pn = (Sn - 0.5 * sorted_w) / Sn[-1]
-    return np.interp(np.asarray(percentile)/100., Pn, sorted_x)
+    return np.interp(np.asarray(percentile) / 100.0, Pn, sorted_x)
 
-def weighted_median(x,w):
-    return weighted_percentile(x,w,50)
+
+def weighted_median(x, w):
+    return weighted_percentile(x, w, 50)
+
 
 def weighted_mad(x, w, stddev=True):
     x = np.asarray(x, dtype=np.float64)
@@ -711,13 +750,12 @@ def weighted_mad(x, w, stddev=True):
         return weighted_median(np.abs(x - weighted_median(x, w)), w)
 
 
-
 def sigmoid(x, a, a0, k, b):
-    '''
+    """
     return a * ( (1 + np.exp(-k*(x-a0)))**-1 - b)
-    '''
-    #a, a0, k, b = p
-    return a * ( (1 + np.exp(-k*(x-a0)))**-1 - b)
+    """
+    # a, a0, k, b = p
+    return a * ((1 + np.exp(-k * (x - a0))) ** -1 - b)
 
 
 def mgeo(arr, n=2, axis=-1):
@@ -767,7 +805,8 @@ def shift_bins(arr, phase=0, nonneg=False):
     else:
         return arr
 
-def get_bin_edges(x,log=False):
+
+def get_bin_edges(x, log=False):
     diff = np.diff(x)
     if not log:
         dx = diff[0]
@@ -775,6 +814,7 @@ def get_bin_edges(x,log=False):
     else:
         dx = np.diff(np.log(x))[0]
         return np.exp(np.r_[np.log(x) - dx / 2, x[-1] + dx / 2])
+
 
 def get_bin_widths(x):
     return np.diff(get_bin_edges(x))
@@ -784,6 +824,7 @@ def err_div(x, y, ex, ey):
     Q = x / y
     dQ = np.abs(Q) * np.sqrt((ex / x) ** 2 + (ey / y) ** 2)
     return Q, dQ
+
 
 def nside2resol(nside,):
     """nside2resol: get healpix resolution from Nsides
@@ -800,6 +841,7 @@ def nside2resol(nside,):
     """
     resol = 60 * (180 / np.pi) * np.sqrt(np.pi / 3) / nside
     return resol * u.arcmin
+
 
 def lin_from_log(p, x, log10=False):
     """Convert linear function to exponential
@@ -820,15 +862,17 @@ def lin_from_log(p, x, log10=False):
         [description]
     """
     if log10:
-        return 10**(p[0]*np.log10(x) + p[1])
+        return 10 ** (p[0] * np.log10(x) + p[1])
     else:
-        return np.exp(p[0]*np.log(x) + p[1])
+        return np.exp(p[0] * np.log(x) + p[1])
 
-def color_hue_shift(c, shift = 1):
+
+def color_hue_shift(c, shift=1):
     c = mpl.colors.to_rgb(c)
-    h,s,v = mpl.colors.rgb_to_hsv(c)
+    h, s, v = mpl.colors.rgb_to_hsv(c)
     h = h + shift % 1
-    return mpl.colors.to_hex(mpl.colors.hsv_to_rgb((h,s,v)))
+    return mpl.colors.to_hex(mpl.colors.hsv_to_rgb((h, s, v)))
+
 
 def llspace(xmin, xmax, n=None, log=False, dx=None, dex=None):
     """
@@ -893,8 +937,7 @@ def nametoradec(name):
                 sign = "-"
             ra = ra[0:2] + ":" + ra[2:4] + ":" + ra[4:6] + "." + ra[6:8]
             de = sign + de[0:2] + ":" + de[2:4] + ":" + de[4:6]
-            coord = SkyCoord(ra, de, frame="icrs",
-                             unit=("hourangle", "degree"))
+            coord = SkyCoord(ra, de, frame="icrs", unit=("hourangle", "degree"))
             rightascen.append(coord.ra.value)
             declinatio.append(coord.dec.value)
         return np.array(rightascen), np.array(declinatio)
@@ -980,8 +1023,7 @@ def cdf(values, bins):
     else:
         range = None
 
-    h, bins = np.histogram(values, bins=bins, range=range,
-                           density=False)  # returns int
+    h, bins = np.histogram(values, bins=bins, range=range, density=False)  # returns int
 
     # cumulative fraction below bin_k
     c = np.cumsum(h / np.sum(h, dtype=float))
@@ -1009,7 +1051,7 @@ def cdf2(values, bins):
     return np.append(0.0, c), bins
 
 
-def area_function(extmap, bins,scale=1):
+def area_function(extmap, bins, scale=1):
     """
     Complimentary CDF for cdf2 (not normalized to 1)
     Value at b is total amount above b.
@@ -1049,8 +1091,13 @@ def mass_function(values, bins, scale=1, aktomassd=183):
     if scale != 1:
         aktomassd = scale
 
-    h, bins = np.histogram(values, bins=bins, range=range,
-                           density=False, weights=values * aktomassd * scale, )
+    h, bins = np.histogram(
+        values,
+        bins=bins,
+        range=range,
+        density=False,
+        weights=values * aktomassd * scale,
+    )
     c = np.cumsum(h).astype(float)
     return c.max() - c, bins
 
@@ -1089,20 +1136,22 @@ def linregress_ppv(x, y):
     Returns:
         f -- best fit least squares solution for whole cube
     """
-    #g = np.isfinite(x + y)
-    #x = x[g]
-    #y = y[g]
+    # g = np.isfinite(x + y)
+    # x = x[g]
+    # y = y[g]
     xbar = np.mean(x)
     ybar = np.mean(y, axis=0)
-    m = np.sum((x - xbar)[:, np.newaxis, np.newaxis] * (y - ybar),
-               axis=0) / (np.sum((x - xbar) ** 2, axis=0))
+    m = np.sum((x - xbar)[:, np.newaxis, np.newaxis] * (y - ybar), axis=0) / (
+        np.sum((x - xbar) ** 2, axis=0)
+    )
     b = ybar - m * xbar
-    f = m[np.newaxis, :, :] * x[:, np.newaxis,
-                                np.newaxis] + b[np.newaxis, :, :]
+    f = m[np.newaxis, :, :] * x[:, np.newaxis, np.newaxis] + b[np.newaxis, :, :]
     return f
 
 
-def polyregress_bootstrap(X, Y, order=1, iterations=10, thru_origin=False, return_errs=False):
+def polyregress_bootstrap(
+    X, Y, order=1, iterations=10, thru_origin=False, return_errs=False
+):
 
     g = np.isfinite(X + Y)
 
@@ -1130,26 +1179,35 @@ def polyregress_bootstrap(X, Y, order=1, iterations=10, thru_origin=False, retur
 
     if return_errs:
         # correct error by sqrt(2) since using 1/2 the data per iteration
-        return (np.nanmean(coeff, axis=0), np.std(coeff, axis=0) /
-                np.sqrt(2), np.nanpercentile(coeff, [16, 50, 84], axis=0).T, )
+        return (
+            np.nanmean(coeff, axis=0),
+            np.std(coeff, axis=0) / np.sqrt(2),
+            np.nanpercentile(coeff, [16, 50, 84], axis=0).T,
+        )
     else:
         return np.array(coeff)
 
+
 def ortho_dist(x, y, m, b):
-    '''
+    """
     get the orthogonal distance
     from a point to a line
-    '''
+    """
     ortho_dist = (y - m * x - b) / np.sqrt(1 + m ** 2)
     return ortho_dist
 
+
 from scipy.optimize import curve_fit
-def curve_fit_line(x,y,yerr=None):
+
+
+def curve_fit_line(x, y, yerr=None):
     def model(xdata, m, b):
         return m * xdata + b
-    p0 = np.polyfit(x,y,1)
-    out = curve_fit(model, x, y, p0 = p0, sigma=yerr )
+
+    p0 = np.polyfit(x, y, 1)
+    out = curve_fit(model, x, y, p0=p0, sigma=yerr)
     return out
+
 
 class PolyRegress(object):
     ###
@@ -1158,9 +1216,18 @@ class PolyRegress(object):
     # but did not use their weird definition for "R^2"
     # reference for R^2: https://en.wikipedia.org/wiki/Coefficient_of_determination
     ###
-    def __init__(self, X, Y, P=1, fit=False, pass_through_origin=False,log=False,dtype=np.float64):
+    def __init__(
+        self,
+        X,
+        Y,
+        P=1,
+        fit=False,
+        pass_through_origin=False,
+        log=False,
+        dtype=np.float64,
+    ):
         if log:
-            X, Y = np.log10(X).ravel(),np.log10(Y).ravel()
+            X, Y = np.log10(X).ravel(), np.log10(Y).ravel()
         else:
             X, Y = np.array(X).ravel(), np.array(Y).ravel()
         self.log = log
@@ -1194,29 +1261,28 @@ class PolyRegress(object):
             b = self.b
             e = self.err
             s = self.scatter
-            term = lambda i: f'({self.b[i]:0.3g}+/-{e[i]:0.3g}) * x^{i}'
-            out1 = ' + '.join([term(i) for i in range(self.P)])
+            term = lambda i: f"({self.b[i]:0.3g}+/-{e[i]:0.3g}) * x^{i}"
+            out1 = " + ".join([term(i) for i in range(self.P)])
             if not self.log:
-                #out=f'm:{b[1]:0.3g}+/-{e[1]:0.3g}, b:{b[0]:0.3g}+/-{e[0]:0.3g}, scatter:{s:0.3g}'
-                out = out1 + f' , scatter:{s:0.3g}'
+                # out=f'm:{b[1]:0.3g}+/-{e[1]:0.3g}, b:{b[0]:0.3g}+/-{e[0]:0.3g}, scatter:{s:0.3g}'
+                out = out1 + f" , scatter:{s:0.3g}"
             else:
-                #out=f'm:{b[1]:0.3g}+/-{e[1]:0.3g}, b:{b[0]:0.3g}+/-{e[0]:0.3g}, scatter:{s:0.3g}'
-                out = out1 + f' , scatter:{s:0.3g}'
-                out=f'{out}\n+10^b:{10**b[0]:0.3g}'
+                # out=f'm:{b[1]:0.3g}+/-{e[1]:0.3g}, b:{b[0]:0.3g}+/-{e[0]:0.3g}, scatter:{s:0.3g}'
+                out = out1 + f" , scatter:{s:0.3g}"
+                out = f"{out}\n+10^b:{10**b[0]:0.3g}"
         else:
-            out='\nERROR::Has not been run. run model.fit() now\n'
-        return '\n'+out+'\n'
+            out = "\nERROR::Has not been run. run model.fit() now\n"
+        return "\n" + out + "\n"
 
     def __repr__(self):
-        out1 = f'\norder={self.P-1} regression'
+        out1 = f"\norder={self.P-1} regression"
         out2 = self.__str__()
-        return out1+out2
+        return out1 + out2
 
     def fit(self):
         if np.linalg.det(self.XX) != 0:
             # self.b = np.dot(np.dot(np.linalg.inv(self.XX),self.A.T),self.Y)
-            self.b = np.linalg.solve(
-                np.dot(self.A.T, self.A), np.dot(self.A.T, self.Y))
+            self.b = np.linalg.solve(np.dot(self.A.T, self.A), np.dot(self.A.T, self.Y))
         else:
             self.b, *_ = np.linalg.lstsq(self.A, self.Y, rcond=-1,)
             # self.b = np.dot(np.dot(np.linalg.pinv(self.XX),self.A.T),self.Y)
@@ -1231,7 +1297,6 @@ class PolyRegress(object):
 
         self.residual = self.y_hat - self.Y
 
-
         # R squared and adjusted R-squared
         self.R2 = R2  # Use more general definition SS_exp / SS_tot
         self.R2_a = (self.R2 * (self.N - 1) - self.P) / (self.N - self.P - 1)
@@ -1241,29 +1306,40 @@ class PolyRegress(object):
         self.cov = self.norm_resid * np.linalg.pinv(self.XX)
         self.err = np.sqrt(np.diag(self.cov))
 
-
-        #ortho_dist = (self.Y - self.b[1] * self.X - self.b[0])/np.sqrt(1 + self.b[1]**2)
-        #self.scatter = np.std(ortho_dist)/np.cos(np.arctan(self.b[1]))
+        # ortho_dist = (self.Y - self.b[1] * self.X - self.b[0])/np.sqrt(1 + self.b[1]**2)
+        # self.scatter = np.std(ortho_dist)/np.cos(np.arctan(self.b[1]))
         self.scatter = np.std(self.residual)
 
         if self.log:
-            self.percent_scatter = np.mean( np.abs(10**self.y_hat - 10**self.Y)/10**self.Y)
+            self.percent_scatter = np.mean(
+                np.abs(10 ** self.y_hat - 10 ** self.Y) / 10 ** self.Y
+            )
         else:
-            self.percent_scatter = np.mean(self.residual/self.Y)
+            self.percent_scatter = np.mean(self.residual / self.Y)
 
         return self.b, self.err
 
     def func(self, x):
         p = self.b[::-1]
         if self.log:
-            return 10**np.polyval(p, np.log10(x))
+            return 10 ** np.polyval(p, np.log10(x))
         else:
             return np.polyval(p, x)
 
     def sample_covarariance(self, n=10000):
         return np.random.multivariate_normal(self.b, self.cov, n)
 
-    def plot(self, ax=None,color='',data=False,marker='o',ms=5,mec='none',unlog=False,**kwargs):
+    def plot(
+        self,
+        ax=None,
+        color="",
+        data=False,
+        marker="o",
+        ms=5,
+        mec="none",
+        unlog=False,
+        **kwargs,
+    ):
         if ax is None:
             ax = plt.gca()
 
@@ -1274,47 +1350,48 @@ class PolyRegress(object):
         else:
             x = self.X
             y = self.Y
-            xx = np.linspace(self.X.min(), self.X.max(),30)
+            xx = np.linspace(self.X.min(), self.X.max(), 30)
 
-        if color == '':
-            c = ('k','r')
+        if color == "":
+            c = ("k", "r")
 
-        if isinstance(color,tuple):
+        if isinstance(color, tuple):
             c_data = color[0]
             c_line = color[1]
             data = True
-        elif color == '':
+        elif color == "":
             if data:
-                c_data = plt.plot([],[],'-')[0].get_color()
-                c_line = 'k'
+                c_data = plt.plot([], [], "-")[0].get_color()
+                c_line = "k"
             else:
-                c_line = 'k'
+                c_line = "k"
         else:
             c_line = color
             if data:
-                c_data = plt.plot([],[],'-')[0].get_color()
+                c_data = plt.plot([], [], "-")[0].get_color()
 
         if data:
-            p=ax.plot(x, y, color=c_data,ms=ms,mec=mec,marker=marker,ls='')
+            p = ax.plot(x, y, color=c_data, ms=ms, mec=mec, marker=marker, ls="")
 
-        ax.plot(xx, self.func(xx), '-', color=c_line,**kwargs)
+        ax.plot(xx, self.func(xx), "-", color=c_line, **kwargs)
 
         if self.log:
-            ax.set_xscale('log')
-            ax.set_yscale('log')
+            ax.set_xscale("log")
+            ax.set_yscale("log")
 
 
+def plot_covariances(p, cov, names=None, figsize=(12, 12), nsamps=5000, smooth=1):
+    p = np.random.multivariate_normal(p, cov, nsamps)
+    fig, axs = corner(p, smooth=smooth, names=names, figsize=figsize)
+    return fig, axs
 
-def plot_covariances(p, cov, names=None,figsize=(12,12),nsamps=5000,smooth=1):
-    p = np.random.multivariate_normal(p,cov,nsamps)
-    fig,axs=corner(p,smooth=smooth,names=names,figsize=figsize)
-    return fig,axs
 
 def plot_astropy_fit_covariances(fit, fitter):
     p = fit.parameters
-    cov = fitter.fit_info['param_cov']
-    ax = plot_covariances(p,cov,  names=fit.param_names)
+    cov = fitter.fit_info["param_cov"]
+    ax = plot_covariances(p, cov, names=fit.param_names)
     return ax
+
 
 def mad(X, stddev=True, axis=None):
     if stddev:
@@ -1353,8 +1430,8 @@ def wcs_to_grid(header, index=False, verbose=False):
     """
 
     wcs = WCS(header)
-    naxis1 = header['NAXIS1']  # naxis1
-    naxis2 = header['NAXIS2']  # naxis2
+    naxis1 = header["NAXIS1"]  # naxis1
+    naxis2 = header["NAXIS2"]  # naxis2
     ij = np.indices(wcs.array_shape)
     if not index:
         coord_grid = wcs.low_level_wcs.array_index_to_world_values(*ij)
@@ -1391,8 +1468,17 @@ def ffill_nan_3d(arr):
     return out.T.reshape(shape)
 
 
-def linear_emcee_fitter(x, y, yerr=None, fit_log=False, gauss_prior=False, nwalkers=10,
-                        theta_init=None, use_lnf=True, bounds=([-np.inf, np.inf], [-np.inf, np.inf]), ):
+def linear_emcee_fitter(
+    x,
+    y,
+    yerr=None,
+    fit_log=False,
+    gauss_prior=False,
+    nwalkers=10,
+    theta_init=None,
+    use_lnf=True,
+    bounds=([-np.inf, np.inf], [-np.inf, np.inf]),
+):
     """
     ## sample call
     sampler,pos = little_emcee_fitter(x,y, theta_init=np.array(mfit.parameters), use_lnf=True)
@@ -1446,8 +1532,7 @@ def linear_emcee_fitter(x, y, yerr=None, fit_log=False, gauss_prior=False, nwalk
     def lnlike(theta, x, y, yerr, use_lnf=use_lnf):
         ymodel = model(x, theta)
         if use_lnf:
-            inv_sigma2 = 1.0 / (yerr ** 2 + ymodel **
-                                2 * np.exp(2 * theta[-1]))
+            inv_sigma2 = 1.0 / (yerr ** 2 + ymodel ** 2 * np.exp(2 * theta[-1]))
         else:
             inv_sigma2 = 1.0 / yerr ** 2
         return -0.5 * (np.sum((y - ymodel) ** 2 * inv_sigma2 - np.log(inv_sigma2)))
@@ -1507,11 +1592,11 @@ def plot_walkers(sampler, limits=None, bad=None):
 # Make it scale properly
 # How does matplotlib
 # scaling work
-def combine_cmap(cmaps, lower, upper, name = 'custom', N = None, register=True):
+def combine_cmap(cmaps, lower, upper, name="custom", N=None, register=True):
 
     n = len(cmaps)
 
-    for ic,c in enumerate(cmaps):
+    for ic, c in enumerate(cmaps):
         if isinstance(c, str):
             cmaps[ic] = mpl.cm.get_cmap(c)
 
@@ -1519,24 +1604,24 @@ def combine_cmap(cmaps, lower, upper, name = 'custom', N = None, register=True):
         N = [256] * n
 
     values = np.array([])
-    colors = np.empty((0,4))
+    colors = np.empty((0, 4))
 
     for i in range(n):
-        step = (upper[i] - lower[i])/N[i]
-        xcols = np.arange(lower[i],upper[i],step)
-        values = np.append(values,xcols)
+        step = (upper[i] - lower[i]) / N[i]
+        xcols = np.arange(lower[i], upper[i], step)
+        values = np.append(values, xcols)
         xcols -= xcols.min()
         xcols /= xcols.max()
         cols = cmaps[i](xcols)
-        colors = np.vstack([colors,cols])
+        colors = np.vstack([colors, cols])
     values -= values.min()
     values /= values.max()
 
-    arr = list(zip(values,colors))
-    cmap = mpl.colors.LinearSegmentedColormap.from_list(name,arr)
+    arr = list(zip(values, colors))
+    cmap = mpl.colors.LinearSegmentedColormap.from_list(name, arr)
 
-    if (name!='custom') & register:
-        mpl.cm.register_cmap(name=name,cmap=cmap)
+    if (name != "custom") & register:
+        mpl.cm.register_cmap(name=name, cmap=cmap)
 
     return cmap
 
@@ -1568,7 +1653,7 @@ def custom_cmap(colormaps, lower, upper, log=(0, 0)):
         upper = upper
         norm = upper[-1:][0]
 
-    for ic,c in enumerate(colormaps):
+    for ic, c in enumerate(colormaps):
         if isinstance(c, str):
             colormaps[ic] = mpl.cm.get_cmap(c)
 
@@ -1590,7 +1675,9 @@ def custom_cmap(colormaps, lower, upper, log=(0, 0)):
     return colors.LinearSegmentedColormap("my_cmap", cdict)
 
 
-def split_cmap(split=0.5, vmin1=12, vmax1=18, vmax2=50, vstep=1, log1=False, cmapn="coolwarm"):
+def split_cmap(
+    split=0.5, vmin1=12, vmax1=18, vmax2=50, vstep=1, log1=False, cmapn="coolwarm"
+):
 
     vmin1 = vmin1
     vmax1 = vmax1
@@ -1687,8 +1774,18 @@ def plot_2dhist(
     else:
         y = np.asarray(Y)
 
-    _ = ax.hist2d(x, y, range=histrange, bins=histbins, cmap=cmap,
-                  cmin=cmin, norm=norm, vmin=vmin, vmax=vmax, zorder=1, )
+    _ = ax.hist2d(
+        x,
+        y,
+        range=histrange,
+        bins=histbins,
+        cmap=cmap,
+        cmin=cmin,
+        norm=norm,
+        vmin=vmin,
+        vmax=vmax,
+        zorder=1,
+    )
 
     # bin the data
 
@@ -1699,8 +1796,16 @@ def plot_2dhist(
     est, be, _ = stats.binned_statistic(x, y, statistic=statstd, bins=binbins)
     cl = np.isfinite(st) & np.isfinite(est)
     if plot_bins:
-        ax.errorbar(mavg(be)[cl], st[cl], yerr=est[cl], fmt="s",
-                    color="r", label="binned data", lw=1.5, zorder=2, )
+        ax.errorbar(
+            mavg(be)[cl],
+            st[cl],
+            yerr=est[cl],
+            fmt="s",
+            color="r",
+            label="binned data",
+            lw=1.5,
+            zorder=2,
+        )
 
     if weighted_fit:
         p = np.polyfit(mavg(be)[cl][1:], st[cl][1:], 1, w=1 / est[cl][1:] ** 2)
@@ -1708,8 +1813,7 @@ def plot_2dhist(
         p = np.polyfit(mavg(be)[cl][1:], st[cl][1:], 1)
     funcname = "Best fit: {m:0.5G}*x + {b:0.5G}".format(m=p[0], b=p[1])
     if plot_fit:
-        ax.plot([0, 64], np.polyval(p, [0, 64]),
-                "dodgerblue", lw=1.5, label=funcname)
+        ax.plot([0, 64], np.polyval(p, [0, 64]), "dodgerblue", lw=1.5, label=funcname)
 
     ax.legend()
 
@@ -1732,8 +1836,6 @@ def data2rank(arr, clip=0, notadummy=True):
         uniqsort = np.r_[True, sorted_arr[1:] != sorted_arr[:-1]]
         order = uniqsort.cumsum()
         return order[invsort].reshape(shape)
-
-
 
 
 def data2norm(H):
@@ -1761,12 +1863,12 @@ def extend_hist(H, X1, Y1, fill=0, padn=2):
     """
     before = np.arange(-padn, 0, 1)
     after = np.arange(1, padn + 1, 1)
-    X2 = np.concatenate([X1[0] + before * np.diff(X1[:2]), X1, X1[-1] +
-                         after * np.diff(X1[-2:]), ]
-                        )
-    Y2 = np.concatenate([Y1[0] + before * np.diff(Y1[:2]), Y1, Y1[-1] +
-                         after * np.diff(Y1[-2:]), ]
-                        )
+    X2 = np.concatenate(
+        [X1[0] + before * np.diff(X1[:2]), X1, X1[-1] + after * np.diff(X1[-2:]),]
+    )
+    Y2 = np.concatenate(
+        [Y1[0] + before * np.diff(Y1[:2]), Y1, Y1[-1] + after * np.diff(Y1[-2:]),]
+    )
 
     padn = ((padn, padn), (padn, padn))
     H2 = np.pad(H, padn, mode="constant", constant_values=fill)
@@ -1774,18 +1876,28 @@ def extend_hist(H, X1, Y1, fill=0, padn=2):
     return H2, X2, Y2
 
 
-def hist2d(x, y, range=None, bins=20, smooth=False, clip=False, pad=True, normed=True, weights=None):
+def hist2d(
+    x,
+    y,
+    range=None,
+    bins=20,
+    smooth=False,
+    clip=False,
+    pad=True,
+    normed=True,
+    weights=None,
+):
     if bins is not None:
         if range is None:
-            if  isinstance(bins,int) or (bins=='auto'):
+            if isinstance(bins, int) or (bins == "auto"):
                 xedges = np.histogram_bin_edges(x, bins=bins)
                 yedges = np.histogram_bin_edges(y, bins=bins)
-            elif check_iterable(bins) & (len(bins)==2):
+            elif check_iterable(bins) & (len(bins) == 2):
                 xedges = np.histogram_bin_edges(x, bins=bins[0])
                 yedges = np.histogram_bin_edges(y, bins=bins[1])
             bins = [xedges, yedges]
         else:
-            if len(list(sum(range,())))==4:
+            if len(list(sum(range, ()))) == 4:
                 xedges = np.histogram_bin_edges(x, bins=bins, range=range[0])
                 yedges = np.histogram_bin_edges(y, bins=bins, range=range[1])
             else:
@@ -1840,8 +1952,7 @@ def color_cmap(c, alpha=1, to_white=True, reverse=False):
 
     color, reverse = clean_color(c, reverse=reverse)
 
-    cmap = mpl.colors.LinearSegmentedColormap.from_list(
-        "density_cmap", [color, end])
+    cmap = mpl.colors.LinearSegmentedColormap.from_list("density_cmap", [color, end])
     if reverse:
         return cmap.reversed()
     else:
@@ -1884,51 +1995,51 @@ def stat_plot1d(x, ax=None, bins="auto", histtype="step", lw=2, **plot_kwargs):
     if ax is None:
         ax = plt.gca()
 
-    ax.hist(x[np.isfinite(x)], bins="auto",
-            histtype="step", lw=2, **plot_kwargs)
+    ax.hist(x[np.isfinite(x)], bins="auto", histtype="step", lw=2, **plot_kwargs)
     return ax
 
 
 def stat_plot2d(
-        x,
-        y,
-        marker="k.",
-        bins=20,
-        range=None,
-        smooth=0,
-        xscale=None,
-        yscale=None,
-        plot_data=False,
-        plot_contourf=False,
-        plot_contour=False,
-        plot_imshow=False,
-        plot_binned=True,
-        color=None,
-        cmap=None,
-        levels=None,
-        mfc=None,
-        mec=None,
-        mew=None,
-        ms=None,
-        vmin=None,
-        vmax=None,
-        alpha=1,
-        rasterized=True,
-        linewidths=None,
-        data_kwargs=None,
-        contourf_kwargs=None,
-        contour_kwargs=None,
-        data_color=None,
-        contour_color=None,
-        default_color=None,
-        binned_color=None,
-        contourf_levels=None,
-        contour_levels=None,
-        lw=None,
-        debug=False,
-        zorder=0,
-        ax=None,
-        plot_datapoints=None):
+    x,
+    y,
+    marker="k.",
+    bins=20,
+    range=None,
+    smooth=0,
+    xscale=None,
+    yscale=None,
+    plot_data=False,
+    plot_contourf=False,
+    plot_contour=False,
+    plot_imshow=False,
+    plot_binned=True,
+    color=None,
+    cmap=None,
+    levels=None,
+    mfc=None,
+    mec=None,
+    mew=None,
+    ms=None,
+    vmin=None,
+    vmax=None,
+    alpha=1,
+    rasterized=True,
+    linewidths=None,
+    data_kwargs=None,
+    contourf_kwargs=None,
+    contour_kwargs=None,
+    data_color=None,
+    contour_color=None,
+    default_color=None,
+    binned_color=None,
+    contourf_levels=None,
+    contour_levels=None,
+    lw=None,
+    debug=False,
+    zorder=0,
+    ax=None,
+    plot_datapoints=None,
+):
     """
     based on hist2d dfm's corner.py
     but so much prettier and so many more options
@@ -1971,20 +2082,23 @@ def stat_plot2d(
     x, y = np.asarray(x)[g], np.asarray(y)[g]
 
     if (x.var() == 0) & (y.var() == 0):
-        print("Both variables have Variance=0. So no plot can be generated. Here is a plot to help"
-              )
+        print(
+            "Both variables have Variance=0. So no plot can be generated. Here is a plot to help"
+        )
         print("First 10 (or less) elements of x", x[:10])
         print("First 10 (or less) elements of y", y[:10])
         ax.scatter(x, y)
         return 0
-    elif x.var()==0:
-        print("Variable X has variance=0. Instead of making an ugly plot, here is a histogram of the remaining variable"
-              )
+    elif x.var() == 0:
+        print(
+            "Variable X has variance=0. Instead of making an ugly plot, here is a histogram of the remaining variable"
+        )
         stat_plot1d(y)
         return 0
-    elif y.var()==0:
-        print("Variable Y has variance=0. Instead of making an ugly plot, here is a histogram of the remaining variable"
-              )
+    elif y.var() == 0:
+        print(
+            "Variable Y has variance=0. Instead of making an ugly plot, here is a histogram of the remaining variable"
+        )
         stat_plot1d(x)
         return 0
 
@@ -2112,14 +2226,14 @@ def stat_plot2d(
 
     # color_match is for contours and data
     no_set_contour_color = contour_color is None
-    kwargs_not_set = (contour_kwargs.get("cmap") is None) & (contour_kwargs.get("colors") is None
-                                                             )
+    kwargs_not_set = (contour_kwargs.get("cmap") is None) & (
+        contour_kwargs.get("colors") is None
+    )
     if kwargs_not_set:
         if (color_match & no_set_contour_color) | (contour_color == "match"):
             contour_kwargs["colors"] = contour_level_colors(cmap, levels)
         elif contour_kwargs.get("colors") is None:
-            contour_kwargs["colors"] = listornone(
-                contour_color) or listornone(color)
+            contour_kwargs["colors"] = listornone(contour_color) or listornone(color)
 
     if contour_kwargs.get("levels") is None:
         contour_kwargs["levels"] = np.array(levels)  # levels
@@ -2129,8 +2243,7 @@ def stat_plot2d(
             pass
         else:
             lw = linewidths or lw
-            contour_kwargs["linewidths"] = [
-                i for i in np.asarray([lw]).flatten()]
+            contour_kwargs["linewidths"] = [i for i in np.asarray([lw]).flatten()]
 
     if contour_kwargs.get("alpha") is None:
         contour_kwargs["alpha"] = alpha
@@ -2138,7 +2251,7 @@ def stat_plot2d(
     if contourf_kwargs.get("levels") is None:
         new_levels = np.hstack([[0], levels])
 
-        contourf_kwargs["levels"] =  np.unique(new_levels) # close top contour
+        contourf_kwargs["levels"] = np.unique(new_levels)  # close top contour
 
     if contourf_kwargs.get("alpha") is None:
         contourf_kwargs["alpha"] = alpha
@@ -2173,8 +2286,9 @@ def stat_plot2d(
     # FINALLY GETTING TO THE PLOTS
 
     if plot_datapoints:
-        p = ax.plot(x, y, marker, **data_kwargs, rasterized=rasterized, zorder=zorder + 1
-                    )
+        p = ax.plot(
+            x, y, marker, **data_kwargs, rasterized=rasterized, zorder=zorder + 1
+        )
         xlim, ylim = ax.get_xlim(), ax.get_ylim()
     else:
         p = None
@@ -2185,20 +2299,32 @@ def stat_plot2d(
     #    vmax = levels[-1]
 
     if plot_contourf:
-        cntrf = ax.contourf(X1, Y1, sm_unflat, **contourf_kwargs, vmin=vmin, vmax=vmax, zorder=zorder + 2
-                            )
+        cntrf = ax.contourf(
+            X1,
+            Y1,
+            sm_unflat,
+            **contourf_kwargs,
+            vmin=vmin,
+            vmax=vmax,
+            zorder=zorder + 2,
+        )
     else:
         cntrf = None
 
     if plot_contour:
-        cntr = ax.contour(X1, Y1, sm_unflat, **contour_kwargs, vmin=vmin, vmax=vmax, zorder=zorder + 3
-                          )
+        cntr = ax.contour(
+            X1, Y1, sm_unflat, **contour_kwargs, vmin=vmin, vmax=vmax, zorder=zorder + 3
+        )
     else:
         cntr = None
 
     if plot_imshow:
-        ax.imshow(sm_unflat, origin="lower", extent=[
-                  X1.min(), X1.max(), Y1.min(), Y1.max()], zorder=zorder + 4, )
+        ax.imshow(
+            sm_unflat,
+            origin="lower",
+            extent=[X1.min(), X1.max(), Y1.min(), Y1.max()],
+            zorder=zorder + 4,
+        )
 
     if plot_datapoints:
         ax.set_xlim(*xlim)
@@ -2216,17 +2342,23 @@ def stat_plot2d(
         return ax
 
 
-def annotate(text, x, y,ax=None,
-            horizontalalignment='center',
-            verticalalignment='center',
-            ha = None,
-            va = None,
-            transform='axes',
-            color='k',
-            fontsize=9,
-            facecolor='w',
-            alpha=0.75,
-            bbox=dict(), **kwargs):
+def annotate(
+    text,
+    x,
+    y,
+    ax=None,
+    horizontalalignment="center",
+    verticalalignment="center",
+    ha=None,
+    va=None,
+    transform="axes",
+    color="k",
+    fontsize=9,
+    facecolor="w",
+    alpha=0.75,
+    bbox=dict(),
+    **kwargs,
+):
 
     if ax is None:
         ax = plt.gca()
@@ -2234,25 +2366,33 @@ def annotate(text, x, y,ax=None,
     horizontalalignment = ha or horizontalalignment
     verticalalignment = va or verticalalignment
 
-    if transform=='axes':
-         transform = ax.transAxes
-    elif transform == 'data':
+    if transform == "axes":
+        transform = ax.transAxes
+    elif transform == "data":
         transform = ax.transData
     bbox1 = dict(facecolor=facecolor, alpha=alpha)
     bbox1.update(bbox)
-    text = ax.text(x,y,text,horizontalalignment=horizontalalignment,
-                                verticalalignment=verticalalignment,
-                                transform=transform,
-                                color=color,
-                                fontsize=fontsize,
-                                bbox=bbox, **kwargs)
+    text = ax.text(
+        x,
+        y,
+        text,
+        horizontalalignment=horizontalalignment,
+        verticalalignment=verticalalignment,
+        transform=transform,
+        color=color,
+        fontsize=fontsize,
+        bbox=bbox,
+        **kwargs,
+    )
     return text
 
 
 # alias only used becuase of old code
 
+
 def jhist2d(*args, **kwargs):
     return stat_plot2d(*args, **kwargs)
+
 
 def corner(pos, names=None, smooth=1, bins=20, figsize=None, **kwargs):
     """produce a corner plot
@@ -2277,26 +2417,43 @@ def corner(pos, names=None, smooth=1, bins=20, figsize=None, **kwargs):
     """
     if figsize is None:
         dim = 2 * pos.shape[1] + 0.5
-        figsize = (dim,dim)
-    fig, axs = plt.subplots(nrows=pos.shape[1],ncols=pos.shape[1],sharex=False,sharey=False,figsize=figsize)
+        figsize = (dim, dim)
+    fig, axs = plt.subplots(
+        nrows=pos.shape[1],
+        ncols=pos.shape[1],
+        sharex=False,
+        sharey=False,
+        figsize=figsize,
+    )
     for i in range(pos.shape[-1]):
         for j in range(pos.shape[-1]):
             if i == j:
-                stat_plot1d(pos[:,i],ax=axs[i,j])
+                stat_plot1d(pos[:, i], ax=axs[i, j])
             if j < i:
-                ax = axs[i,j]
-                stat_plot2d(pos[:,j],pos[:,i],ax=ax,bins=bins,smooth=smooth,plot_datapoints=True,plot_contour=True,**kwargs)
+                ax = axs[i, j]
+                stat_plot2d(
+                    pos[:, j],
+                    pos[:, i],
+                    ax=ax,
+                    bins=bins,
+                    smooth=smooth,
+                    plot_datapoints=True,
+                    plot_contour=True,
+                    **kwargs,
+                )
                 if names is not None:
                     try:
-                        if i==pos.shape[1]-1: ax.set_xlabel(names[j])
-                        if j==pos.shape[1]-1: ax.set_ylabel(names[i])
+                        if i == pos.shape[1] - 1:
+                            ax.set_xlabel(names[j])
+                        if j == pos.shape[1] - 1:
+                            ax.set_ylabel(names[i])
                     except:
                         pass
 
             if j > i:
-                plt.delaxes(axs[i,j])
+                plt.delaxes(axs[i, j])
     fig.tight_layout()
-    return fig,axs
+    return fig, axs
 
 
 def standardize(X, remove_mean=True, remove_std=True):
@@ -2311,7 +2468,20 @@ def standardize(X, remove_mean=True, remove_std=True):
 
     return (X - mean) / std
 
-def plotoneone(color='k', lw = 2, scale = 1, offset=0, p=None, invert=False, n=50, start=None,end=None,ax=None,**kwargs):
+
+def plotoneone(
+    color="k",
+    lw=2,
+    scale=1,
+    offset=0,
+    p=None,
+    invert=False,
+    n=50,
+    start=None,
+    end=None,
+    ax=None,
+    **kwargs,
+):
     if ax is None:
         ax = plt.gca()
     xlim, ylim = ax.get_xlim(), ax.get_ylim()
@@ -2321,8 +2491,8 @@ def plotoneone(color='k', lw = 2, scale = 1, offset=0, p=None, invert=False, n=5
     if end is None:
         end = np.max([xlim[1], ylim[1]])
     scale = ax.get_xscale()
-    if scale=='log':
-        xs = np.logspace(np.log10(start),np.log10(end),n)
+    if scale == "log":
+        xs = np.logspace(np.log10(start), np.log10(end), n)
     else:
         xs = np.linspace(start, end, n)
 
@@ -2338,8 +2508,16 @@ def plotoneone(color='k', lw = 2, scale = 1, offset=0, p=None, invert=False, n=5
     ax.set_ylim(*ylim)
 
 
-
-def oplot_hist(X, bins=None, ylim=None, scale=0.5, ax=None, show_mean = False, show_median = False, show_percentiles = None):
+def oplot_hist(
+    X,
+    bins=None,
+    ylim=None,
+    scale=0.5,
+    ax=None,
+    show_mean=False,
+    show_median=False,
+    show_percentiles=None,
+):
     if ax is None:
         ax = plt.gca()
     if ylim is None:
@@ -2347,76 +2525,76 @@ def oplot_hist(X, bins=None, ylim=None, scale=0.5, ax=None, show_mean = False, s
     if bins is None:
         bins = "auto"
 
-    H, xedge = np.histogram(X, range=np.nanpercentile(X, [0, 100]), bins=bins, density=True
-                            )
+    H, xedge = np.histogram(
+        X, range=np.nanpercentile(X, [0, 100]), bins=bins, density=True
+    )
     H = (H / H.max()) * (ylim[1] - ylim[0]) * scale + ylim[0]
-    ax.step(mavg(xedge), H, where="mid",
-            color="0.25", alpha=1, zorder=10, lw=1.5)
+    ax.step(mavg(xedge), H, where="mid", color="0.25", alpha=1, zorder=10, lw=1.5)
 
     if show_mean:
-        ax.axvline(np.nanmean(X), 0, 1, color='0.45', ls = '--')
+        ax.axvline(np.nanmean(X), 0, 1, color="0.45", ls="--")
     if show_median:
-        ax.axvline(np.nanmedian(X), 0, 1, color='0.45', ls = '--')
+        ax.axvline(np.nanmedian(X), 0, 1, color="0.45", ls="--")
     if not (show_percentiles is None):
         for p in show_percentiles:
-            ax.axvline(p, 0, 1, color='0.45', ls = '--',alpha=0.5)
+            ax.axvline(p, 0, 1, color="0.45", ls="--", alpha=0.5)
     return ax
 
 
-
-def find_minima(x,y,yer=-1,err_cut=False,cut=3):
-    #srt = np.argsort(x)
-    #y = y[srt]
-    #x = x[srt]
-    #dy = np.gradient(y,axis=0)#/np.gradient(x)
-    #dyy = np.gradient(dy,axis=0)#/np.gradient(x)
-    dy = np.diff(y,axis=0)
-    dy = np.insert(dy,0,0,axis=0)
-    dyy = np.diff(dy,axis=0)
-    dyy = np.insert(dyy,-1,0,axis=0)
+def find_minima(x, y, yer=-1, err_cut=False, cut=3):
+    # srt = np.argsort(x)
+    # y = y[srt]
+    # x = x[srt]
+    # dy = np.gradient(y,axis=0)#/np.gradient(x)
+    # dyy = np.gradient(dy,axis=0)#/np.gradient(x)
+    dy = np.diff(y, axis=0)
+    dy = np.insert(dy, 0, 0, axis=0)
+    dyy = np.diff(dy, axis=0)
+    dyy = np.insert(dyy, -1, 0, axis=0)
 
     dysign = np.sign(dy)
     dyysign = np.sign(dyy)
 
-    dysignchange = ((np.roll(dysign, 1,axis=0) - dysign) != 0)
-    dysignchange[0:2]=False
-    dyysignchange = ((np.roll(dyysign, 1,axis=0) - dyysign) != 0)
-    dyysignchange[0:2]=False
+    dysignchange = (np.roll(dysign, 1, axis=0) - dysign) != 0
+    dysignchange[0:2] = False
+    dyysignchange = (np.roll(dyysign, 1, axis=0) - dyysign) != 0
+    dyysignchange[0:2] = False
 
     if err_cut:
-        mins = dysignchange & (dyysign>=0) & (y > cut*yer)
+        mins = dysignchange & (dyysign >= 0) & (y > cut * yer)
     else:
-        mins = dysignchange & (dyysign>=0) #& (np.abs(dy) < yer)
+        mins = dysignchange & (dyysign >= 0)  # & (np.abs(dy) < yer)
     return np.roll(mins, -1, axis=0)
 
-def find_maxima(x,y,yer=-1,err_cut=False,cut=3):
-    #srt = np.argsort(x)
-    #y = y[srt,:,:]
-    #x = x[srt]
-    dy = np.gradient(y,axis=0)#/np.gradient(x)
-    dyy = np.gradient(dy,axis=0)#/np.gradient(x)
+
+def find_maxima(x, y, yer=-1, err_cut=False, cut=3):
+    # srt = np.argsort(x)
+    # y = y[srt,:,:]
+    # x = x[srt]
+    dy = np.gradient(y, axis=0)  # /np.gradient(x)
+    dyy = np.gradient(dy, axis=0)  # /np.gradient(x)
 
     dysign = np.sign(dy)
     dyysign = np.sign(dyy)
 
-    dysignchange = ((np.roll(dysign, 1,axis=0) - dysign) != 0)
-    dysignchange[0]=False
-    dyysignchange = ((np.roll(dyysign, 1,axis=0) - dyysign) != 0)
-    dyysignchange[0]=False
+    dysignchange = (np.roll(dysign, 1, axis=0) - dysign) != 0
+    dysignchange[0] = False
+    dyysignchange = (np.roll(dyysign, 1, axis=0) - dyysign) != 0
+    dyysignchange[0] = False
 
     if err_cut:
-        mins = dysignchange & (dyysign<=0) & (y > cut*yer)
+        mins = dysignchange & (dyysign <= 0) & (y > cut * yer)
     else:
-        mins = dysignchange & (dyysign<=0) #& (np.abs(dy) < yer)
-    return np.roll(mins,-1,axis=0)
+        mins = dysignchange & (dyysign <= 0)  # & (np.abs(dy) < yer)
+    return np.roll(mins, -1, axis=0)
 
 
-
-def multi_colored_line_plot(x,y,z=None,cmap='viridis',norm=None,
-                            vmin=None,vmax=None,ax=None,**kwargs):
-    '''
+def multi_colored_line_plot(
+    x, y, z=None, cmap="viridis", norm=None, vmin=None, vmax=None, ax=None, **kwargs
+):
+    """
     adapted from matplotlib gallery
-    '''
+    """
     if ax is None:
         ax = plt.gca()
     # Create a set of line segments so that we can color them individually
@@ -2435,18 +2613,29 @@ def multi_colored_line_plot(x,y,z=None,cmap='viridis',norm=None,
         vmax = np.nanmax(z)
     if norm is None:
         norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
-    lc = mpl.collections.LineCollection(segments, cmap=cmap, norm=norm,**kwargs)
+    lc = mpl.collections.LineCollection(segments, cmap=cmap, norm=norm, **kwargs)
     # Set the values used for colormapping
 
     lc.set_array(z)
 
     line = ax.add_collection(lc)
-    #fig.colorbar(line, ax=axs[0])
+    # fig.colorbar(line, ax=axs[0])
     return line
 
 
-def errorbar_fill(x=None, y=None, yerr=None, *args, ax=None, mid=True, \
-                    color=None,alpha=1,lw=1,ls='-',**kwargs):
+def errorbar_fill(
+    x=None,
+    y=None,
+    yerr=None,
+    *args,
+    ax=None,
+    mid=True,
+    color=None,
+    alpha=1,
+    lw=1,
+    ls="-",
+    **kwargs,
+):
     if ax is None:
         ax = plt.gca()
 
@@ -2456,61 +2645,60 @@ def errorbar_fill(x=None, y=None, yerr=None, *args, ax=None, mid=True, \
             alpha_fill = 1
     ax.fill_between(x, y - yerr, y + yerr, color=color, alpha=alpha)
     if mid:
-        ax.plot(x,y,'-',color=color,alpha=alpha,lw=lw,ls=ls)
+        ax.plot(x, y, "-", color=color, alpha=alpha, lw=lw, ls=ls)
     return None
 
 
-def confidence_bands(x, p, cov, func, N=1000, ci=90,ucb=None,lcb=None):
-    '''
+def confidence_bands(x, p, cov, func, N=1000, ci=90, ucb=None, lcb=None):
+    """
     x, inputs
     p, parameters
     func - function called f(x,*p)
 
     if linear then p, should be in the order returned
     by np.polyfit. If used PolyRegress then pass p=PolyRegress.b[::-1]
-    '''
+    """
     ps = np.random.multivariate_normal(mean=p, cov=cov, size=N)
-    if isinstance(func,str):
-        if (func=='line')|(func=='lin'):
-            func = lambda x,p: np.polyval(p,x)
-    out = np.array([func(x,pi) for pi in ps])
+    if isinstance(func, str):
+        if (func == "line") | (func == "lin"):
+            func = lambda x, p: np.polyval(p, x)
+    out = np.array([func(x, pi) for pi in ps])
     if ucb is None:
         ucb = 50 + ci / 2
     if lcb is None:
         lcb = 50 - ci / 2
-    upper,lower=np.percentile(out,[lcb,ucb],axis=0)
-    return lower,upper
+    upper, lower = np.percentile(out, [lcb, ucb], axis=0)
+    return lower, upper
 
 
-
-def detrend_iter_single_mod(t,f,p=1, low=3,high=3,cutboth=False):
-    '''
+def detrend_iter_single_mod(t, f, p=1, low=3, high=3, cutboth=False):
+    """
      My iterative detrending algorithm, based on the concept in Vandenberg & Johnson 2015
      borrowed clipping portion from scipy.stats.sigmaclip
      with substantial modifications.
-    '''
+    """
     clip = 1
     c = np.asarray(f).ravel()
-    #mask = np.full(c.shape,True,dtype=np.bool)
+    # mask = np.full(c.shape,True,dtype=np.bool)
     mask = np.isfinite(c)
-    outmask = np.copy(mask) #np.full(c.shape,True, dtype=np.bool)
+    outmask = np.copy(mask)  # np.full(c.shape,True, dtype=np.bool)
     i = 0
     while clip:
-        i+=1
-        m = PolyRegress(t[mask], c[mask],P=p,fit=True)
+        i += 1
+        m = PolyRegress(t[mask], c[mask], P=p, fit=True)
         c_trend = m.y_hat
-        c_detrend = (c[mask] - c_trend + 1) #get masked detreneded lighcurve
-        c_mean = np.median(c_detrend) # use median for mean
+        c_detrend = c[mask] - c_trend + 1  # get masked detreneded lighcurve
+        c_mean = np.median(c_detrend)  # use median for mean
         c_std = c_detrend.std()
         size = c_detrend.size
-        critlower = c_mean - c_std*low
-        critupper = c_mean + c_std*high
+        critlower = c_mean - c_std * low
+        critupper = c_mean + c_std * high
         newmask = (c_detrend >= critlower) & (c_detrend <= critupper)
         outmask[mask] = c_detrend <= critupper
         mask[mask] = newmask
         clip = size - c[mask].size
-        print(i,clip, np.sum(mask), len(t))
-        #plt.plot(x[mask],c_trend[newmask])
+        print(i, clip, np.sum(mask), len(t))
+        # plt.plot(x[mask],c_trend[newmask])
         if i > 50:
             clip = 0
     if cutboth:
@@ -2522,11 +2710,11 @@ def plot_to_origin(ax=None):
     if ax is None:
         ax = plt.gca()
 
-    ax.set_xlim(0,ax.get_xlim()[1])
-    ax.set_ylim(0,ax.get_ylim()[1])
+    ax.set_xlim(0, ax.get_xlim()[1])
+    ax.set_ylim(0, ax.get_ylim()[1])
 
 
-def jconvolve(h1, h2, x1, x2 = None, mode = 'math', normed = None):
+def jconvolve(h1, h2, x1, x2=None, mode="math", normed=None):
     """convolve two functions with equal sample spacing
 
     mode: 'math' (default), 'average'
@@ -2542,10 +2730,10 @@ def jconvolve(h1, h2, x1, x2 = None, mode = 'math', normed = None):
     written for dealing with PDFs,
 
     """
-    if mode=='sum':
-        mode = 'math'
+    if mode == "sum":
+        mode = "math"
 
-    if isinstance(normed,int):
+    if isinstance(normed, int):
         normed = float(normed)
 
     if x2 is None:
@@ -2560,41 +2748,42 @@ def jconvolve(h1, h2, x1, x2 = None, mode = 'math', normed = None):
 
     # math mode should'nt be scaled
     # average mode should return density
-    if (mode=='math') & (normed is None):
+    if (mode == "math") & (normed is None):
         normed = None
-    elif (mode=='average') & (normed is None):
-        normed = 'density'
-
+    elif (mode == "average") & (normed is None):
+        normed = "density"
 
     # the starting point is x1[0] + x2[0]
-    Xconv = ((x1[0]+x2[0])/delta + np.arange(len(hconv))) * delta
-    if mode=='math':
+    Xconv = ((x1[0] + x2[0]) / delta + np.arange(len(hconv))) * delta
+    if mode == "math":
         pass
-    elif mode=='average':
-        #when computing the average, the x-axis is down-weighted
+    elif mode == "average":
+        # when computing the average, the x-axis is down-weighted
         # by a factor of 2. this is accomplished, by rescaling
         # the x-axis
-        Xconv = Xconv / 2 #np.linspace(b[0],b[-1],len(hconv))
-
+        Xconv = Xconv / 2  # np.linspace(b[0],b[-1],len(hconv))
 
     # return properly scaled functions
-    if (normed is None) or (normed=='none'):
+    if (normed is None) or (normed == "none"):
         return hconv, Xconv
 
-    elif normed == 'density':
+    elif normed == "density":
         hconv /= np.sum(hconv * np.diff(Xconv)[0])
         return hconv, Xconv
 
-    elif (normed == 'max') | (normed == 1):
+    elif (normed == "max") | (normed == 1):
         hconv /= np.max(hconv)
         return hconv, Xconv
 
-    elif isinstance(normed,float):
+    elif isinstance(normed, float):
         hconv /= np.max(hconv)
         hconv *= normed
         return hconv, Xconv
 
-def jconvolve_funcs(x1, y1, x2, y2, outx,interp_kind='nearest',fill_value=0,**kwargs):
+
+def jconvolve_funcs(
+    x1, y1, x2, y2, outx, interp_kind="nearest", fill_value=0, **kwargs
+):
     """
     convolve 2 arrays on different x-axes using interpolated functions
     jconvolve_funcs(x1, y1, x2, y2, outx,interp_kind='nearest',fill_value=0)
@@ -2603,40 +2792,41 @@ def jconvolve_funcs(x1, y1, x2, y2, outx,interp_kind='nearest',fill_value=0,**kw
     """
     # take two array and find the c
     # for now assume x1 == x2
-    f = interpolate.interp1d(x1,y1,fill_value=fill_value,kind=interp_kind,**kwargs)
-    g = interpolate.interp1d(x2,y2,fill_value=fill_value,kind=interp_kind,**kwargs)
-    xmin, xmax = ju.minmax(np.append(x1,x2))
-    func = lambda tau: f(tau) * g(outx-tau)
-    ht = integrate.quad_vec(func,xmin,xmax)[0]
-    return ht,outx
+    f = interpolate.interp1d(x1, y1, fill_value=fill_value, kind=interp_kind, **kwargs)
+    g = interpolate.interp1d(x2, y2, fill_value=fill_value, kind=interp_kind, **kwargs)
+    xmin, xmax = ju.minmax(np.append(x1, x2))
+    func = lambda tau: f(tau) * g(outx - tau)
+    ht = integrate.quad_vec(func, xmin, xmax)[0]
+    return ht, outx
 
-def arr_to_rgb(arr,rgb = (0,0,0),alpha=1,invert=False,ax=None):
+
+def arr_to_rgb(arr, rgb=(0, 0, 0), alpha=1, invert=False, ax=None):
     """
     arr to be made a mask
     rgb:assumed using floats (0..1,0..1,0..1)
 
     """
     # arr should be scaled to 1
-    img = np.asarray(arr,dtype=np.float64)
+    img = np.asarray(arr, dtype=np.float64)
     img = img - np.nanmin(img)
     img = img / np.nanmax(img)
     im2 = np.zeros(img.shape + (4,))
 
-    if isinstance(rgb,str):
+    if isinstance(rgb, str):
         rgb = mpl.colors.to_rgb(rgb)
 
     if invert:
         img = 1 - img
     im2[:, :, 3] = img * alpha
-    r,g,b = rgb
-    im2[:,:,0] = r
-    im2[:,:,1] = g
-    im2[:,:,2] = b
+    r, g, b = rgb
+    im2[:, :, 0] = r
+    im2[:, :, 1] = g
+    im2[:, :, 2] = b
 
-#     if ax is None:
-#         ax = plt.gca()
-#     plt.sca(ax)
-#     plt.imshow(im2)
+    #     if ax is None:
+    #         ax = plt.gca()
+    #     plt.sca(ax)
+    #     plt.imshow(im2)
 
     return im2
 
@@ -2660,13 +2850,14 @@ def pdf_pareto(t, a, k, xmax=None):
         numpy array
     """
     if xmax is None:
-        out = ((a-1)/k) * (t/k)**(-a)
-        out[(t<k)] = 0
+        out = ((a - 1) / k) * (t / k) ** (-a)
+        out[(t < k)] = 0
         return out
     else:
-        out = ((a-1)/(k**(1-a) - xmax**(1-a))) * t**(-a)
-        out[(t<=k)|(t>xmax)] = 0
+        out = ((a - 1) / (k ** (1 - a) - xmax ** (1 - a))) * t ** (-a)
+        out[(t <= k) | (t > xmax)] = 0
         return out
+
 
 def cdf_pareto(t, a, k, xmax=None):
     """CDF of Pareto distribution
@@ -2687,34 +2878,32 @@ def cdf_pareto(t, a, k, xmax=None):
         numpy array
     """
     if xmax is None:
-        out = 1 - (k/t)**(a-1)
-        out[t<k] = 0
+        out = 1 - (k / t) ** (a - 1)
+        out[t < k] = 0
         return out
     else:
-        out = (1 - (t/k)**(1 - a))/(1 - (xmax/k)**(1 - a))
-        out[t<=k] = 0
-        out[t>xmax] = 1
+        out = (1 - (t / k) ** (1 - a)) / (1 - (xmax / k) ** (1 - a))
+        out[t <= k] = 0
+        out[t > xmax] = 1
         return out
 
 
+def lvp(x, p, v):
+    return p + v * x[:, np.newaxis]
 
-def lvp(x,p,v):
-    return p + v * x[:,np.newaxis]
 
 def eigen_decomp(A, b=[0, 0], return_slope=True):
     eVa, eVe = np.linalg.eig(A)
 
-
     P, D = eVe, np.diag(eVa)
-    S = D**.5
+    S = D ** 0.5
 
-    T = P @ S # transform from real to eigenspace
+    T = P @ S  # transform from real to eigenspace
     # Columns of T are scaled eigenvectors
 
     # for eigenvector in T
 
-
-    m = P[1]/P[0]
+    m = P[1] / P[0]
     y_int = -m * b[0] + b[1]
     major = np.argmax(eVa)
 
@@ -2723,74 +2912,83 @@ def eigen_decomp(A, b=[0, 0], return_slope=True):
     else:
         return P, D, T
 
-def eigenplot(A, b=[0, 0], n=3, data=False, vec_c='r', ell_c='b', ell_lw=2, **kwargs):
+
+def eigenplot(A, b=[0, 0], n=3, data=False, vec_c="r", ell_c="b", ell_lw=2, **kwargs):
     # https://janakiev.com/blog/covariance-matrix/
     eVa, eVe = np.linalg.eig(A)
 
-    #print(eVe.T[0].dot(eVe.T[1]))
+    # print(eVe.T[0].dot(eVe.T[1]))
 
     if data:
-        data = data = np.random.multivariate_normal(b,A,2000)
+        data = data = np.random.multivariate_normal(b, A, 2000)
 
-        plt.plot(*data.T,'k.')
+        plt.plot(*data.T, "k.")
 
     P, D = eVe, np.diag(eVa)
-    S = D**.5
+    S = D ** 0.5
 
-    T = P @ S # transform from real to eigenspace
+    T = P @ S  # transform from real to eigenspace
     # Columns of T are scaled eigenvectors
 
     # for eigenvector in T
 
-
     for i in T.T:
-        i = b + n*i
-        plt.plot([b[0], i[0]], [b[1], i[1]], c=vec_c, zorder=100,**kwargs)
-
+        i = b + n * i
+        plt.plot([b[0], i[0]], [b[1], i[1]], c=vec_c, zorder=100, **kwargs)
 
     # for e, v in zip(eVa, eVe.T):
     #     plt.plot([0, 3*np.sqrt(e)*v[0]], [0, 3*np.sqrt(e)*v[1]], 'k-', lw=2)
 
-    #plt.axis('equal')
+    # plt.axis('equal')
 
-
-    m = P[1]/P[0]
+    m = P[1] / P[0]
     y_int = -m * b[0] + b[1]
     major = np.argmax(eVa)
-    angle = np.arctan(m)[major] * 180/np.pi
-    #print(angle)
+    angle = np.arctan(m)[major] * 180 / np.pi
+    # print(angle)
     # get the norm of the
-    #a1 = 2 * n * np.linalg.norm(T, axis=0)
+    # a1 = 2 * n * np.linalg.norm(T, axis=0)
     a1 = 2 * n * np.sqrt(eVa)
     h, w = a1[np.argsort(eVa)]
 
-    pat = mpl.patches.Ellipse(angle=angle, xy=b, width=w, height=h,
-            zorder=100, facecolor='none',
-            edgecolor=ell_c,lw=ell_lw)
+    pat = mpl.patches.Ellipse(
+        angle=angle,
+        xy=b,
+        width=w,
+        height=h,
+        zorder=100,
+        facecolor="none",
+        edgecolor=ell_c,
+        lw=ell_lw,
+    )
     plt.gca().add_artist(pat)
 
-    #print(m[major], y_int[major])
+    # print(m[major], y_int[major])
     return m[major], y_int[major]
 
-def eigenplot_from_data(x,y,n=3,data=False,vec_c='r',ell_c='b',ell_lw=2):
-    g = np.isfinite(x+y)
-    cov = np.cov(x[g],y[g])
-    b = np.mean(x[g]),np.mean(y[g])
+
+def eigenplot_from_data(x, y, n=3, data=False, vec_c="r", ell_c="b", ell_lw=2):
+    g = np.isfinite(x + y)
+    cov = np.cov(x[g], y[g])
+    b = np.mean(x[g]), np.mean(y[g])
     if data:
-        plt.plot(x,y,'k.',zorder=0)
-    out = eigenplot(cov,b,data=False,n=n,vec_c=vec_c,ell_c=ell_c,ell_lw=ell_lw)
+        plt.plot(x, y, "k.", zorder=0)
+    out = eigenplot(cov, b, data=False, n=n, vec_c=vec_c, ell_c=ell_c, ell_lw=ell_lw)
     return out
 
 
 def print_bces(bc):
-    a,b,erra,errb,covab=bc
-    types = ['y/x','x/y','bisec','ortho']
+    a, b, erra, errb, covab = bc
+    types = ["y/x", "x/y", "bisec", "ortho"]
 
-    for i,t in enumerate(types):
-        print(f'{t}: \t m:{a[i]:6.3g} +/- {erra[i]:6.3g} \t b:{b[i]:6.3g} +/- {errb[i]:6.3g}')
+    for i, t in enumerate(types):
+        print(
+            f"{t}: \t m:{a[i]:6.3g} +/- {erra[i]:6.3g} \t b:{b[i]:6.3g} +/- {errb[i]:6.3g}"
+        )
+
 
 def figsize(arr, default=[6, 6]):
     arr = np.array(arr)
-    norm = np.array(arr.shape)/np.max(arr.shape)
+    norm = np.array(arr.shape) / np.max(arr.shape)
     figsize = (np.array(default) * norm)[::-1]
     return figsize
