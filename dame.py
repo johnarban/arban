@@ -188,7 +188,7 @@ def getmaps(objec, make_global=False, imin=0, imax=0):
     tmass = glob.glob(f"{dirs}/{obj}/nicest_reproj_smooth125.fits")[0]
     tmass = fits.getdata(tmass)
     etmass = glob.glob(f"{dirs}/{obj}/nicest_ivar_reproj_smooth125.fits")[0]
-    etmass = fits.getdata(etmass)
+    etmass = fits.getdata(etmass) ** -0.5
 
     tmass_full = glob.glob(f"{dirs}/{obj}/nicest_reproj_full.fits")[0]
     tmass_full = fits.getdata(tmass_full)

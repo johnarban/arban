@@ -1675,38 +1675,66 @@ def custom_cmap(colormaps, lower, upper, log=(0, 0)):
     return colors.LinearSegmentedColormap("my_cmap", cdict)
 
 
-def split_cmap(
-    split=0.5, vmin1=12, vmax1=18, vmax2=50, vstep=1, log1=False, cmapn="coolwarm"
-):
+def cmap_split(*args, **kwargs):
+    """alias for split_cmap"""
+    return split_cmap(*args, **kwargs)
 
-    vmin1 = vmin1
-    vmax1 = vmax1
+def split_cmap(cmapn='viridis',split=0.5,vmin=0, vmaxs=(.5,1),vstep=None,
+               vsplit=None,log=False):
+    """
+    split a colormap at a certain location
+
+    split - where along the colormap will be our split point
+            by default this split point is put in the middle
+            of the values
+    vmin  value for colorbar to start at: should max vim in
+            plotting command
+    vmaxs  (splitvalue,vmax) - where to start the second segment
+            of the color map. cmap(split) will be located
+            at valeu=splitvalue
+    vplit = instead of giving vmin,vmax,a you can split it at a
+            value between 0,1.
+    log     doesn't do what anyone would think, don't recommend using
+
+
+
+    """
+    if vsplit is not None:
+        vmin=0
+        vmaxs=(vsplit,1)
+    vmin1 = vmin
+    vmax1 =  vmaxs[0]
     vmin2 = vmax1
-    vmax2 = vmax2
-    vstep = vstep
-    levels1 = np.arange(vmin1, vmax1 + vstep, vstep)
-    levels2 = np.arange(vmin2, vmax2 + vstep, vstep)
-    levels_pieces2 = np.hstack((levels1, levels2[1:]))
-    ncols1 = len(levels1) - 1
-    ncols2 = len(levels2) - 1
-    ncols = ncols1 + ncols2
+    vmax2 =  vmaxs[1]
+    if vstep is None:
+        vstep=   (vmax2 - vmin1)/1024
+    levels1 = np.arange(vmin1, vmax1+vstep, vstep)
+    levels2 = np.arange(vmin2, vmax2+vstep, vstep)
+
+    ncols1 = len(levels1)-1
+    #ncols1 = int((vmax1-vmin1)//vstep)
+    ncols2 = len(levels2)-1
+#     ncols1 = int((vmax1-vmin1)//vstep)+1
+#     ncols2 = int((vmax2-vmin2)//vstep)+1
+    # ncols = ncols1 + ncols2
     split = split
     # Sample the right number of colours
     # from the right bits (between 0 &amp; 1) of the colormaps we want.
-    if log1:
-        cmap1 = mpl.cm.get_cmap(cmapn + "_r")
-        cols1 = cmap1(np.logspace(np.log10(1 - split), 0, ncols1))[::-1]
-    else:
-        cmap1 = mpl.cm.get_cmap(cmapn)
-        cols1 = cmap1(np.linspace(0.0, split, ncols1))
-
     cmap2 = mpl.cm.get_cmap(cmapn)
-    cols2 = cmap2(np.logspace(np.log10(split), 0, ncols2))
+    if log:
+        cmap1 = mpl.cm.get_cmap(cmapn+'_r')
+        cols1 = cmap1(np.logspace(np.log10(1-split),0, ncols1))[::-1]
+        cols2 = cmap2(np.logspace(np.log10(split), 0, ncols2))
+    else:
+        cols1 = cmap2(np.linspace(0.0, split, ncols1))
+        cols2 = cmap2(np.linspace(split, 1, ncols2))
+
+
+    #cols2 = cmap2(np.logspace(np.log10(split), 0, ncols2))
 
     # Combine them and build a new colormap:
-    allcols2 = np.vstack((cols1, cols2))
-    return mpl.colors.LinearSegmentedColormap.from_list("piecewise2", allcols2)
-
+    allcols2 = np.vstack( (cols1,cols2) )
+    return mpl.colors.LinearSegmentedColormap.from_list('piecewise2', allcols2)
 
 def plot_2dhist(
     X,
@@ -1823,6 +1851,7 @@ def plot_2dhist(
 def data2rank(arr, clip=0, notadummy=True):
     # stolen from scipy.stats.rankdata
     # so just just that dummy
+
     arr = np.array(arr, copy=True)
     if notadummy:
         out = stats.rankdata(arr, method="dense")
@@ -1834,18 +1863,26 @@ def data2rank(arr, clip=0, notadummy=True):
         invsort = np.argsort(sort)  # get sorted array in to original order
         sorted_arr = arr[sort]
         uniqsort = np.r_[True, sorted_arr[1:] != sorted_arr[:-1]]
-        order = uniqsort.cumsum()
+        order = np.nancumsum(uniqsort)
         return order[invsort].reshape(shape)
 
 
 def data2norm(H):
+    """
+    normalize data as percentiles
+
+    """
+    bad = ~np.isfinite(H)
     H = np.array(H, copy=True)
+
     Hflat = H.flatten()
     inds = np.argsort(Hflat)[::-1]
     Hflat = Hflat[inds]
-    sm = np.cumsum(Hflat)
+    sm = np.nancumsum(Hflat)
     sm /= sm[-1]
-    return sm[np.argsort(inds)].reshape(H.shape)
+    out = sm[np.argsort(inds)].reshape(H.shape)
+    out[bad] = np.nan
+    return out
 
 
 def extend_hist(H, X1, Y1, fill=0, padn=2):
@@ -2381,7 +2418,7 @@ def annotate(
         transform=transform,
         color=color,
         fontsize=fontsize,
-        bbox=bbox,
+        bbox=bbox1,
         **kwargs,
     )
     return text
@@ -2490,8 +2527,8 @@ def plotoneone(
         start = np.min([xlim[0], ylim[0]])
     if end is None:
         end = np.max([xlim[1], ylim[1]])
-    scale = ax.get_xscale()
-    if scale == "log":
+    axscale = ax.get_xscale()
+    if axscale == "log":
         xs = np.logspace(np.log10(start), np.log10(end), n)
     else:
         xs = np.linspace(start, end, n)
@@ -2794,7 +2831,7 @@ def jconvolve_funcs(
     # for now assume x1 == x2
     f = interpolate.interp1d(x1, y1, fill_value=fill_value, kind=interp_kind, **kwargs)
     g = interpolate.interp1d(x2, y2, fill_value=fill_value, kind=interp_kind, **kwargs)
-    xmin, xmax = ju.minmax(np.append(x1, x2))
+    xmin, xmax = minmax(np.append(x1, x2))
     func = lambda tau: f(tau) * g(outx - tau)
     ht = integrate.quad_vec(func, xmin, xmax)[0]
     return ht, outx
@@ -2887,40 +2924,131 @@ def cdf_pareto(t, a, k, xmax=None):
         out[t > xmax] = 1
         return out
 
+from scipy.spatial.distance import cdist
+def mahalanobis(X):
+    """mahalanobis distance for data
+    X = np.array([x,y,z,...])
 
-def lvp(x, p, v):
-    return p + v * x[:, np.newaxis]
+
+    Parameters
+    ----------
+    X : np.array (M x N)
+        M x N array, with M varialbes,
+            and N observations.
+            print(X) should look like
+            # [[x1, x2, x3, x4...xn],
+            #  [y1, y2, y3, y4...yn].
+            #  [z1, z2, z3, z4...zn],
+            #   ..]
+            # as if X = np.array([x, y, z, ...])
+
+    Returns
+    -------
+    md: np.array
+        the square of maholanobis distance
+        it follows a chi2 distribution for normally
+        distributed data
+    """
+    # let scipy do all the lifting
+    # but this is a nice way anyways
+    # C = np.cov(X.T)
+    # P, D, T = eigen_decomp(C)
+    # mu = np.mean(X, axis=1)
+    # X = (X - mu)
+    # wX = wX = X @ np.linalg.inv(T.T) #whitened data
+    # #wXT = np.linalg.inv(T) @ X.T
+    # #md = wX @ wX.T
+    # #md = np.sqrt(md.diagonal())
+    # md = np.linalg.norm(wX, axis=1)**2  #norm spannign [xi,yi,zi]
+    # # md is distributed as chi2 with d.o.f. = # independent axes
+    # md = X @ np.linalg.inv(C) @ X.T
+
+    return cdist(X,np.atleast_2d(X.mean(axis=0)),metric='mahalanobis')[:,0]**2
 
 
-def eigen_decomp(A, b=[0, 0], return_slope=True):
+
+def eigen_decomp(A, b=[0, 0], return_slope=False):
+    """
+    eigenvalue decomposition
+
+    A: matrix,
+    b: means (if matrix describes the covariance of a distribution)
+    returns:
+        P, D, T
+            P: eigenmatrix P @ D @ P^-1 = A
+            D: diagonal(eigenvalues)
+            T: transorm matrix, P @ S
+            data.(T.T^-1) = whitened data
+                projects into the orthogonal eigenspace
+                    / the space without covariance
+    or if return_slope is True
+        slope, intercept of the major axis of 1st two dimensions.
+    """
+
+
     eVa, eVe = np.linalg.eig(A)
+    # relationship in Mathematica is
+    # {val, vec} = Eigensystem[m] // N
+    # P = Transpose[vec/(Norm /@ vec)] (* normalize eigenvectors *)
+    # d = DiagonalMatrix[val]
+    # m == P.d.Inverse[P]
+    # sometimes P in Mathematica is rotated +- 90 deg w.r.t numpy
 
     P, D = eVe, np.diag(eVa)
+    # cov = P @ D @ np.linalg.inv(P)
     S = D ** 0.5
 
     T = P @ S  # transform from real to eigenspace
     # Columns of T are scaled eigenvectors
 
-    # for eigenvector in T
-
-    m = P[1] / P[0]
-    y_int = -m * b[0] + b[1]
-    major = np.argmax(eVa)
-
     if return_slope:
+        m = P[1] / P[0]
+        y_int = -m * b[0] + b[1]
+        major = np.argmax(eVa)
         return m[major], y_int[major]
     else:
         return P, D, T
 
+def plot_covariance_ellipse(cov, mu, n=1, ax=None, c='b', lw=1, zorder=100):
 
-def eigenplot(A, b=[0, 0], n=3, data=False, vec_c="r", ell_c="b", ell_lw=2, **kwargs):
+    P, D, T = eigen_decomp(cov, mu, return_slope=False)
+
+    m = P[1] / P[0]
+    major = np.argmax(D.diagonal())
+    angle = np.arctan(m)[major] * 180 / np.pi
+
+    axes = n * np.sqrt(D.diagonal())
+    b, a = axes[np.argsort(D.diagonal())]
+    # let the width be the length fo the major axis
+    pat = mpl.patches.Ellipse(
+        angle=angle,
+        xy=b,
+        width=2*a,
+        height=2*b,
+        zorder=zorder,
+        facecolor="none",
+        edgecolor=c,
+        lw=lw,
+    )
+
+    if ax is None:
+        plt.gca().add_artist(pat)
+    else:
+        ax.add_artist(pat)
+
+    return a, b, angle
+
+
+
+
+def eigenplot(A, b=[0, 0], n=3, plot_data=False, vec_c="r", ell_c="b", ell_lw=2, **kwargs):
     # https://janakiev.com/blog/covariance-matrix/
     eVa, eVe = np.linalg.eig(A)
+    b = np.array(b)
 
-    # print(eVe.T[0].dot(eVe.T[1]))
 
-    if data:
-        data = data = np.random.multivariate_normal(b, A, 2000)
+    if plot_data:
+        data = np.random.multivariate_normal(b, A, 2000)
 
         plt.plot(*data.T, "k.")
 
@@ -2935,11 +3063,6 @@ def eigenplot(A, b=[0, 0], n=3, data=False, vec_c="r", ell_c="b", ell_lw=2, **kw
     for i in T.T:
         i = b + n * i
         plt.plot([b[0], i[0]], [b[1], i[1]], c=vec_c, zorder=100, **kwargs)
-
-    # for e, v in zip(eVa, eVe.T):
-    #     plt.plot([0, 3*np.sqrt(e)*v[0]], [0, 3*np.sqrt(e)*v[1]], 'k-', lw=2)
-
-    # plt.axis('equal')
 
     m = P[1] / P[0]
     y_int = -m * b[0] + b[1]
