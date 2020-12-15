@@ -263,6 +263,8 @@ def analysis(
     boundary,
     noise_mask,
     co_mask=None,
+    tmass=None,
+    tmass_off=None,
     df=None,
     pixel_scale=0.125,
     dist=1000,
@@ -309,6 +311,7 @@ def analysis(
     sigma_co_co = sigma(mass_co_co, radius_co)
     sigma_ak_co = sigma(mass_ak_co, radius_co)
 
+
     columns = [
         "mass_ak_ak",
         "mass_co_ak",
@@ -333,6 +336,17 @@ def analysis(
         "Area_co",
         "distance",
     ]
+    if tmass is not None:
+        columns.insert(3,'mass_2m_ak')
+        columns.insert(7,'mass_2m_co')
+        mass_2m_ak = mass(tmass, akmask, ak_scale, pixel_pc)
+        mass_2m_co = mass(tmass, comask, ak_scale, pixel_pc)
+        if tmass_off is not None:
+            columns.insert(4,'mass_2m_off_ak')
+            columns.insert(8,'mass_2m_off_co')
+            mass_2m_off_ak = mass(tmass-tmass_off, akmask, ak_scale, pixel_pc)
+            mass_2m_off_co = mass(tmass-tmass_off, comask, ak_scale, pixel_pc)
+
     row = [name]
     df = pd.DataFrame(index=row, columns=columns)
 
@@ -350,6 +364,13 @@ def analysis(
     df.sigma_co_co = sigma_co_co
     df.sigma_ak_co = sigma_ak_co
     df.distance = dist
+
+    if tmass is not None:
+        df.mass_2m_ak = mass_2m_ak
+        df.mass_2m_co = mass_2m_co
+        if tmass_off is not None:
+            df.mass_2m_off_ak = mass_2m_off_ak
+            df.mass_2m_off_co = mass_2m_off_co
 
     df.Aperpix = pixel_pc ** 2
     print(f"analysis:: Map total pixels: {np.sum(np.isfinite(boundary))}")
