@@ -347,7 +347,7 @@ def sigconf1d(n):
     cdf = (1 / 2.0) * (1 + special.erf(n / np.sqrt(2)))
     return (1 - cdf) * 100, 100 * cdf  # , 100 * special.erf(n / np.sqrt(2))
 
-def gen_nsigma(dim=1, n=1):
+def nsigma(dim=1, n=1):
     """Generalized n-sigma relation
 
     Parameters
