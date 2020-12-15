@@ -347,6 +347,48 @@ def sigconf1d(n):
     cdf = (1 / 2.0) * (1 + special.erf(n / np.sqrt(2)))
     return (1 - cdf) * 100, 100 * cdf  # , 100 * special.erf(n / np.sqrt(2))
 
+def gen_nsigma(dim=1, n=1):
+    """Generalized n-sigma relation
+
+    Parameters
+    ----------
+    dim : float, optional
+        dimensionality, by default 1
+    n : float, optional
+        N-sigma, by default 1
+
+    Returns
+    -------
+    float
+        the percential/100 corresponding the given sigma
+
+    References:
+        https://math.stackexchange.com/a/3668447
+        https://mathworld.wolfram.com/RegularizedGammaFunction.html
+
+    The generalized N-sigma relation for M dimensions is given
+    by the Regularized Lower Incomplete Gamma Function -
+        P(a,z) = γ(a,z)/Γ(a), where γ(a,z) is the lower incomplete gamma function
+    The Incomplete Gamma Function is defined
+        $\Gamma(a,z0,z1) = \int_z0^z1 t^{a-1} e^{-t} dt$
+
+    For 1D: $Erf(n/sqrt(2)) = \Gamma(1,0,n^2/2)/\Gamma(1)$ gives the Percentile for n-sigma
+    For 2D: 1 - exp(-m^2 /2) gives the Percentile for n-sigma
+    P(m/2,n^2 / 2) generalizes this to m dimensions
+    We need the regularized lower incomplete gamma, which is Gamma(a,z0,z1)/Gamma(a,0,inf)
+    this is the incomp. reg. gamma func P(a,z) in
+
+    If we want to think about this in terms of Mahalanobis distance
+    Then, well, the Mahalanobis distance is distributed like
+    a chi2-distribution with k = m degrees of freedom (assuming the
+    eigenvectors are of the covariance matrix are all independent)
+    So this covariance is also written as the
+    SurvivalFunction(χ^2(k=m),x=n**2) where n = mahalanobis distance
+    this would be written stats.chi2(m).cdf(n**2), but this is half
+    the speed of using special.gammainc
+    @astrojthe3
+    """
+    return special.gammainc(dim/2,n**2 /2)
 
 def sort_bool(g, srt):
     isrt = np.argsort(srt)
@@ -1924,6 +1966,9 @@ def hist2d(
     normed=True,
     weights=None,
 ):
+    g = np.isfinite(x + y)
+    x = np.array(x)[g]
+    y = np.array(y)[g]
     if bins is not None:
         if range is None:
             if isinstance(bins, int) or (bins == "auto"):
@@ -1934,7 +1979,7 @@ def hist2d(
                 yedges = np.histogram_bin_edges(y, bins=bins[1])
             bins = [xedges, yedges]
         else:
-            if len(list(sum(range, ()))) == 4:
+            if (len(range)==2) & (len(range[0])==2):
                 xedges = np.histogram_bin_edges(x, bins=bins, range=range[0])
                 yedges = np.histogram_bin_edges(y, bins=bins, range=range[1])
             else:
@@ -2464,10 +2509,11 @@ def corner(pos, names=None, smooth=1, bins=20, figsize=None, **kwargs):
     )
     for i in range(pos.shape[-1]):
         for j in range(pos.shape[-1]):
+            ax = axs[i, j]
             if i == j:
                 stat_plot1d(pos[:, i], ax=axs[i, j])
+                ax.set_xlabel(names[j])
             if j < i:
-                ax = axs[i, j]
                 stat_plot2d(
                     pos[:, j],
                     pos[:, i],
@@ -2480,10 +2526,11 @@ def corner(pos, names=None, smooth=1, bins=20, figsize=None, **kwargs):
                 )
                 if names is not None:
                     try:
-                        if i == pos.shape[1] - 1:
+                        if i != j :
                             ax.set_xlabel(names[j])
-                        if j == pos.shape[1] - 1:
                             ax.set_ylabel(names[i])
+
+
                     except:
                         pass
 
