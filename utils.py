@@ -394,8 +394,11 @@ def sort_bool(g, srt):
     isrt = np.argsort(srt)
     return srt[g[srt[isrt]]]
 
+def scale_ptp(arr):
+    g = np.isfinite(arr)
+    return (arr - np.nanmin(arr))/np.ptp(arr[g])
 
-def wcsaxis(header, N=6, ax=None, fmt="%0.2f", use_axes=False):
+def wcsaxis(header, N=6, ax=None, fmt="%0.2f", use_axes=False,label=True):
     oldax = plt.gca()
     if ax is None:
         ax = plt.gca()
@@ -446,12 +449,13 @@ def wcsaxis(header, N=6, ax=None, fmt="%0.2f", use_axes=False):
     plt.xticks(x, [fmt % i for i in x_tick])
     plt.yticks(y, [fmt % i for i in y_tick])
 
-    if header["CTYPE1"][0].lower() == "g":
-        plt.xlabel("Galactic Longitude (l)")
-        plt.ylabel("Galactic Latitude (b)")
-    else:
-        plt.xlabel("Right Ascension (J2000)")
-        plt.ylabel("Declination (J2000)")
+    if label:
+        if header["CTYPE1"][0].lower() == "g":
+            plt.xlabel("Galactic Longitude (l)")
+            plt.ylabel("Galactic Latitude (b)")
+        else:
+            plt.xlabel("Right Ascension (J2000)")
+            plt.ylabel("Declination (J2000)")
 
     ax.axes.set_xlim(xlim[0], xlim[1])
     ax.axes.set_ylim(ylim[0], ylim[1])
@@ -2972,7 +2976,7 @@ def cdf_pareto(t, a, k, xmax=None):
         return out
 
 from scipy.spatial.distance import cdist
-def mahalanobis(X):
+def mahalanobis(X,X2=None):
     """mahalanobis distance for data
     X = np.array([x,y,z,...])
 
@@ -3002,15 +3006,24 @@ def mahalanobis(X):
     # P, D, T = eigen_decomp(C)
     # mu = np.mean(X, axis=1)
     # X = (X - mu)
-    # wX = wX = X @ np.linalg.inv(T.T) #whitened data
+    # wX = X @ np.linalg.inv(T.T) #whitened data
     # #wXT = np.linalg.inv(T) @ X.T
     # #md = wX @ wX.T
     # #md = np.sqrt(md.diagonal())
     # md = np.linalg.norm(wX, axis=1)**2  #norm spannign [xi,yi,zi]
     # # md is distributed as chi2 with d.o.f. = # independent axes
     # md = X @ np.linalg.inv(C) @ X.T
+    if X2 is None:
+        return cdist(X,np.atleast_2d(X.mean(axis=0)),metric='mahalanobis')[:,0]**2
+    else:
+        C = np.cov(X.T)
+        P, D, T = eigen_decomp(C)
+        mu = np.mean(X2, axis=1)
+        wX = (X2-mu) @ np.linalg.inv(T.T)
+        md = np.linalg.norm(wX, axis=1)** 2
+        return md
 
-    return cdist(X,np.atleast_2d(X.mean(axis=0)),metric='mahalanobis')[:,0]**2
+
 
 
 
