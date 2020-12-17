@@ -213,12 +213,7 @@ def getmaps(objec, make_global=False, imin=0, imax=0):
         peakv = np.argmax(np.nan_to_num(co[:, :, imin:imax]), axis=2)
         with np.errstate(all="ignore"):
             frac = wco / (wco + offwco)  # (np.nansum(co,axis=2)*.65)
-        # frac[np.isclose(offwco, 0, atol=0.31)] = 1
-        # frac[np.isclose(wco, 0, atol=0.31)] = 0
-        # frac[((wco + offwco) < wco) & (wco < 0)] = 0
-        # frac[((wco + offwco) < wco) & (wco > 0)] = 1
-        # frac[wco < 0] = 0
-        # frac[offwco < 0] = 1
+
         frac[(wco < 0) & (offwco > 0)] = 0
         # frac[(wco < 0) & (offwco<=0) ] = 1
         frac[(wco == 0) & (offwco == 0)] = 1
@@ -254,6 +249,7 @@ def getmaps(objec, make_global=False, imin=0, imax=0):
         etmass_full,
         planck_errfullres,
         beta,
+        offwco
     )
 
 
@@ -264,7 +260,6 @@ def analysis(
     noise_mask,
     co_mask=None,
     tmass=None,
-    tmass_off=None,
     df=None,
     pixel_scale=0.125,
     dist=1000,
@@ -341,11 +336,6 @@ def analysis(
         columns.insert(7,'mass_2m_co')
         mass_2m_ak = mass(tmass, akmask, ak_scale, pixel_pc)
         mass_2m_co = mass(tmass, comask, ak_scale, pixel_pc)
-        if tmass_off is not None:
-            columns.insert(4,'mass_2m_off_ak')
-            columns.insert(8,'mass_2m_off_co')
-            mass_2m_off_ak = mass(tmass-tmass_off, akmask, ak_scale, pixel_pc)
-            mass_2m_off_co = mass(tmass-tmass_off, comask, ak_scale, pixel_pc)
 
     row = [name]
     df = pd.DataFrame(index=row, columns=columns)
@@ -368,9 +358,6 @@ def analysis(
     if tmass is not None:
         df.mass_2m_ak = mass_2m_ak
         df.mass_2m_co = mass_2m_co
-        if tmass_off is not None:
-            df.mass_2m_off_ak = mass_2m_off_ak
-            df.mass_2m_off_co = mass_2m_off_co
 
     df.Aperpix = pixel_pc ** 2
     print(f"analysis:: Map total pixels: {np.sum(np.isfinite(boundary))}")
@@ -738,3 +725,8 @@ def largest_closed_contour(field, bound, steps, lim=1, min_size=0, progress=Fals
             largest_old = largest_new
     return largest_contour, largest_contour_level, labels
 
+def lon_ptp(lons):
+    s = lons.copy()
+    w = s >= 180
+    s[w] = s[w] - 360
+    return np.ptp(s)
