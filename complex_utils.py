@@ -102,3 +102,26 @@ def pwl_w2brks(x, x1, x2, k1, k2, k3, b1):
     b3 = (k2 - k3) * x2 + b2
     f3 = lambda x: x * k3 + b3
     return np.piecewise(x, [c1,c2,c3], [f1,f2,f3])
+
+
+def radec2vec(ra,dec):
+    """Convert RA/Dec angle (in radians) to a vector"""
+    v1 = np.cos(dec)*np.cos(ra)
+    v2 = np.cos(dec)*np.sin(ra)
+    v3 = np.sin(dec)
+    return np.array([v1, v2, v3])
+
+
+def vec2radec(v):
+    """Convert a vector to Ra/Dec (in radians)"""
+    el=np.arcsin(v[2]/np.sqrt(v[0]**2+v[1]**2+v[2]**2))
+    ccc=v[0]**2+v[1]**2
+    if (v[1] > 0):
+        s=1
+    else:
+        s=-1
+    if (ccc != 0):
+        az=(abs(np.arccos(v[0]/np.sqrt(v[0]**2+v[1]**2)))*s+(4*np.pi)) % (2*np.pi)
+    else:
+        az=0
+    return np.array([az,el])
