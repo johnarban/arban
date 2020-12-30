@@ -396,7 +396,7 @@ def sort_bool(g, srt):
 
 def scale_ptp(arr):
     g = np.isfinite(arr)
-    return (arr - np.nanmin(arr))/np.ptp(arr[g])
+    return (arr - np.nanmin(arr[g]))/np.ptp(arr[g])
 
 def wcsaxis(header, N=6, ax=None, fmt="%0.2f", use_axes=False,label=True):
     oldax = plt.gca()
@@ -2722,18 +2722,23 @@ def errorbar_fill(
     alpha=1,
     lw=1,
     ls="-",
+    fmt=None,
+    label=None,
     **kwargs,
 ):
+    oldax = plt.gca()
     if ax is None:
-        ax = plt.gca()
+        ax = oldax
+    plt.sca(ax)
 
     if mid:
         alpha_fill = alpha * 2
         if alpha_fill >= 1:
             alpha_fill = 1
-    ax.fill_between(x, y - yerr, y + yerr, color=color, alpha=alpha)
+    plt.fill_between(x, y - yerr, y + yerr, color=color, alpha=alpha,label=label,**kwargs)
     if mid:
-        ax.plot(x, y, "-", color=color, alpha=alpha, lw=lw, ls=ls)
+        plt.plot(x, y, "-", color=color, alpha=alpha, lw=lw, ls=ls,**kwargs)
+    plt.sca(oldax)
     return None
 
 
