@@ -49,6 +49,8 @@ def nice_pandas(format="{:3.3g}"):
 
 # Set uniform plot options
 
+# some constants
+fwhm = 2 * np.sqrt(2 * np.log(2))
 
 def set_plot_opts(serif_fonts=True):
 
@@ -64,6 +66,10 @@ def check_iterable(arr):
 
 
 def color_array(arr, alpha=1):
+    """ take an array of colors and convert to
+    an RGBA image that can be displayed
+    with imshow
+    """
     img = np.zeros(arr.shape + (4,))
     for row in range(arr.shape[0]):
         for col in range(arr.shape[1]):
@@ -71,6 +77,39 @@ def color_array(arr, alpha=1):
             img[row, col, 0:3] = c
             img[row, col, 3] = alpha
     return img
+
+
+
+def arr_to_rgb(arr, rgb=(0, 0, 0), alpha=1, invert=False, ax=None):
+    """
+    arr to be made a mask
+    rgb:assumed using floats (0..1,0..1,0..1) or string
+
+    """
+    # arr should be scaled to 1
+    img = np.asarray(arr, dtype=np.float64)
+    img = img - np.nanmin(img)
+    img = img / np.nanmax(img)
+    im2 = np.zeros(img.shape + (4,))
+
+    if isinstance(rgb, str):
+        rgb = mpl.colors.to_rgb(rgb)
+
+    if invert:
+        img = 1 - img
+    im2[:, :, 3] = img * alpha
+    r, g, b = rgb
+    im2[:, :, 0] = r
+    im2[:, :, 1] = g
+    im2[:, :, 2] = b
+
+    #     if ax is None:
+    #         ax = plt.gca()
+    #     plt.sca(ax)
+    #     plt.imshow(im2)
+
+    return im2
+
 
 
 def invert_color(ml, *args, **kwargs):
@@ -239,7 +278,6 @@ def kdeplot(xp, yp, filled=False, ax=None, grid=None, bw=None, *args, **kwargs):
 
 
 AtomicMass = {"H2": 2, "12CO": 12 + 16, "13CO": 13 + 18, "C18O": 12 + 18, "ISM": 2.33}
-
 
 def thermal_v(T, mu=None, mol=None):
     """thermal_v(T,atomicmass)
@@ -2806,6 +2844,8 @@ def plot_to_origin(ax=None):
     ax.set_xlim(0, ax.get_xlim()[1])
     ax.set_ylim(0, ax.get_ylim()[1])
 
+    return None
+
 
 def jconvolve(h1, h2, x1, x2=None, mode="math", normed=None):
     """convolve two functions with equal sample spacing
@@ -2893,37 +2933,6 @@ def jconvolve_funcs(
     return ht, outx
 
 
-def arr_to_rgb(arr, rgb=(0, 0, 0), alpha=1, invert=False, ax=None):
-    """
-    arr to be made a mask
-    rgb:assumed using floats (0..1,0..1,0..1)
-
-    """
-    # arr should be scaled to 1
-    img = np.asarray(arr, dtype=np.float64)
-    img = img - np.nanmin(img)
-    img = img / np.nanmax(img)
-    im2 = np.zeros(img.shape + (4,))
-
-    if isinstance(rgb, str):
-        rgb = mpl.colors.to_rgb(rgb)
-
-    if invert:
-        img = 1 - img
-    im2[:, :, 3] = img * alpha
-    r, g, b = rgb
-    im2[:, :, 0] = r
-    im2[:, :, 1] = g
-    im2[:, :, 2] = b
-
-    #     if ax is None:
-    #         ax = plt.gca()
-    #     plt.sca(ax)
-    #     plt.imshow(im2)
-
-    return im2
-
-
 def pdf_pareto(t, a, k, xmax=None):
     """PDF of Pareto distribution
 
@@ -2983,7 +2992,7 @@ def cdf_pareto(t, a, k, xmax=None):
 from scipy.spatial.distance import cdist
 def mahalanobis(X,X2=None):
     """mahalanobis distance for data
-    X = np.array([x,y,z,...])
+    X = np.array([x1,x2,x3,...])
 
 
     Parameters
@@ -3012,12 +3021,11 @@ def mahalanobis(X,X2=None):
     # mu = np.mean(X, axis=1)
     # X = (X - mu)
     # wX = X @ np.linalg.inv(T.T) #whitened data
+    # md = np.linalg.norm(wX, axis=1)**2  #norm spannign [xi,yi,zi]
     # #wXT = np.linalg.inv(T) @ X.T
     # #md = wX @ wX.T
     # #md = np.sqrt(md.diagonal())
-    # md = np.linalg.norm(wX, axis=1)**2  #norm spannign [xi,yi,zi]
-    # # md is distributed as chi2 with d.o.f. = # independent axes
-    # md = X @ np.linalg.inv(C) @ X.T
+    # #md is distributed as chi2 with d.o.f. = # independent axes
     if X2 is None:
         return cdist(X,np.atleast_2d(X.mean(axis=0)),metric='mahalanobis')[:,0]**2
     else:
@@ -3042,7 +3050,7 @@ def eigen_decomp(A, b=[0, 0], return_slope=False):
         P, D, T
             P: eigenmatrix P @ D @ P^-1 = A
             D: diagonal(eigenvalues)
-            T: transorm matrix, P @ S
+            T: transorm matrix, P @ S ## S = D**0.5
             data.(T.T^-1) = whitened data
                 projects into the orthogonal eigenspace
                     / the space without covariance
@@ -3166,6 +3174,7 @@ def eigenplot_from_data(x, y, n=3, data=False, vec_c="r", ell_c="b", ell_lw=2):
 
 
 def print_bces(bc):
+    """ Print the output from bces """
     a, b, erra, errb, covab = bc
     types = ["y/x", "x/y", "bisec", "ortho"]
 

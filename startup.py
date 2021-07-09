@@ -53,8 +53,8 @@ from scipy.ndimage import morphology
 print('load custom utils (ju)')
 import utils as ju
 
-from IPython.display import set_matplotlib_formats
-set_matplotlib_formats('retina')
+# from IPython.display import set_matplotlib_formats
+# set_matplotlib_formats('retina')
 
 
 print(f'load time: {time.time()-istart+0.3:3.1f}s')
