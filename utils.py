@@ -24,7 +24,8 @@ from astropy.io import fits
 from astropy.table import Table
 from astropy.wcs import WCS
 from mpl_toolkits.axes_grid1 import make_axes_locatable, axes_size
-from scipy import integrate, interpolate, ndimage, signal, special, stats
+from scipy import integrate, interpolate, ndimage, signal, stats
+import scipy.special as special
 from weighted import quantile
 
 nd = ndimage
@@ -52,6 +53,7 @@ def nice_pandas(format="{:3.3g}"):
 # some constants
 fwhm = 2 * np.sqrt(2 * np.log(2))
 
+#legacy
 def set_plot_opts(serif_fonts=True):
 
     if serif_fonts:
@@ -277,17 +279,19 @@ def kdeplot(xp, yp, filled=False, ax=None, grid=None, bw=None, *args, **kwargs):
     return cs
 
 
-AtomicMass = {"H2": 2, "12CO": 12 + 16, "13CO": 13 + 18, "C18O": 12 + 18, "ISM": 2.33}
+AtomicMass = {"H2": 2, "12CO": 12 + 16, "13CO": 13 + 16, "C18O": 12 + 18, "ISM": 2.33}
 
 def thermal_v(T, mu=None, mol=None):
-    """thermal_v(T,atomicmass)
+    """thermal_v(T,mu)
     get thermal velocity for a temperature & molecular mass mu
 
     Arguments:
-        T {[type]} -- [description]
+        T {[float]} -- [temperature in kelvin]
 
     Keyword Arguments:
-        atomicmass {int} -- [description] (default: {28})
+        mu {int} -- [description] (default: {1})
+                ISM: 2.33
+                12CO, 13CO,C18O = 18,19,20
 
     Returns:
         [type] -- [description]
@@ -355,7 +359,7 @@ def jeansmass(temp, numdens, mu=2.33):  # 12.03388 msun T=n=1
 #############################
 
 
-def freq_grid(t, fmin=None, fmax=None, oversamp=10.0, pmin=None, pmax=None):
+def freq_grid(t, fmin=None, fmax=None, pmin=None, pmax=None, oversamp=10.0, ):
     """
     freq_grid(t,fmin=None,fmax=None,oversamp=10.,pmin=None,pmax=None)
     Generate a 1D list of frequences over a certain range
@@ -385,7 +389,7 @@ def sigconf1d(n):
     cdf = (1 / 2.0) * (1 + special.erf(n / np.sqrt(2)))
     return (1 - cdf) * 100, 100 * cdf  # , 100 * special.erf(n / np.sqrt(2))
 
-def nsigma(dim=1, n=1):
+def nsigma(dim=1, n=1,return_interval=False):
     """Generalized n-sigma relation
 
     Parameters
@@ -426,7 +430,10 @@ def nsigma(dim=1, n=1):
     the speed of using special.gammainc
     @astrojthe3
     """
-    return special.gammainc(dim/2,n**2 /2)
+    if return_interval:
+        p2 = special.gammainc(dim/2,n**2 /2)/2
+        return (1 - p), (1 + p)
+    return special.gammainc(dim/2,n**2 /2), special.jn_zeros()
 
 def sort_bool(g, srt):
     isrt = np.argsort(srt)
@@ -518,11 +525,6 @@ def grid_data(
     z,
     nxy=(512, 512),
     interp="linear",
-    plot=False,
-    cmap="Greys",
-    levels=None,
-    sigmas=None,
-    filled=False,
 ):
     """
     stick x,y,z data on a grid and return
@@ -536,20 +538,6 @@ def grid_data(
     xi, yi = np.meshgrid(xi, yi)
 
     zi = interpolate.griddata((x, y), z, (xi, yi), method=interp)
-
-    if plot:
-        if levels is None:
-            if sigmas is None:
-                sigmas = np.arange(0.5, 3.1, 0.5)
-            else:
-                sigmas = np.atleast_1d(sigmas)
-            levels = 1.0 - np.exp(-0.5 * sigmas ** 2)
-        ax = plt.gca()
-        if filled:
-            cont = ax.contourf
-        else:
-            cont = ax.contour
-        cont(xi, yi, zi / np.max(zi[np.isfinite(zi)]), cmap=cmap, levels=levels)
 
     return xi, yi, zi
 
@@ -1528,7 +1516,7 @@ def wcs_to_grid(header, index=False, verbose=False):
 def gauss(x, a, mu, sig):
     return a * np.exp(-((x - mu) ** 2) / (2 * sig ** 2))
 
-
+## misc
 def forward_fill_nan(arr):
     mask = np.isnan(arr)
     idx = np.where(~mask, np.arange(mask.shape[1]), 0)
@@ -1536,7 +1524,7 @@ def forward_fill_nan(arr):
     out = arr[np.arange(idx.shape[0])[:, None], idx]
     return out
 
-
+## misc
 def ffill_nan_3d(arr):
     """ foward fill 3d arrays along first axis
     from: https://stackoverflow.com/a/41191127
@@ -1602,7 +1590,8 @@ def linear_emcee_fitter(
     def model(x, theta):
         return theta[0] * x + theta[1]
 
-    theta_init, cov = np.polyfit(x, y, 1, cov=True)
+    if theta_init is None:
+        theta_init, cov = np.polyfit(x, y, 1, cov=True)
     if use_lnf:
         theta_init = np.append(theta_init, 0)
         newcov = np.zeros((3, 3))
@@ -2166,7 +2155,7 @@ def stat_plot2d(
 ):
     """
     based on hist2d dfm's corner.py
-    but so much prettier and so many more options
+    but worse. eventually should be more customizable though
     will eventually part of my own corner.py
     (of course most of the corner part will lifted
     directly from corner.py (with attribution of course :D
