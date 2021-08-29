@@ -1665,7 +1665,22 @@ def plot_walkers(sampler, limits=None, bad=None):
 # Make it scale properly
 # How does matplotlib
 # scaling work
-def combine_cmap(cmaps, lower, upper, name="custom", N=None, register=True):
+def combine_cmap(cmaps, lower, upper, log = False,name="custom", N=None, register=True):
+    """
+    colormaps : a list of N matplotlib colormap classes
+    lower : the lower limits for each colormap: array or tuple
+    upper : the upper limits for each colormap: array or tuple
+    log   : Do you want to plot logscale. This will create
+            a color map that is usable with LogNorm()
+    """
+    if log:
+        upper = [np.log10(i / lower[0]) for i in upper]
+        lower = [np.log10(i / lower[0]) for i in lower]
+        norm = upper[-1:][0]
+    else:
+        lower = lower
+        upper = upper
+        norm = upper[-1:][0]
 
     n = len(cmaps)
 
