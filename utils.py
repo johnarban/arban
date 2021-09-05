@@ -491,7 +491,7 @@ def wcsaxis(header, N=6, ax=None, fmt="%0.2f", use_axes=False,label=True):
         ticks = wcs.all_pix2world(coord, 0)
         x_tick, y_tick = np.asarray(ticks)[:, :2].T
 
-    plt.xticks(x, [fmt % i for i in x_tick])
+    plt.xticks(x, [fmt % i for i in x_tick],rotation=45)
     plt.yticks(y, [fmt % i for i in y_tick])
 
     if label:
@@ -3187,8 +3187,12 @@ def print_bces(bc):
             f"{t}: \t m:{a[i]:6.3g} +/- {erra[i]:6.3g} \t b:{b[i]:6.3g} +/- {errb[i]:6.3g}"
         )
 
+def get_aspect(arr):
+    h, w = arr.shape
+    return w/h
 
-def figsize(arr, default=[6, 6]):
+
+def figsize(arr, default=[6, 6], dpi=72):
     arr = np.array(arr)
     norm = np.array(arr.shape) / np.max(arr.shape)
     figsize = (np.array(default) * norm)[::-1]
