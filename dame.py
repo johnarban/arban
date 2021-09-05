@@ -75,6 +75,26 @@ def getheader2d(filen):
     data.close()
     return 0
 
+def mass(surfd, mask = None, scale = 1, pix_linear_scale = 1, err=None):
+    if mask is None:
+        mask = np.full_like(surfd,True)
+
+    if err is None:
+        return np.sum(surfd[mask] * scale * (pix_linear_scale ** 2))
+    else:
+        m = np.sum(surfd[mask] * scale * (pix_linear_scale ** 2))
+        e = np.sum((err[mask] * scale * pix_linear_scale ** 2)) ** 0.5
+        return m, e
+
+
+def radius(mask, pix_linear_scale=1):
+    """find radius assuming circle (R = sqrt(Area/π))
+    """
+    N = np.sum(mask)
+    return np.sqrt(N * (pix_linear_scale ** 2) / np.pi)
+
+def sigma(mass, radius):
+    return mass / (np.pi * (radius ** 2))
 
 def get_mass_over_av(
     akmap, wco, df=None, pixel_scale=0.125, dist=450, lim=0.1, scale=183, alpha_co=4.389
@@ -126,22 +146,7 @@ def get_mass_over_av(
     return 0
 
 
-def mass(surfd, mask, scale, pixscale, err=None):
-    if err is None:
-        return np.sum(surfd[mask] * scale * (pixscale ** 2))
-    else:
-        m = np.sum(surfd[mask] * scale * (pixscale ** 2))
-        e = np.sum((err[mask] * scale * pixscale ** 2)) ** 0.5
-        return m, e
 
-
-def radius(mask, pixscale):
-    N = np.sum(mask)
-    return np.sqrt(N * (pixscale ** 2) / np.pi)
-
-
-def sigma(mass, radius):
-    return mass / (np.pi * (radius ** 2))
 
 
 def virial_mass(sigma, radius):
@@ -188,12 +193,12 @@ def getmaps(objec, make_global=False, imin=0, imax=0):
     tmass = glob.glob(f"{dirs}/{obj}/nicest_reproj_smooth125.fits")[0]
     tmass = fits.getdata(tmass)
     etmass = glob.glob(f"{dirs}/{obj}/nicest_ivar_reproj_smooth125.fits")[0]
-    etmass = fits.getdata(etmass) ** -0.5
+    etmass = fits.getdata(etmass) ** -0.5 # get variance from inverse variance
 
     tmass_full = glob.glob(f"{dirs}/{obj}/nicest_reproj_full.fits")[0]
     tmass_full = fits.getdata(tmass_full)
     etmass_full = glob.glob(f"{dirs}/{obj}/nicest_ivar_reproj_full.fits")[0]
-    etmass_full = fits.getdata(etmass_full) ** -0.5
+    etmass_full = fits.getdata(etmass_full) ** -0.5 # get variance from inverse variance
 
     co = fits.getdata(momfile[0])
     co_raw = fits.getdata(rawfile[0])
@@ -486,26 +491,27 @@ def get_bounds(l=None, b=None, obj=None):
 
 
 def getlb(header, amap, origin=0):
+    """get GLAT, GLON coords. Origin=0 indicates
+    indices are in numpy format. FITS is origin=1
+    """
     ys, xs = np.indices(amap.shape)
     return WCS(header).all_pix2world(xs, ys, origin)
 
 
 def getv(header3d, naxis=1):
+    """get velocity vector
+    """
     naxis = int(naxis)
     x = np.arange(header3d[f"NAXIS{naxis}"])
     v = header3d[f"CRVAL{naxis}"] + x * header3d[f"CDELT{naxis}"]
     return v
 
 
-def dame_bad(arr, bad_val=20):
-    with np.errstate(all="ignore"):
-        c1 = -np.log2(np.abs(arr)) > bad_val - 5
-        c2 = np.isnan(arr)
-        c3 = arr == -32768
-        c4 = arr == 0
-    # with np.errstate(invalid='ignore'):
-    #    c4 = np.log2(arr) < -10
-    return c1 | c2 | c3 | c4
+def dame_bad(arr,unscaled=False):
+    if unscaled:
+        return arr == -32768
+    else:
+        return np.isnan(arr)
 
 
 def mask_dame_wco(co, co_raw, noise=None, level=3):
@@ -730,3 +736,152 @@ def lon_ptp(lons):
     w = s >= 180
     s[w] = s[w] - 360
     return np.ptp(s)
+
+
+
+
+
+def get_square(n,aspect=1.):
+    """
+    return rows, cols for grid of n items
+    n <= 3 returns single row
+
+    aspect = width/height (cols/rows)
+    """
+    def empty(n,rows,cols):
+        empty_spaces = (rows * cols) - n
+        empty_rows = floor(empty_spaces / cols)
+        return floor(empty_spaces / cols)
+    if n < 4:
+        return 1, n
+    if (sqrt(n) % 1)  > 0:
+        ceil = int(np.ceil(sqrt(n)))
+        rows = cols = ceil
+        if aspect == 1:
+            rows -= empty(n,rows,cols)
+        else:
+            rows, cols = round(rows * sqrt(aspect)), round(cols / sqrt(aspect))
+            rows -= empty(n,rows,cols)
+    else:
+        rows, cols = sqrt(n),sqrt(n)
+        if aspect != 1:
+            print(rows,cols)
+            rows, cols = round(rows * sqrt(aspect)), round(cols / sqrt(aspect))
+            print(rows,cols,)
+            rows -= empty(n,rows,cols)
+
+    return rows,cols
+
+from matplotlib.patheffects import withStroke
+
+from astropy.visualization.wcsaxes import WCSAxes
+
+def channel_maps(mmap,velmin=None,velmax=None,velskip=None,figsize=10,**kwargs):
+
+
+
+    ## CHANNEL SELECTION STUFF
+    if velskip is None:
+        if (velmax is None) & (velmin is None):
+            velskip = mmap.dv * 5
+        else:
+            velskip = mmap.dv
+    if velmin is None:
+        velmin = mmap.v[0]
+    if velmax is None:
+        velmax = mmap.v[-1]
+
+    if velskip < mmap.dv: velskip = mmap.dv
+    imin = np.argsort(np.abs(mmap.v - velmin))[0]
+    print(f'Nearest channel to {velmin:0.4g}: channel {imin}, {mmap.v[imin]:0.4g} km/s')
+    imax = np.argsort(np.abs(mmap.v - velmax))[0]
+    print(f'Nearest channel to {velmax:0.4g}: channel {imax}, {mmap.v[imax]:0.4g} km/s')
+    iskip = int(velskip // mmap.dv)
+    print(f'Summing every {iskip} ({iskip * mmap.dv:0.4g} km/s) channels')
+    chans = np.arange(imin,int(imax)+iskip,iskip)
+    if chans[-1] >= len(mmap.v):
+        chans[-1]=len(mmap.v)-1
+    print(len(chans))
+
+
+
+    d1, d2 = np.indices(mmap.boundary.shape)
+    min_row, max_row = ju.minmax(d1[mmap.boundary])
+    min_col, max_col = ju.minmax(d2[mmap.boundary])
+    a = ju.get_aspect(mmap.planck[min_row:max_row+1,min_col:max_col+1])
+
+    nr,nc = get_square(len(chans)-1,aspect=a)
+    print(f'Rows: {nr}  Columns: {nc} Aspect: {a:0.2g}')
+    aspect = a
+
+    ds = figsize #* np.sqrt(nc)
+    figsize = ds
+    dpi = 72
+    figsize = figsize
+    figsize *= np.array([nc*a,nr])
+
+    figsize = figsize * ds / figsize[0]
+    if np.sqrt(nc*nr) % 1 == 0:
+        figsize[0] = figsize[0]* 1.2
+
+
+    fig,axs = plt.subplots(nrows=nr,ncols=nc,figsize=figsize,sharex=True,sharey=True,
+                          gridspec_kw={'hspace':0.,'wspace':0.,
+                                       'left':0.05,'right':0.92,'top':0.95,'bottom':0.05},
+                          subplot_kw={'projection':mmap.wcs},facecolor='tan')
+
+    axs = np.asarray(axs.flat)
+    mmap.set_limits(ax=axs[0],expand=3,square=False,)
+
+    for i in range(len(chans)-1):
+        ax = axs[i]
+        im = ax.imshow(np.nansum(mmap.co[:,:,chans[i]:chans[i+1]],axis=-1)*mmap.dv,**kwargs)
+        v_min, v_max = mmap.v[chans[i]],mmap.v[chans[i+1]-1]
+        if v_min == v_max:
+            t = ju.annotate(fr'${v_min:0.1f}\ km/s$',0.05,0.95,ha='left',va='top',
+                            alpha=1,ax=ax,facecolor='none',bbox={'color':'none'})
+            t.set_path_effects([withStroke(foreground="w",linewidth=3)])
+        else:
+            v_min -= mmap.dv/2
+            v_max += mmap.dv/2
+            t = ju.annotate(fr'$({v_min:0.2f},{v_max:0.2f})\ km/s$',0.05,0.95,ha='left',va='top',
+                            alpha=1,ax=ax,facecolor='none',bbox={'color':'none'})
+            t.set_path_effects([withStroke(foreground="w",linewidth=3)])
+
+
+    #colorbar on last axis
+    cax = inset_axes(ax,
+                     width="4%", # width = 10% of parent_bbox width
+                     height="90%", # height : 50%
+                     loc=3,
+                     bbox_to_anchor=(1.01, 0, 1, 1),
+                     bbox_transform=ax.transAxes,
+                     borderpad=0.
+                     )
+    cbr = plt.colorbar(im, cax=cax)
+    cbr.set_label(r"$\rm T_{mb}\ [K]$")
+    cbr.set_ticks(np.linspace(*im.get_clim(),5))
+
+    col_0_axs = axs[0::nc]
+    last_row_axs = axs[-nc:]
+
+    for ax in axs.reshape(nr,nc)[:-1,1:].flat:
+        #ax.set_axis_off()
+        ax.coords[0].set_ticklabel_visible(False)
+        ax.coords[1].set_ticklabel_visible(False)
+
+    for ax in axs.reshape(nr,nc)[:,0]:
+        ax.coords[1].set_axislabel(' ')
+
+    for ax in [axs.reshape(nr,nc)[-1,0]]:
+        ax.coords[1].set_axislabel('Galactic Latitude')
+
+    for ax in axs.reshape(nr,nc)[-1,:]:
+        ax.coords[0].set_axislabel('Galactic Longitude')
+
+    for i in range(len(chans)-1,len(axs)):
+        plt.delaxes(axs[i])
+
+    #axs = [g for g in gr]
+
+
