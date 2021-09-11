@@ -28,6 +28,14 @@ from scipy import integrate, interpolate, ndimage, signal, stats
 import scipy.special as special
 from weighted import quantile
 
+from matplotlib.patheffects import withStroke
+
+import john_plot as jplot
+import error_prop as jerr
+
+from john_plot import annotate
+
+
 nd = ndimage
 
 
@@ -62,6 +70,8 @@ def set_plot_opts(serif_fonts=True):
         mpl.rcParams["font.size"] = 14
     return None
 
+def annotate(*args,**kwargs):
+    return jplot.annotate(*args,**kwargs)
 
 def check_iterable(arr):
     return hasattr(arr, "__iter__")
@@ -217,7 +227,7 @@ def _normalize_location_orientation(location, orientation):
     return loc_settings
 
 
-def get_cax(ax=None, position="right", frac=0.03, pad=0.05):
+def get_cax(ax=None, position=None, frac=0.03, pad=0.05):
     """get a colorbar axes of the same height as current axes
     position: "left" "right" ( vertical | )
               "top"  "bottom"  (horizontal --- )
@@ -228,22 +238,36 @@ def get_cax(ax=None, position="right", frac=0.03, pad=0.05):
 
     size = f"{frac*100}%"
     divider = make_axes_locatable(ax)
+
+    if position is None:
+        position = 'right'
+
+    if position is 'bottom':
+        pad += 0.15
     cax = divider.append_axes(position, size=size, pad=pad)
     plt.sca(ax)
     return cax
 
 
-def colorbar(mappable=None, cax=None, ax=None, size=0.03, pad=0.05, **kw):
+def colorbar(mappable=None, cax=None, ax=None, size=0.03, pad=0.05, position=None, orientation='vertical', **kw):
     """wrapper for pyplot.colorbar.
 
     """
     if ax is None:
         ax = plt.gca()
+    if orientation[0].lower()=='h':
+        pos = 'bottom'
+    elif orientation[0].lower()=='v':
+        pos = 'right'
 
     if cax is None:
-        cax = get_cax(ax=ax, frac=size, pad=pad)
+        cax = get_cax(ax=ax, frac=size, pad=pad, position=position)
+    elif (cax == 'inset') & (orientation[0].lower()=='h'):
+        cax = ax.inset_axes([0.2,.1,0.6,0.05])
+    elif (cax == 'inset') & (orientation[0].lower()=='v'):
+        cax = ax.inset_axes([0.85,.1,0.05,0.8])
 
-    ret = plt.colorbar(mappable, cax=cax, ax=ax, **kw)
+    ret = plt.colorbar(mappable, cax=cax, ax=ax, orientation=orientation, **kw)
     return ret
 
 
@@ -451,11 +475,15 @@ def wcsaxis(header, N=6, ax=None, fmt="%0.2f", use_axes=False,label=True):
     xlim = ax.axes.get_xlim()
     ylim = ax.axes.get_ylim()
 
-    wcs = WCS(header)
+    if isinstance(header,WCS):
+        wcs = header
+    else:
+        wcs = WCS(header)
 
-    naxis = header["NAXIS"]  # naxis
-    naxis1 = header["NAXIS1"]  # naxis1
-    naxis2 = header["NAXIS2"]  # naxis2
+    # naxis = header["NAXIS"]  # naxis
+    naxis = wcs.wcs.naxis
+    # naxis1 = header["NAXIS1"]  # naxis1
+    # naxis2 = header["NAXIS2"]  # naxis2
     # crpix1 = hdr['CRPIX1']
     # crpix2 = hdr['CRPIX2']
     # crval1 = hdr['CRVAL1']
@@ -495,7 +523,7 @@ def wcsaxis(header, N=6, ax=None, fmt="%0.2f", use_axes=False,label=True):
     plt.yticks(y, [fmt % i for i in y_tick])
 
     if label:
-        if header["CTYPE1"][0].lower() == "g":
+        if wcs.wcs.ctype[0][0].lower() == "g":
             plt.xlabel("Galactic Longitude (l)")
             plt.ylabel("Galactic Latitude (b)")
         else:
@@ -968,7 +996,7 @@ def llspace(xmin, xmax, n=None, log=False, dx=None, dex=None):
     # either user specifies log or gives dex and not dx
     log = log or (dxisNone and (not dexisNone))
     if log:
-        if xmin == 0:
+        if xmin <= 0:
             print("log(0) is -inf. xmin must be > 0 for log spacing")
             return 0
         else:
@@ -1173,6 +1201,27 @@ def mass_function(values, bins, scale=1, aktomassd=183):
     c = np.cumsum(h).astype(float)
     return c.max() - c, bins
 
+def mass_comp_function(values, bins, scale=1, aktomassd=183):
+    """
+    M(>Ak), mass weighted complimentary cdf
+    """
+    if hasattr(bins, "__getitem__"):
+        range = (np.nanmin(bins), np.nanmax(bins))
+    else:
+        range = None
+
+    if scale != 1:
+        aktomassd = scale
+
+    h, bins = np.histogram(
+        values,
+        bins=bins,
+        range=range,
+        density=False,
+        weights=values * aktomassd * scale,
+    )
+    c = np.cumsum(h).astype(float)
+    return c, bins
 
 def polyregress(X, Y, order=1, thru_origin=False):
     g = np.isfinite(X + Y)
@@ -1665,7 +1714,7 @@ def plot_walkers(sampler, limits=None, bad=None):
 # Make it scale properly
 # How does matplotlib
 # scaling work
-def combine_cmap(cmaps, lower, upper, log = False,name="custom", N=None, register=True):
+def combine_cmap(cmaps, lower, upper, log = False,name="custom", N=None, register=True, norm=False):
     """
     colormaps : a list of N matplotlib colormap classes
     lower : the lower limits for each colormap: array or tuple
@@ -1711,7 +1760,15 @@ def combine_cmap(cmaps, lower, upper, log = False,name="custom", N=None, registe
     if (name != "custom") & register:
         mpl.cm.register_cmap(name=name, cmap=cmap)
 
+    if norm:
+        if log:
+            norm = mpl.colors.LogNorm(vmin=min(lower), vmax=max(upper))
+        else:
+            norm = mpl.colors.Normalize(vmin=min(lower), vmax=max(upper))
+        return cmap, norm
+
     return cmap
+
 
 
 def custom_cmap(colormaps, lower, upper, log=(0, 0)):
@@ -2470,50 +2527,6 @@ def stat_plot2d(
         return ax
 
 
-def annotate(
-    text,
-    x,
-    y,
-    ax=None,
-    horizontalalignment="center",
-    verticalalignment="center",
-    ha=None,
-    va=None,
-    transform="axes",
-    color="k",
-    fontsize=9,
-    facecolor="w",
-    alpha=0.75,
-    bbox=dict(),
-    **kwargs,
-):
-
-    if ax is None:
-        ax = plt.gca()
-
-    horizontalalignment = ha or horizontalalignment
-    verticalalignment = va or verticalalignment
-
-    if transform == "axes":
-        transform = ax.transAxes
-    elif transform == "data":
-        transform = ax.transData
-    bbox1 = dict(facecolor=facecolor, alpha=alpha)
-    bbox1.update(bbox)
-    text = ax.text(
-        x,
-        y,
-        text,
-        horizontalalignment=horizontalalignment,
-        verticalalignment=verticalalignment,
-        transform=transform,
-        color=color,
-        fontsize=fontsize,
-        bbox=bbox1,
-        **kwargs,
-    )
-    return text
-
 
 # alias only used becuase of old code
 
@@ -3197,3 +3210,21 @@ def figsize(arr, default=[6, 6], dpi=72):
     norm = np.array(arr.shape) / np.max(arr.shape)
     figsize = (np.array(default) * norm)[::-1]
     return figsize
+
+
+
+
+# def deep_reload(m: ModuleType):
+#     name = m.__name__  # get the name that is used in sys.modules
+#     name_ext = name + '.'  # support finding sub modules or packages
+#     del m
+
+#     def compare(loaded: str):
+#         return (loaded == name) or loaded.startswith(name_ext)
+
+#     all_mods = tuple(sys.modules)  # prevent changing iterable while iterating over it
+#     sub_mods = filter(compare, all_mods):
+#     for pkg in sub_pkgs:
+#         del sys.modules[pkg]  # remove sub modules and packages from import cache
+
+#     return importlib.import_module(name)

@@ -1,8 +1,10 @@
 import numpy as np
+from math import floor,ceil,sqrt
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from scipy import ndimage
 from scipy.stats import rv_histogram
+from importlib import reload
 
 
 from astropy.io import fits
@@ -27,6 +29,9 @@ import plfit
 import powerlaw
 
 from tqdm import tqdm
+
+import john_plot as jplot
+reload(jplot)
 
 np.seterr(divide="ignore")
 
@@ -165,97 +170,6 @@ def mass_radius(surfd, mask, scale, pixscale, err=None):
         merr = np.sqrt(np.sum((err[mask] * scale * pixscale) ** 2))
         return m, r, merr
 
-
-def getmaps(objec, make_global=False, imin=0, imax=0):
-    dirs = "/Users/johnlewis/dameco"
-    file = glob.glob(f"{dirs}/co_survey/*{objec}*mom.fits")[0]
-    print("getmaps::", objec)
-    # if make_global:
-    #    global planck, header, co, co_raw, wco, peakv, header3d, survey, obj, noise, N
-
-    survey, obj, *_, = os.path.basename(file).split("_")
-    print("getmaps::", survey)
-
-    planck = fits.getdata(f"{dirs}/{obj}/{obj}_TAU353.fits")
-    header = fits.getheader(f"{dirs}/{obj}/{obj}_TAU353.fits")
-    tdust = fits.getdata(f"{dirs}/{obj}/{obj}_TEMP.fits")
-    beta = fits.getdata(f"{dirs}/{obj}/{obj}_BETA.fits")
-    planck_err = fits.getdata(f"{dirs}/{obj}/{obj}_ERR_TAU.fits")
-    planck_fullres = fits.getdata(f"{dirs}/{obj}/{obj}_TAU353_full.fits")
-    planck_errfullres = fits.getdata(f"{dirs}/{obj}/{obj}_ERR_TAU_full.fits")
-    header_fullres = fits.getheader(f"{dirs}/{obj}/{obj}_TAU353_full.fits")
-
-    momfile = glob.glob(f"{dirs}/co_survey/{survey}*mom.fits")
-    rawfile = glob.glob(f"{dirs}/co_survey/{survey}*raw.fits")
-    header3d = fits.getheader(momfile[0])
-    header3d_raw = fits.getheader(rawfile[0])
-
-    tmass = glob.glob(f"{dirs}/{obj}/nicest_reproj_smooth125.fits")[0]
-    tmass = fits.getdata(tmass)
-    etmass = glob.glob(f"{dirs}/{obj}/nicest_ivar_reproj_smooth125.fits")[0]
-    etmass = fits.getdata(etmass) ** -0.5 # get variance from inverse variance
-
-    tmass_full = glob.glob(f"{dirs}/{obj}/nicest_reproj_full.fits")[0]
-    tmass_full = fits.getdata(tmass_full)
-    etmass_full = glob.glob(f"{dirs}/{obj}/nicest_ivar_reproj_full.fits")[0]
-    etmass_full = fits.getdata(etmass_full) ** -0.5 # get variance from inverse variance
-
-    co = fits.getdata(momfile[0])
-    co_raw = fits.getdata(rawfile[0])
-    if imin == imax:
-        wco = np.nansum(co, axis=2) * np.abs(header3d["CDELT1"])
-        peakv = np.argmax(np.nan_to_num(co), axis=2)
-        frac = 1
-        offwco = wco * 0
-    else:
-        wco = np.nansum(co[:, :, imin:imax], axis=2) * np.abs(header3d["CDELT1"])
-        offwco = np.nansum(co[:, :, 0:imin], axis=2) + np.nansum(
-            co[:, :, imax:], axis=2
-        )
-        offwco *= np.abs(header3d["CDELT1"])
-        # total = np.nansum(co,axis=2) * np.abs(header3d["CDELT1"])
-
-        peakv = np.argmax(np.nan_to_num(co[:, :, imin:imax]), axis=2)
-        with np.errstate(all="ignore"):
-            frac = wco / (wco + offwco)  # (np.nansum(co,axis=2)*.65)
-
-        frac[(wco < 0) & (offwco > 0)] = 0
-        # frac[(wco < 0) & (offwco<=0) ] = 1
-        frac[(wco == 0) & (offwco == 0)] = 1
-        frac[offwco <= 0] = 1
-
-    # if co_raw.shape == co.shape:
-    #     _, noise, N = mask_dame_wco(co, co_raw)
-    noise = np.nan
-    bad = dame_bad(co)
-    N = np.nansum(~bad, axis=-1)
-
-    return (
-        planck * frac,
-        header,
-        co,
-        co_raw,
-        wco,
-        peakv,
-        header3d,
-        survey,
-        obj,
-        noise,
-        N,
-        planck_fullres,
-        header_fullres,
-        tdust,
-        planck_err,
-        frac,
-        header3d_raw,
-        tmass,
-        etmass,
-        tmass_full,
-        etmass_full,
-        planck_errfullres,
-        beta,
-        offwco
-    )
 
 
 def analysis(
@@ -456,7 +370,7 @@ def get_bounds(l=None, b=None, obj=None):
 
         Rose = (l >= 205) & (l <= 209) & (b >= -4) & (b <= 0)
 
-        Pol = (l >= 117) & (l <= 127) & (b >= 20) & (b <= 32)
+        Pol = (l >= 117) & (l <= 127) & (b >= 20) & (b <= 34)
         notPol = (b < 22) & (l > 123)
         Pol = Pol & ~notPol
 
@@ -509,9 +423,15 @@ def getv(header3d, naxis=1):
 
 def dame_bad(arr,unscaled=False):
     if unscaled:
-        return arr == -32768
+        return (arr == -32768) #| (arr == -29248)
     else:
-        return np.isnan(arr)
+        return np.isnan(arr) #| (arr == 2**-18)
+
+def dame_near_zero(arr, unscaled=False):
+    if unscaled:
+        return arr == -29248
+    else:
+        return (arr <1e-5)
 
 
 def mask_dame_wco(co, co_raw, noise=None, level=3):
@@ -524,60 +444,6 @@ def mask_dame_wco(co, co_raw, noise=None, level=3):
         wco = np.nansum(co, axis=-1)
         return ((wco / (sqrtN * noise)) > level) & (N > 0), noise, N
 
-
-def channel_maps(
-    chmap,
-    v,
-    start=0,
-    stop=-1,
-    step=1,
-    vmin=-0.2,
-    vmax=10,
-    xlim=None,
-    ylim=None,
-    **kwargs,
-):
-    if stop == -1:
-        stop = chmap.shape[-1]
-    chan = np.arange(start, stop + step, step)
-    chan[-1] = len(v) - 1
-    N = len(chan)
-    sN = np.sqrt(N)
-    nrow = int(np.ceil(sN))
-    ncol = int(np.ceil(N / nrow))
-    nrow, ncol
-    ny, nx, _ = chmap.shape
-    if ny > nx:
-        ac = 1  # ny/nx
-        ar = 1
-    else:
-        ac = 1
-        ar = 1  # nx/ny
-    fig, axs = plt.subplots(
-        nrows=nrow,
-        ncols=ncol,
-        figsize=(4.0 * nrow * ar, 4.0 * ncol * ac),
-        sharex=True,
-        sharey=True,
-    )
-    for i, ax in enumerate(axs.flatten()):
-        if i < N - 1:
-            summed = np.nansum(chmap[:, :, chan[i] : chan[i + 1]], axis=-1)
-            ax.imshow(summed, vmin=vmin, vmax=vmax, **kwargs)
-            ju.annotate(
-                f"{v[chan[i]]:0.1f}:{v[chan[i+1]]:0.1f}", 0.8, 0.9, ax=ax, fontsize=25
-            )
-            if xlim is not None:
-                ax.set_xlim(*xlim)
-            if ylim is not None:
-                ax.set_ylim(*ylim)
-            # plt.ylim(15, 45)
-        else:
-            plt.delaxes(ax)
-
-    return fig, axs
-
-
 def iscontained(bound, labels, label_id, lim=1):
     good = labels == label_id
     if lim == 1:
@@ -589,8 +455,8 @@ def iscontained(bound, labels, label_id, lim=1):
         return np.sum(bound[good]) >= lim * np.sum(good)
 
 
-def closed_contour(field, bound, steps, lim=1, min_size=0, nan_value=0):
-    """[summary]
+def closed_contour(field, bound=None, steps=None, lim=1, min_size=0, nan_value=0):
+    """lowest value where all contours are closed
 
     Parameters
     ----------
@@ -614,6 +480,9 @@ def closed_contour(field, bound, steps, lim=1, min_size=0, nan_value=0):
     """
     if bound is None:
         bound = np.full(field.shape, True, dtype=bool)
+
+    if steps is None:
+        steps = np.linspace(*np.percentile(field[bound],[2,98]),1000)
 
     # we need a external border for the contour
     min_frac = np.sum(bound) / field.size
@@ -662,7 +531,7 @@ def closed_contour(field, bound, steps, lim=1, min_size=0, nan_value=0):
 
 
 def largest_closed_contour(field, bound, steps, lim=1, min_size=0, progress=False):
-    """[summary]
+    """find the largest object with a closed contour
 
     Parameters
     ----------
@@ -739,8 +608,6 @@ def lon_ptp(lons):
 
 
 
-
-
 def get_square(n,aspect=1.):
     """
     return rows, cols for grid of n items
@@ -772,116 +639,32 @@ def get_square(n,aspect=1.):
 
     return rows,cols
 
-from matplotlib.patheffects import withStroke
+def channel_maps(mmap,velmin=None,velmax=None,velskip=None,figsize=10,nrows=None,ncols=None,overlay_dust=None,verbose=True,raw=False,set_bad=0,colorbar=True,**kwargs):
 
-from astropy.visualization.wcsaxes import WCSAxes
+    r,c = np.indices(mmap.shape)
 
-def channel_maps(mmap,velmin=None,velmax=None,velskip=None,figsize=10,**kwargs):
+    sl = slice(*ju.minmax(r[mmap.boundary])),slice(*ju.minmax(c[mmap.boundary]))
 
+    zero = (~mmap.bad).astype(int)
+    if raw:
+        co = mmap.co_raw
+        zero = (~dame_bad(mmap.co_raw)).astype(int)
+    else:
+        co = mmap.co
 
+    fig, axs = jplot.channel_maps(co[sl[0],sl[1],:],
+                            v=mmap.v,dv=mmap.dv,spec_ax=-1,
+                            wcs=mmap.wcs,
+                            velmin=velmin,velmax=velmax,velskip=velskip,nrows=nrows,ncols=ncols,
+                            figsize=figsize,verbose=verbose,set_bad=set_bad,colorbar=colorbar,**kwargs)
 
-    ## CHANNEL SELECTION STUFF
-    if velskip is None:
-        if (velmax is None) & (velmin is None):
-            velskip = mmap.dv * 5
-        else:
-            velskip = mmap.dv
-    if velmin is None:
-        velmin = mmap.v[0]
-    if velmax is None:
-        velmax = mmap.v[-1]
+    axs = np.array(fig.axes).flat
 
-    if velskip < mmap.dv: velskip = mmap.dv
-    imin = np.argsort(np.abs(mmap.v - velmin))[0]
-    print(f'Nearest channel to {velmin:0.4g}: channel {imin}, {mmap.v[imin]:0.4g} km/s')
-    imax = np.argsort(np.abs(mmap.v - velmax))[0]
-    print(f'Nearest channel to {velmax:0.4g}: channel {imax}, {mmap.v[imax]:0.4g} km/s')
-    iskip = int(velskip // mmap.dv)
-    print(f'Summing every {iskip} ({iskip * mmap.dv:0.4g} km/s) channels')
-    chans = np.arange(imin,int(imax)+iskip,iskip)
-    if chans[-1] >= len(mmap.v):
-        chans[-1]=len(mmap.v)-1
-    print(len(chans))
+    if overlay_dust is not None:
+        for i in range(len(axs)):
+            ax = axs[i]
+            if overlay_dust is not None:
+                ax.contour(mmap.planck[sl[0],sl[1]],levels=overlay_dust,colors='k',linewidths=[1])
 
-
-
-    d1, d2 = np.indices(mmap.boundary.shape)
-    min_row, max_row = ju.minmax(d1[mmap.boundary])
-    min_col, max_col = ju.minmax(d2[mmap.boundary])
-    a = ju.get_aspect(mmap.planck[min_row:max_row+1,min_col:max_col+1])
-
-    nr,nc = get_square(len(chans)-1,aspect=a)
-    print(f'Rows: {nr}  Columns: {nc} Aspect: {a:0.2g}')
-    aspect = a
-
-    ds = figsize #* np.sqrt(nc)
-    figsize = ds
-    dpi = 72
-    figsize = figsize
-    figsize *= np.array([nc*a,nr])
-
-    figsize = figsize * ds / figsize[0]
-    if np.sqrt(nc*nr) % 1 == 0:
-        figsize[0] = figsize[0]* 1.2
-
-
-    fig,axs = plt.subplots(nrows=nr,ncols=nc,figsize=figsize,sharex=True,sharey=True,
-                          gridspec_kw={'hspace':0.,'wspace':0.,
-                                       'left':0.05,'right':0.92,'top':0.95,'bottom':0.05},
-                          subplot_kw={'projection':mmap.wcs},facecolor='tan')
-
-    axs = np.asarray(axs.flat)
-    mmap.set_limits(ax=axs[0],expand=3,square=False,)
-
-    for i in range(len(chans)-1):
-        ax = axs[i]
-        im = ax.imshow(np.nansum(mmap.co[:,:,chans[i]:chans[i+1]],axis=-1)*mmap.dv,**kwargs)
-        v_min, v_max = mmap.v[chans[i]],mmap.v[chans[i+1]-1]
-        if v_min == v_max:
-            t = ju.annotate(fr'${v_min:0.1f}\ km/s$',0.05,0.95,ha='left',va='top',
-                            alpha=1,ax=ax,facecolor='none',bbox={'color':'none'})
-            t.set_path_effects([withStroke(foreground="w",linewidth=3)])
-        else:
-            v_min -= mmap.dv/2
-            v_max += mmap.dv/2
-            t = ju.annotate(fr'$({v_min:0.2f},{v_max:0.2f})\ km/s$',0.05,0.95,ha='left',va='top',
-                            alpha=1,ax=ax,facecolor='none',bbox={'color':'none'})
-            t.set_path_effects([withStroke(foreground="w",linewidth=3)])
-
-
-    #colorbar on last axis
-    cax = inset_axes(ax,
-                     width="4%", # width = 10% of parent_bbox width
-                     height="90%", # height : 50%
-                     loc=3,
-                     bbox_to_anchor=(1.01, 0, 1, 1),
-                     bbox_transform=ax.transAxes,
-                     borderpad=0.
-                     )
-    cbr = plt.colorbar(im, cax=cax)
-    cbr.set_label(r"$\rm T_{mb}\ [K]$")
-    cbr.set_ticks(np.linspace(*im.get_clim(),5))
-
-    col_0_axs = axs[0::nc]
-    last_row_axs = axs[-nc:]
-
-    for ax in axs.reshape(nr,nc)[:-1,1:].flat:
-        #ax.set_axis_off()
-        ax.coords[0].set_ticklabel_visible(False)
-        ax.coords[1].set_ticklabel_visible(False)
-
-    for ax in axs.reshape(nr,nc)[:,0]:
-        ax.coords[1].set_axislabel(' ')
-
-    for ax in [axs.reshape(nr,nc)[-1,0]]:
-        ax.coords[1].set_axislabel('Galactic Latitude')
-
-    for ax in axs.reshape(nr,nc)[-1,:]:
-        ax.coords[0].set_axislabel('Galactic Longitude')
-
-    for i in range(len(chans)-1,len(axs)):
-        plt.delaxes(axs[i])
-
-    #axs = [g for g in gr]
-
+    return fig
 
