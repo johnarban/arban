@@ -434,6 +434,20 @@ def dame_near_zero(arr, unscaled=False):
         return (arr <1e-5)
 
 
+def dame_int(a,i,j):
+    ai,aj = a.shape[0],a.shape[1]
+    im = i-1
+    ip = i+1
+    jm = j-1
+    jp = j+1
+    #a_sub = [a[ii,jj] for ii in [im,i,ip] if 0<=ii<ai for jj in [jm,j,jp] if 0<=jj<aj]
+    #return sum(a_sub)/len(a_sub)
+    cs = [i+1,j],[i,j+1],[i-1,j],[i,j-1]
+    a_sub = [a[ii,jj] for ii,jj in cs if (0<=ii<ai) & (0<=jj<aj) ]
+    return np.sum(a_sub,axis=0)/len(a_sub)
+
+
+
 def mask_dame_wco(co, co_raw, noise=None, level=3):
     with np.errstate(all="ignore"):
         bad = dame_bad(co)
@@ -639,29 +653,32 @@ def get_square(n,aspect=1.):
 
     return rows,cols
 
-def channel_maps(mmap,velmin=None,velmax=None,velskip=None,figsize=10,nrows=None,ncols=None,overlay_dust=None,verbose=True,raw=False,set_bad=0,colorbar=True,**kwargs):
+def channel_maps(mmap,velmin=None,velmax=None,velskip=None,figsize=10,nrows=None,ncols=None,which='interp',
+                overlay_dust=None,verbose=True,set_bad=0,interpolation='bicubic',colorbar=True,**kwargs):
 
     r,c = np.indices(mmap.shape)
 
     sl = slice(*ju.minmax(r[mmap.boundary])),slice(*ju.minmax(c[mmap.boundary]))
 
     zero = (~mmap.bad).astype(int)
-    if raw:
+    if which[0].lower() == 'r':
         co = mmap.co_raw
         zero = (~dame_bad(mmap.co_raw)).astype(int)
+    elif which[0].lower() == 'i':
+        co = mmap.co_interp
     else:
         co = mmap.co
 
     fig, axs = jplot.channel_maps(co[sl[0],sl[1],:],
                             v=mmap.v,dv=mmap.dv,spec_ax=-1,
-                            wcs=mmap.wcs,
+                            wcs=mmap.wcs[sl[0],sl[1]],
                             velmin=velmin,velmax=velmax,velskip=velskip,nrows=nrows,ncols=ncols,
-                            figsize=figsize,verbose=verbose,set_bad=set_bad,colorbar=colorbar,**kwargs)
+                            figsize=figsize,verbose=verbose,set_bad=set_bad,interpolation=interpolation,colorbar=colorbar,**kwargs)
 
     axs = np.array(fig.axes).flat
 
     if overlay_dust is not None:
-        for i in range(len(axs)):
+        for i in range(len(axs)-1): #the last axis is the colorbar
             ax = axs[i]
             if overlay_dust is not None:
                 ax.contour(mmap.planck[sl[0],sl[1]],levels=overlay_dust,colors='k',linewidths=[1])
