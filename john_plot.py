@@ -4,7 +4,7 @@ import utils as ju
 
 from  math import floor,sqrt,ceil
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-
+from matplotlib.cm import get_cmap
 
 
 
@@ -266,10 +266,14 @@ def channel_maps(cube,v=None,dv=None,spec_ax=-1,wcs=None,
     if ncols is None:
         ncols = 0
 
-    if nrows * ncols < nimage:
-        nr,nc = get_square(nimage,aspect=a)
-    else:
+    if (nrows * ncols >= nimage):
         nr, nc = nrows,ncols
+    elif ncols > 0:
+        nc = ncols
+        nr = int(nimage / ncols + 0.5)
+    else:
+        nr,nc = get_square(nimage,aspect=a)
+
 
     if verbose:
         print(f'Rows: {nr}  Columns: {nc} Aspect: {a:0.2g}')
@@ -285,12 +289,16 @@ def channel_maps(cube,v=None,dv=None,spec_ax=-1,wcs=None,
     if np.sqrt(nc*nr) % 1 == 0:
         figsize[0] = figsize[0]* 1.2
 
+    gridspec_kw={'hspace':0.,'wspace':0.,'left':0.1,'right':0.92,'top':0.95,'bottom':0.1}
+    subplot_kw={'projection':wcs}
+    fig = plt.figure(figsize=figsize)
+    gs = plt.GridSpec(nrows=nr,ncols=nc,figure=fig,**gridspec_kw)
+    axs = gs.subplots(subplot_kw=subplot_kw,sharex=True,sharey=True,).ravel()
+    fig.set_constrained_layout(False)
 
-    fig,axs = plt.subplots(nrows=nr,ncols=nc,figsize=figsize,sharex=True,sharey=True,
-                          gridspec_kw={'hspace':0.,'wspace':0.,
-                                       'left':0.05,'right':0.92,'top':0.95,'bottom':0.05},
-                          subplot_kw={'projection':wcs},facecolor='tan') # wcs can be None
-    fig.set_tight_layout(False) # don't use tight layout
+    # fig,axs = plt.subplots(nrows=nr,ncols=nc,figsize=figsize,sharex=True,sharey=True,constrained_layout=False,
+    #                         gridspec_kw=gridspec_kw,subplot_kw=subplot_kw,facecolor='tan') # wcs can be None
+    #fig.set_tight_layout(False) # don't use tight layout
 
 
     axs = np.asarray(np.atleast_1d(axs).flat)
@@ -318,7 +326,6 @@ def channel_maps(cube,v=None,dv=None,spec_ax=-1,wcs=None,
             t = ju.annotate(fr'${v_min:0.1f}\ km/s$' + '\n' + fr'$\rm chan: {c_start}$',0.05,0.95,ha='left',va='top',
                             alpha=1,ax=ax,bbox=None,stroke={'foreground':'w','linewidth':3})
         else:
-
             #v_min -= dv/2
             #v_max += dv/2
             t = ju.annotate(fr'$({v_min:0.2f},{v_max:0.2f})\ km/s$'+'\n'+fr'$\rm chan: {c_start}-{c_end}$',0.05,0.95,ha='left',va='top',
@@ -380,7 +387,177 @@ def channel_maps(cube,v=None,dv=None,spec_ax=-1,wcs=None,
     for i in range(nimage,len(axs)):
         plt.delaxes(axs[i])
 
+    #fig.supxlabel('Galactic Longitude',y=0.0)
+    #fig.supylabel('Galactic Latitude',x=0.0)
+
+
     return fig,axs.reshape(nr,nc)
     #axs = [g for g in gr]
 
 
+
+
+def renzogram(cube,v=None,dv=None,wcs=None,
+                velmin=None,velmax=None,velskip=None,
+                figsize=10,verbose=True,cmap='RdBu_r',smooth=0,levels=[1],lw=1, **kwargs):
+    """Create grid of channel maps
+
+    Uses matplotlib sublplots to create nicely sized grids.
+
+    cube: 3d cube laid out as p - p - v
+    v = velocity vector
+    dv = width of channels
+    spec_ax : don't use this it may not work right
+    wcs = none, optional wcs to get wcs coordinates on the axes
+    velmin, velmax, velskip : velocity integration min, max, & channels
+        if no v is given, then these are interpreted as indices
+    figsize=width of figure
+    nrows, ncols: can pass in a number of nrows, ncols : can try, but
+            this program finds good values for those by itself.
+            [[[[ curently these are not implemented ]]]]
+    **kwargs get passed to imshow
+    """
+
+
+    ## CHANNEL SELECTION STUFF
+    # if a vector of velocities is not provided, use the length
+    # of the spectral axis to define channel index as "velocity"
+    if v is None:
+        v = np.arange(cube.shape[-1])
+    if dv is None:
+        dv = 1
+
+    shape = (cube.shape[0],cube.shape[1])
+
+    # pick default velocity integration range (velskip)
+    if velskip is None:
+        if (velmax is None) & (velmin is None):
+            velskip = dv * 5
+        else:
+            velskip = dv
+    if velmin is None:
+        velmin = v[0]
+    if velmax is None:
+        velmax = v[-1]
+
+    # I don't intentionally implement -1 integration, so don't allow it
+    if velskip < 0:
+        print(" don't be getting fancy trying to go backwards.\n setting velskip = abs(velskip)\n I see you")
+        velskip = abs(velskip)
+
+    # we can't integrate over less than 1 channel
+    if velskip < dv:
+        velskip = dv
+
+    # get 1st index
+    imin = int((velmin - v[0])/dv)
+    if (imin < 0) | (imin>len(v)-1):
+        imin = 0
+        velmin = v[imin]
+    if verbose:
+        print(f'Nearest channel to vel_min={velmin:0.4g}: channel {imin}, {v[imin]:0.4g} km/s')
+
+    # get last index
+    imax = int(((velmax - v[0])/dv) + 0.5)
+    if (imax < 0) | (imax>len(v)-1):
+        imax = len(v)-1
+        velmax = v[imax]
+    if verbose:
+        print(f'Nearest channel to vel_max={velmax:0.4g}: channel {imax}, {v[imax]:0.4g} km/s')
+
+
+
+
+    if verbose:
+        print(f'channel width: {dv:0.2f}')
+    # round to best velskip
+    if velskip >= velmax-velmin:
+        print('velskip cannot be > velmax - velmin. setting them equal')
+        iskip = imax - imin
+
+    else:
+        iskip = int(velskip / dv + 0.5)
+    if verbose:
+        print(f'Summing every {iskip} ({iskip * dv:0.4g} km/s) channels')
+
+    ## Need to be careful of how numpy indices work
+    ## We will integrate from chans[i], chans[i+1]
+    ## There will be n_images = len(chans)-1 images ===  each images goes from [0,1),[1,2), [2,3)...
+    ## i runs from 0,....,n_images-1  # numpy is 0-based indexing
+    ## this means if last element in chans, chans[-1] <= imax
+    ## then imax will not show up in the channel map output
+    ## this is not what a user expects. So the last value in
+    ## chan_end should be >= imax.
+
+
+    if iskip > 1:
+        chan_start = np.arange(imin,imax+iskip,iskip) # we might have to start integration at imax
+        chan_end = np.arange(imin+iskip,imax + iskip,iskip)-1 # but we can end on imax.
+
+        if chan_end[-1] > len(v):
+            chan_end[-1] = len(v)-1
+        chans = list(zip(chan_start,chan_end))  ## ordered pairs [(chan_start[0], chan_end[0]),...]
+        if (chan_end[-1] < imax):
+            cstart = chan_end[-1] + 1
+            cend = imax + (imax-cstart)
+            chans.append([cstart,cend])
+    else:
+        # if we're not integrating, we will just be taking each channel
+        chans = np.arange(imin,imax+iskip,iskip)
+        if chans[-1] >= len(v):
+            chans[-1]=len(v)-1
+    #print(chans)
+    nchans = len(chans)
+    nimage = nchans
+    if verbose:
+        print(f'Number of images: {nimage}')
+
+
+    ### Set up the axes and figure shape
+    a = ju.get_aspect(cube[:,:,0])
+
+    nr = 1
+    nc = 1
+    ds = figsize #* np.sqrt(nc)
+    figsize = figsize
+    figsize *= np.array([nc*a,nr])
+    figsize = figsize * ds / figsize[0]
+
+    subplot_kw={'projection':wcs}
+    fig, ax = plt.subplots(nr, nc, figsize=figsize,subplot_kw=subplot_kw)
+    fig.set_constrained_layout(False)
+
+
+
+    for i in range(nimage):
+        color = get_cmap(cmap,nimage)(i/nimage)
+        if abs(iskip) == 1:
+            c_start = chans[i]
+            c_end = c_start + 1
+            layer = cube[:,:,c_start]*dv
+
+        elif abs(iskip) > 1:
+            c_start = chans[i][0]
+            c_end = chans[i][1]+1 #make it inclusive
+            sub = cube[:,:,c_start:c_end]
+            img = np.nansum(sub,axis=-1) * dv
+            #img[np.isnan(sub).all(axis=-1)] = np.nan #nansum got rid of badvals->0, I want them back
+            #img[img==set_bad] = np.nan
+            layer = img
+
+
+        cntr = ax.contour(nd.gaussian_filter(layer,smooth),levels=levels,linewidths=lw,colors=[color], **kwargs)
+
+
+    ax.set_aspect('equal')
+
+
+
+    ax.coords[1].set_axislabel('GLAT')
+    ax.coords[0].set_axislabel('GLON')
+
+    imin,imax = np.mean(np.atleast_1d(chans[0])),np.mean(np.atleast_1d(chans[-1]))
+    vmin,vmax = np.interp([imin,imax],np.arange(len(v)),v)
+
+
+    return fig,mpl.cm.get_cmap(cmap,nimage), mpl.colors.Normalize(vmin=vmin,vmax=vmax)

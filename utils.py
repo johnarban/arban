@@ -267,7 +267,7 @@ def colorbar(mappable=None, cax=None, ax=None, size=0.03, pad=0.05, position=Non
     elif (cax == 'inset') & (orientation[0].lower()=='v'):
         cax = ax.inset_axes([0.85,.1,0.05,0.8])
 
-    ret = plt.colorbar(mappable, cax=cax, ax=ax, orientation=orientation, **kw)
+    ret = plt.colorbar(mappable, cax=cax, ax=ax, **kw)
     return ret
 
 

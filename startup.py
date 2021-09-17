@@ -4,6 +4,7 @@ print(f'Standard imports')
 import glob
 import os
 import sys
+import copy
 from importlib import reload
 import warnings
 
