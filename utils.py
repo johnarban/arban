@@ -455,9 +455,9 @@ def nsigma(dim=1, n=1,return_interval=False):
     @astrojthe3
     """
     if return_interval:
-        p2 = special.gammainc(dim/2,n**2 /2)/2
-        return (1 - p), (1 + p)
-    return special.gammainc(dim/2,n**2 /2), special.jn_zeros()
+        p = special.gammainc(dim/2,n**2 /2)/2
+        return (1 - p)/2, (1 + p)/2
+    return special.gammainc(dim/2,n**2 /2)
 
 def sort_bool(g, srt):
     isrt = np.argsort(srt)
@@ -465,7 +465,10 @@ def sort_bool(g, srt):
 
 def scale_ptp(arr):
     g = np.isfinite(arr)
-    return (arr - np.nanmin(arr[g]))/np.ptp(arr[g])
+    if g.any():
+        return (arr - np.nanmin(arr[g]))/np.ptp(arr[g])
+    else:
+        return arr
 
 def wcsaxis(header, N=6, ax=None, fmt="%0.2f", use_axes=False,label=True):
     oldax = plt.gca()
