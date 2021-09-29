@@ -7,103 +7,6 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from matplotlib.cm import get_cmap
 
 
-
-
-def annotate(text, x, y, ax=None,
-    horizontalalignment="center",
-    verticalalignment="center",
-    ha=None, va=None, transform="axes",
-    fontsize=9,
-    color="k",
-    facecolor="w",
-    edgecolor='0.75',
-    alpha=0.75,
-    text_alpha=1,
-    bbox=dict(),
-    stroke = None,
-    **kwargs,
-):
-    """wrapper for Axes.text
-
-    Parameters
-    ----------
-    text : str
-        text
-    x : number
-        x coordinate
-    y : number
-        x coordinate
-    ax : axes, optional
-        [description], by default None
-    horizontalalignment : str, optional
-        by default "center"
-    verticalalignment : str, optional
-         by default "center"
-    ha : alias for horizontalalignment
-    va : alias for verticalalignment
-    transform : str, optional
-        use 'axes' (ax.transAxes) or 'data' (ax.transData) to interpret x,y
-    fontsize : int, optional
-         by default 9
-    color : str, optional
-        text color, by default "k"
-    facecolor : str, optional
-        color of frame area, by default "w"
-    edgecolor : str, optional
-        color of frame edge, by default '0.75'
-    alpha : float, optional
-        transparency of frame area, by default 0.75
-    text_alpha : int, optional
-        transparency of text, by default 1
-    bbox : [type], optional
-        dictionary defining the bounding box or frame, by default dict()
-    stroke : (list, mpl.patheffects,dict), optional
-        most often should be dict with {'foregroud':"w", linewidth:3}
-        if using stroke, use should set bbox=None
-
-    Returns
-    -------
-    text
-       the annotation
-    """
-    if ax is None:
-        ax = plt.gca()
-
-    horizontalalignment = ha or horizontalalignment
-    verticalalignment = va or verticalalignment
-
-    if transform == "axes":
-        transform = ax.transAxes
-    elif transform == "data":
-        transform = ax.transData
-    if bbox is None:
-        bbox1 = dict(facecolor='none', alpha=0,edgecolor='none')
-
-    else:
-        bbox1 = dict(facecolor=facecolor, alpha=alpha,edgecolor=edgecolor)
-        bbox1.update(bbox)
-    text = ax.text(
-        x,
-        y,
-        text,
-        horizontalalignment=horizontalalignment,
-        verticalalignment=verticalalignment,
-        transform=transform,
-        color=color,
-        fontsize=fontsize,
-        bbox=bbox1,
-        **kwargs,
-    )
-
-    if stroke is not None:
-        if type(stroke) == dict:
-            text.set_path_effects([withStroke(**stroke)])
-        elif isinstance(stroke,(list,tuple)):
-            text.set_path_effects([*stroke])
-        elif isinstnace(stroke,mpl.patheffects.AbstractPathEffect):
-            text.set_path_effects([stroke])
-    return text
-
 def get_square(n,aspect=1.):
     """
     return rows, cols for grid of n items
@@ -270,7 +173,8 @@ def channel_maps(cube,v=None,dv=None,spec_ax=-1,wcs=None,
         nr, nc = nrows,ncols
     elif ncols > 0:
         nc = ncols
-        nr = int(nimage / ncols + 0.5)
+        nr = int(nimage / ncols + 1)
+
     else:
         nr,nc = get_square(nimage,aspect=a)
 
@@ -316,7 +220,7 @@ def channel_maps(cube,v=None,dv=None,spec_ax=-1,wcs=None,
             c_end = chans[i][1]+1 #make it inclusive
             sub = cube[:,:,c_start:c_end]
             img = np.nansum(sub,axis=-1) * dv
-            img[np.isnan(sub).all(axis=-1)] = np.nan #nansum got rid of badvals->0, I want them back
+            #img[np.isnan(sub).all(axis=-1)] = np.nan #nansum got rid of badvals->0, I want them back
             #img[img==set_bad] = np.nan
             im = ax.imshow(img,**kwargs)
 
@@ -550,11 +454,11 @@ def renzogram(cube,v=None,dv=None,wcs=None,
 
 
     ax.set_aspect('equal')
-
-
-
-    ax.coords[1].set_axislabel('GLAT')
-    ax.coords[0].set_axislabel('GLON')
+    if wcs is None:
+        pass
+    else:
+        ax.coords[1].set_axislabel('GLAT')
+        ax.coords[0].set_axislabel('GLON')
 
     imin,imax = np.mean(np.atleast_1d(chans[0])),np.mean(np.atleast_1d(chans[-1]))
     vmin,vmax = np.interp([imin,imax],np.arange(len(v)),v)
