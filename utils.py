@@ -9,6 +9,7 @@ import os
 import statistics
 import sys
 from importlib import reload
+import warnings
 
 import emcee
 import matplotlib as mpl
@@ -33,9 +34,10 @@ from matplotlib.patheffects import withStroke
 import john_plot as jplot
 import error_prop as jerr
 
-from john_plot import annotate
+#from john_plot import annotate
 
-
+reload(jplot)
+reload(jerr)
 nd = ndimage
 
 
@@ -70,8 +72,107 @@ def set_plot_opts(serif_fonts=True):
         mpl.rcParams["font.size"] = 14
     return None
 
-def annotate(*args,**kwargs):
-    return jplot.annotate(*args,**kwargs)
+# def annotate(*args,**kwargs):
+#     return jplot.annotate(*args,**kwargs)
+
+
+
+def annotate(text, x, y, ax=None,
+    horizontalalignment="center",
+    verticalalignment="center",
+    ha=None, va=None, transform="axes",
+    fontsize=9,
+    color="k",
+    facecolor="w",
+    edgecolor='0.75',
+    alpha=0.75,
+    text_alpha=1,
+    bbox=dict(),
+    stroke = None,
+    **kwargs,
+):
+    """wrapper for Axes.text
+
+    Parameters
+    ----------
+    text : str
+        text
+    x : number
+        x coordinate
+    y : number
+        x coordinate
+    ax : axes, optional
+        [description], by default None
+    horizontalalignment : str, optional
+        by default "center"
+    verticalalignment : str, optional
+         by default "center"
+    ha : alias for horizontalalignment
+    va : alias for verticalalignment
+    transform : str, optional
+        use 'axes' (ax.transAxes) or 'data' (ax.transData) to interpret x,y
+    fontsize : int, optional
+         by default 9
+    color : str, optional
+        text color, by default "k"
+    facecolor : str, optional
+        color of frame area, by default "w"
+    edgecolor : str, optional
+        color of frame edge, by default '0.75'
+    alpha : float, optional
+        transparency of frame area, by default 0.75
+    text_alpha : int, optional
+        transparency of text, by default 1
+    bbox : [type], optional
+        dictionary defining the bounding box or frame, by default dict()
+    stroke : (list, mpl.patheffects,dict), optional
+        most often should be dict with {'foregroud':"w", linewidth:3}
+        if using stroke, use should set bbox=None
+
+    Returns
+    -------
+    text
+       the annotation
+    """
+    if ax is None:
+        ax = plt.gca()
+
+    horizontalalignment = ha or horizontalalignment
+    verticalalignment = va or verticalalignment
+
+    if transform == "axes":
+        transform = ax.transAxes
+    elif transform == "data":
+        transform = ax.transData
+    if bbox is None:
+        bbox1 = dict(facecolor='none', alpha=0,edgecolor='none')
+
+    else:
+        bbox1 = dict(facecolor=facecolor, alpha=alpha,edgecolor=edgecolor)
+        bbox1.update(bbox)
+    text = ax.text(
+        x,
+        y,
+        text,
+        horizontalalignment=horizontalalignment,
+        verticalalignment=verticalalignment,
+        transform=transform,
+        color=color,
+        fontsize=fontsize,
+        bbox=bbox1,
+        **kwargs,
+    )
+
+    if stroke is not None:
+        if type(stroke) == dict:
+            text.set_path_effects([withStroke(**stroke)])
+        elif isinstance(stroke,(list,tuple)):
+            text.set_path_effects([*stroke])
+        elif isinstnace(stroke,mpl.patheffects.AbstractPathEffect):
+            text.set_path_effects([stroke])
+    return text
+
+
 
 def check_iterable(arr):
     return hasattr(arr, "__iter__")
@@ -98,10 +199,16 @@ def arr_to_rgb(arr, rgb=(0, 0, 0), alpha=1, invert=False, ax=None):
     rgb:assumed using floats (0..1,0..1,0..1) or string
 
     """
+    #check if boolean or single value
+    is_bool = ((arr==0) | (arr==1)).all() or (arr.dtype is np.dtype(bool))
+
     # arr should be scaled to 1
     img = np.asarray(arr, dtype=np.float64)
-    img = img - np.nanmin(img)
-    img = img / np.nanmax(img)
+
+    if not is_bool:
+        img = img - np.nanmin(img)
+        img = img / np.nanmax(img)
+
     im2 = np.zeros(img.shape + (4,))
 
     if isinstance(rgb, str):
@@ -780,6 +887,45 @@ def rolling_window(arr, window):
     return np.lib.stride_tricks.as_strided(arr, shape=shape, strides=strides)
 
 
+def embiggenA(arr, zoom):
+    """
+    Faster when zoom is large
+    i.e.; zoom**2 > arr.shape[0]*arr.shape[1]/zoom
+    embiggenB is the preferred function for large arrays
+    """
+    shape = arr.shape
+    arr2 = np.zeros((shape[0]*zoom,shape[1]*zoom))
+
+    for i in range(arr.shape[0]):
+        for j in range(arr.shape[1]):
+            istart = i * zoom
+            iend   = istart + zoom
+            jstart = j * zoom
+            jend   = jstart + zoom
+            arr2[istart:iend,jstart:jend] = arr[i,j]
+    return arr2
+
+def embiggenB(arr, zoom):
+    """
+    Faster when zoom is small
+    i.e.; zoom**2 < arr.shape[0]*arr.shape[1]/zoom
+    This is normally the faster one, we are usually
+    aren't zoom by more than a few
+    """
+    shape = arr.shape
+    arr2 = np.zeros((shape[0]*zoom,shape[1]*zoom),dtype=float)
+
+    for i in range(zoom):
+        for j in range(zoom):
+            arr2[i::zoom,j::zoom] = arr
+    return arr2
+
+def embiggen(arr,zoom):
+    if zoom**2 > (arr.shape[0]* arr.shape[1])/zoom:
+        return embiggenA(arr,zoom)
+    else:
+        return embiggenB(arr,zoom)
+
 def minmax(arr, axis=None):
     return np.nanmin(arr, axis=axis), np.nanmax(arr, axis=axis)
 
@@ -977,48 +1123,81 @@ def color_hue_shift(c, shift=1):
     return mpl.colors.to_hex(mpl.colors.hsv_to_rgb((h, s, v)))
 
 
+# def llspace(xmin, xmax, n=None, log=False, dx=None, dex=None):
+#     """
+#     llspace(xmin, xmax, n = None, log = False, dx = None, dex = None)
+#     get values evenly spaced in linear or log spaced
+#     n [10] -- Optional -- number of steps
+#     log [false] : switch for log spacing
+#     dx : spacing for linear bins
+#     dex : spacing for log bins (in base 10)
+#     dx and dex override n
+#     """
+#     xmin, xmax = float(xmin), float(xmax)
+#     nisNone = n is None
+#     dxisNone = dx is None
+#     dexisNone = dex is None
+#     if nisNone & dxisNone & dexisNone:
+#         print("Error: Defaulting to 10 linears steps")
+#         n = 10.0
+#         nisNone = False
+
+#     # either user specifies log or gives dex and not dx
+#     log = log or (dxisNone and (not dexisNone))
+#     if log:
+#         if xmin <= 0:
+#             print("log(0) is -inf. xmin must be > 0 for log spacing")
+#             return 0
+#         else:
+#             xmin, xmax = np.log10(xmin), np.log10(xmax)
+#     # print nisNone, dxisNone, dexisNone, log # for debugging logic
+#     if not nisNone:  # this will make dex or dx if they are not specified
+#         if log and dexisNone:  # if want log but dex not given
+#             dex = (xmax - xmin) / n
+#             # print dex
+#         elif (not log) and dxisNone:  # else if want lin but dx not given
+#             dx = (xmax - xmin) / n  # takes floor
+#             print(dx)
+
+#     if log:
+#         # return np.power(10, np.linspace(xmin, xmax , (xmax - xmin)/dex + 1))
+#         return np.power(10, np.arange(xmin, xmax + dex, dex))
+#     else:
+#         # return np.linspace(xmin, xmax, (xmax-xmin)/dx + 1)
+#         return np.arange(xmin, xmax + dx, dx)
+
+from math import log10
 def llspace(xmin, xmax, n=None, log=False, dx=None, dex=None):
     """
-    llspace(xmin, xmax, n = None, log = False, dx = None, dex = None)
-    get values evenly spaced in linear or log spaced
-    n [10] -- Optional -- number of steps
-    log [false] : switch for log spacing
-    dx : spacing for linear bins
-    dex : spacing for log bins (in base 10)
-    dx and dex override n
     """
     xmin, xmax = float(xmin), float(xmax)
-    nisNone = n is None
-    dxisNone = dx is None
-    dexisNone = dex is None
-    if nisNone & dxisNone & dexisNone:
-        print("Error: Defaulting to 10 linears steps")
-        n = 10.0
-        nisNone = False
-
-    # either user specifies log or gives dex and not dx
-    log = log or (dxisNone and (not dexisNone))
-    if log:
-        if xmin <= 0:
-            print("log(0) is -inf. xmin must be > 0 for log spacing")
-            return 0
-        else:
-            xmin, xmax = np.log10(xmin), np.log10(xmax)
-    # print nisNone, dxisNone, dexisNone, log # for debugging logic
-    if not nisNone:  # this will make dex or dx if they are not specified
-        if log and dexisNone:  # if want log but dex not given
-            dex = (xmax - xmin) / n
-            # print dex
-        elif (not log) and dxisNone:  # else if want lin but dx not given
-            dx = (xmax - xmin) / n  # takes floor
-            print(dx)
 
     if log:
-        # return np.power(10, np.linspace(xmin, xmax , (xmax - xmin)/dex + 1))
-        return np.power(10, np.arange(xmin, xmax + dex, dex))
+        if xmin < 0:
+            raise ValueError('xmin must be >0 for log=True')
+        return logspace(log10(xmin), log10(xmax), n=n, dex = dex)
     else:
-        # return np.linspace(xmin, xmax, (xmax-xmin)/dx + 1)
-        return np.arange(xmin, xmax + dx, dx)
+        return linspace(xmin, xmax, n = n, dx = dx)
+
+
+def logspace(start, stop, n = None, dex = None):
+    """
+    wrapper for np.logspace. only adds dex parameter
+    to act like arange
+    """
+    arr = linspace(start,stop,n = n, dx = dex)
+    return 10**arr
+
+def linspace(start, stop, n, dx):
+    """
+    wrapper for np.logspace. only adds dex parameter
+    to act like arange only it's inclusive of stop
+    """
+    if (n is None) & (dx is not None):
+        return np.arange(start, stop + dx, dx)
+    else:
+        n = n or 50 # act like default for np.linspace
+        return np.linspace(start, stop, n)
 
 
 def nametoradec(name):
@@ -1554,8 +1733,8 @@ def wcs_to_grid(header, index=False, verbose=False):
     """
 
     wcs = WCS(header)
-    naxis1 = header["NAXIS1"]  # naxis1
-    naxis2 = header["NAXIS2"]  # naxis2
+    #naxis1 = header["NAXIS1"]  # naxis1
+    #naxis2 = header["NAXIS2"]  # naxis2
     ij = np.indices(wcs.array_shape)
     if not index:
         coord_grid = wcs.low_level_wcs.array_index_to_world_values(*ij)
@@ -1645,10 +1824,10 @@ def linear_emcee_fitter(
     if theta_init is None:
         theta_init, cov = np.polyfit(x, y, 1, cov=True)
     if use_lnf:
-        theta_init = np.append(theta_init, 0)
+        theta_init = np.append(theta_init, -1)
         newcov = np.zeros((3, 3))
         newcov[0:2, 0:2] = cov
-        newcov[2, 2] = 0.01
+        newcov[2, 2] = 0.0001
         cov = newcov
     ndim = len(theta_init)
 
@@ -2065,40 +2244,50 @@ def hist2d(
     x,
     y,
     range=None,
-    bins=20,
+    bins=None,
     smooth=False,
     clip=False,
     pad=True,
     normed=True,
     weights=None,
+    return_edges=False
 ):
     g = np.isfinite(x + y)
     x = np.array(x)[g]
     y = np.array(y)[g]
-    if bins is not None:
-        if range is None:
-            if isinstance(bins, int) or (bins == "auto"):
-                xedges = np.histogram_bin_edges(x, bins=bins)
-                yedges = np.histogram_bin_edges(y, bins=bins)
-            elif check_iterable(bins) & (len(bins) == 2):
-                xedges = np.histogram_bin_edges(x, bins=bins[0])
-                yedges = np.histogram_bin_edges(y, bins=bins[1])
-            bins = [xedges, yedges]
-        else:
-            if (len(range)==2) & (len(range[0])==2):
-                xedges = np.histogram_bin_edges(x, bins=bins, range=range[0])
-                yedges = np.histogram_bin_edges(y, bins=bins, range=range[1])
-            else:
-                xedges = np.histogram_bin_edges(x, bins=bins, range=range)
-                yedges = np.histogram_bin_edges(y, bins=bins, range=range)
-            bins = [xedges, yedges]
-    elif range is None:
-        xedges = np.histogram_bin_edges(x, bins=bins)
-        yedges = np.histogram_bin_edges(y, bins=bins)
-        bins = [xedges, yedges]
-        range = None
+    if range is None:
+        range = (x.min(),x.max()), (y.min(),y.max())
+
+    # bins options
+    # bins is None  :: default to (10, 10)
+    # bins is a string
+    # bins is list of 2 strings
+
+    if bins is None:
+        bins = [10, 10] # default value from numpy
+    elif isinstance(bins,str):
+        bins = [bins, bins]
+    elif not check_iterable(bins):
+        # print('doubling')
+        bins = [ bins, bins]
+    # print(len(bins),len(bins[0]),len(bins[1]))
+
+    if check_iterable(bins[0]) & (not isinstance(bins[0],str)):
+        # print('keep x bin')
+        xedges = bins[0]
     else:
-        range = list(map(np.sort, range))
+        # print('new x bin')
+        xedges = np.histogram_bin_edges(x, bins=bins[0], range=range[0])
+    if check_iterable(bins[1]) & (not isinstance(bins[1],str)):
+        # print('keep y bin')
+        yedges = bins[1]
+    else:
+        # print('new y bin')
+        yedges = np.histogram_bin_edges(y, bins=bins[1], range=range[1])
+
+    bins = [xedges, yedges]
+    # print(xedges)
+
     H, X, Y = np.histogram2d(x, y, bins=bins, range=range, weights=weights)
 
     X1, Y1 = 0.5 * (X[1:] + X[:-1]), 0.5 * (Y[1:] + Y[:-1])
@@ -2117,7 +2306,10 @@ def hist2d(
     else:
         sm = H
 
-    return sm.T, X1, Y1
+    if return_edges:
+        return sm.T, get_bin_edges(X1), get_bin_edges(Y1)
+    else:
+        return sm.T, X1, Y1
 
 
 def clean_color(color, reverse=False):
