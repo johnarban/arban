@@ -33,11 +33,12 @@ from matplotlib.patheffects import withStroke
 
 import john_plot as jplot
 import error_prop as jerr
-
+import sphere as sphere
 #from john_plot import annotate
 
 reload(jplot)
 reload(jerr)
+reload(sphere)
 nd = ndimage
 
 
@@ -581,7 +582,7 @@ def wcsaxis(header, N=6, ax=None, fmt="%0.2f", use_axes=False,label=True):
     oldax = plt.gca()
     if ax is None:
         ax = plt.gca()
-    plt.sca(ax)
+    #plt.sca(ax)
     xlim = ax.axes.get_xlim()
     ylim = ax.axes.get_ylim()
 
@@ -634,16 +635,16 @@ def wcsaxis(header, N=6, ax=None, fmt="%0.2f", use_axes=False,label=True):
 
     if label:
         if wcs.wcs.ctype[0][0].lower() == "g":
-            plt.xlabel("Galactic Longitude (l)")
-            plt.ylabel("Galactic Latitude (b)")
+            ax.set_xlabel("Galactic Longitude (l)")
+            ax.set_ylabel("Galactic Latitude (b)")
         else:
-            plt.xlabel("Right Ascension (J2000)")
-            plt.ylabel("Declination (J2000)")
+            ax.set_xlabel("Right Ascension (J2000)")
+            ax.set_ylabel("Declination (J2000)")
 
     ax.axes.set_xlim(xlim[0], xlim[1])
     ax.axes.set_ylim(ylim[0], ylim[1])
 
-    plt.sca(oldax)
+    #plt.sca(oldax)
     return ax
 
 
@@ -1743,6 +1744,12 @@ def wcs_to_grid(header, index=False, verbose=False):
 
     return coord_grid
 
+def mask_to_slice(mask):
+    r,c = np.indices(mask.shape)[:,mask]
+    rmin,rmax = r.min(), r.max()+1 # to include the last row
+    cmin,cmax = c.min(), c.max()+1 # to include the last column
+    sl = slice(rmin, rmax), slice(cmin, cmax)  # slice(start,stop,step)
+    return sl
 
 def gauss(x, a, mu, sig):
     return a * np.exp(-((x - mu) ** 2) / (2 * sig ** 2))
@@ -2704,6 +2711,7 @@ def stat_plot2d(
             origin="lower",
             extent=[X1.min(), X1.max(), Y1.min(), Y1.max()],
             zorder=zorder + 4,
+            cmap = cmap
         )
 
     if plot_datapoints:
@@ -2960,6 +2968,18 @@ def multi_colored_line_plot(
     # fig.colorbar(line, ax=axs[0])
     return line
 
+import matplotlib.colors as mc
+from colorsys import rgb_to_hls,hls_to_rgb #builtin
+def adjust_lightness(color, amount=0.5):
+    # brighter : amount > 1
+    #https://stackoverflow.com/a/49601444
+
+    try:
+        c = mc.cnames[color]
+    except:
+        c = color
+    c = rgb_to_hls(*mc.to_rgb(c))
+    return hls_to_rgb(c[0], max(0, min(1, amount * c[1])), c[2])
 
 def errorbar_fill(
     x=None,
@@ -2979,16 +2999,18 @@ def errorbar_fill(
     oldax = plt.gca()
     if ax is None:
         ax = oldax
-    plt.sca(ax)
+    #plt.sca(ax)
 
     if mid:
         alpha_fill = alpha * 2
         if alpha_fill >= 1:
             alpha_fill = 1
-    plt.fill_between(x, y - yerr, y + yerr, color=color, alpha=alpha,label=label,**kwargs)
+    if color is None:
+        color = ax.plot([],[])[0].get_color()
+    ax.fill_between(x, y - yerr, y + yerr, color=adjust_lightness(color,1.25), alpha=alpha,label=label,**kwargs)
     if mid:
-        plt.plot(x, y, "-", color=color, alpha=alpha, lw=lw, ls=ls,**kwargs)
-    plt.sca(oldax)
+        ax.plot(x, y, color=color, alpha=alpha, lw=lw, ls=ls,**kwargs)
+    #plt.sca(oldax)
     return None
 
 

@@ -84,11 +84,12 @@ def mass(surfd, mask = None, scale = 1, pix_linear_scale = 1, err=None):
     if mask is None:
         mask = np.full_like(surfd,True)
 
+    scale_factor = scale * (pix_linear_scale ** 2)
     if err is None:
-        return np.sum(surfd[mask] * scale * (pix_linear_scale ** 2))
+        return np.sum(surfd[mask]) * scale_factor
     else:
-        m = np.sum(surfd[mask] * scale * (pix_linear_scale ** 2))
-        e = np.sum((err[mask] * scale * pix_linear_scale ** 2)) ** 0.5
+        m = np.sum(surfd[mask]) * scale_factor
+        e = np.sqrt(np.sum((err[mask])**2))  * scale_factor
         return m, e
 
 
@@ -97,6 +98,76 @@ def radius(mask, pix_linear_scale=1):
     """
     N = np.sum(mask)
     return np.sqrt(N * (pix_linear_scale ** 2) / np.pi)
+
+# these functions lifted from astrodendro (roslowsky something)
+def mom0(arr,mas=None):
+    """The sum of the values"""
+    if mask is None:
+        mask = np.full(arr.shape,True)
+    values = arr[mask]
+    return np.nansum(values)
+
+def mom1(arr, mask=None):
+    """The intensity-weighted mean position"""
+    if mask is None:
+        mask = np.full(arr.shape,True)
+
+    mom0 = mom0(arr,mask)
+    r,c = np.indices(mask.shape)[mask]
+    values = arr[mask]
+    return np.array([np.nansum(i * values)/mom0 for i in [r,c]])
+
+def mom2(arr,mask=None):
+        """The intensity-weighted covariance matrix"""
+        if mask is None:
+            mask = np.full(arr.shape,True)
+
+        mom1 = mom1(arr,mask)
+        mom0 = mom0(arr,mask)
+
+        indices = np.indices(mask.shape)[mask]
+        values = arr[mask]
+
+        v = values / mom0
+
+        nd = len(indices)
+        zyx = tuple(i - m for i, m in zip(indices, mom1))
+
+        result = np.zeros((nd, nd),dtype=float)
+
+        for i in range(nd):
+            result[i, i] = np.nansum(v * zyx[i] ** 2)
+            for j in range(i + 1, nd):
+                result[i, j] = result[j, i] = np.nansum(v * zyx[i] * zyx[j])
+
+        return result
+
+def radius2(arr, mask, pix_linear_scale=1):
+    """find radius assuming circle (R = sqrt(Area/π))
+    """
+    Lr, Lc = mom2(arr,mask)
+    return np.sqrt(Lr * Lc) * pix_linear_scale
+
+def virial_mass(sigma, radius):
+    sigma_3d_sq = 3 * (sigma * u.km / u.s) ** 2
+    r = radius * u.pc
+    return (sigma_3d_sq * r / Ggrav).to("Msun")
+
+
+def mass_radius(surfd, mask, scale, pixscale, err=None):
+    """pixscale is the physcial (parsec) scale of a pixel
+       scale is the conversion from observed units to Msun/pc^2
+    """
+
+    r = radius(mask, pix_linear_scale = pixscale)
+    if err is None:
+        m = mass(surfd,mask=mask,scale=scale,pix_linear_scale=pixscale, err=err)
+        return m, r
+    else:
+        m, merr = mass(surfd,mask=mask,scale=scale,pix_linear_scale=pixscale, err=err)
+        return m, r, merr
+
+
 
 def sigma(mass, radius):
     return mass / (np.pi * (radius ** 2))
@@ -153,36 +224,16 @@ def get_mass_over_av(
 
 
 
-
-def virial_mass(sigma, radius):
-    sigma_3d_sq = 3 * (sigma * u.km / u.s) ** 2
-    r = radius * u.pc
-    return (sigma_3d_sq * r / Ggrav).to("Msun")
-
-
-def mass_radius(surfd, mask, scale, pixscale, err=None):
-    N = np.sum(mask)
-    m = np.sum(surfd[mask] * scale * (pixscale ** 2))
-    r = np.sqrt(N * (pixscale ** 2) / np.pi)
-    if err is None:
-        return m, r
-    else:
-        merr = np.sqrt(np.sum((err[mask] * scale * pixscale) ** 2))
-        return m, r, merr
-
-
-
 def analysis(
     ak,
     wco,
     boundary,
-    noise_mask,
     co_mask=None,
     tmass=None,
     df=None,
     pixel_scale=0.125,
     dist=1000,
-    lim=0.1,
+    lim=None,
     ak_scale=183,
     ak_nh2=83.5e20,
     alpha_co=4.389,
@@ -195,122 +246,89 @@ def analysis(
     CO cloud boundary
     """
     # GET AK DEFINED MASSES
-    above_lim = ak >= lim
-    akmask = np.isfinite(ak) & above_lim & boundary
+    if lim is None:
+        lim = closed_contour(ak,bound=boundary,lim=.95)[1]
+    above_lim = ak > lim
+    ak_mask = np.isfinite(ak) & above_lim & boundary
     pixel_pc = np.tan(pixel_scale * np.pi / 180) * dist
+
     if co_mask is None:
-        co_mask = noise_mask
-    comask = co_mask & noise_mask & np.isfinite(ak + wco) & boundary
+        co_mask = wco>0 & np.isfinite(ak + wco) & boundary
     print(f"analysis:: {name}")
-    print("analysis:: N(Ak): ", np.sum(akmask))
-    print("analysis:: N(CO): ", np.sum(comask))
-    print("analysis:: N(CO & Ak): ", np.sum(comask & akmask))
+    print(f"analysis:: Closed contour {lim:0.2f}")
+    print("analysis:: #(Ak): ", np.sum(ak_mask))
+    print("analysis:: #(CO): ", np.sum(co_mask))
+    print("analysis:: #(CO & Ak): ", np.sum(co_mask & ak_mask))
     print("analysis:: alpha_co: ", alpha_co)
     print("analysis:: ak_scale: ", ak_scale)
 
-    mass_ak_ak = mass(ak, akmask, ak_scale, pixel_pc)  # AK MASS, AK BOUNDARIES
+    mass_ak_ak = mass(ak, ak_mask, ak_scale, pixel_pc)  # AK MASS, AK BOUNDARIES
     # CO MASS, AK BOUNDARIES
-    mass_co_ak = mass(wco, akmask, alpha_co, pixel_pc)
-    mass_co_noise_ak = mass(
-        wco, noise_mask & akmask, alpha_co, pixel_pc
-    )  # CO MASS, AK BOUNDARIES, NOISE CUT
-    radius_ak = radius(akmask, pixel_pc)
+    mass_co_ak = mass(np.nan_to_num(wco), ak_mask, alpha_co, pixel_pc)
+    radius_ak = radius(ak_mask, pixel_pc)
     sigma_ak_ak = sigma(mass_ak_ak, radius_ak)
     sigma_co_ak = sigma(mass_co_ak, radius_ak)
 
     # CO MASS, CO BOUNDARIES
-    mass_co_co = mass(wco, comask, alpha_co, pixel_pc)
-    mass_ak_co = mass(ak, comask, ak_scale, pixel_pc)  # CO MASS, CO BOUNDARIES
-    radius_co = radius(comask, pixel_pc)
+    mass_co_co = mass(np.nan_to_num(wco), co_mask, alpha_co, pixel_pc)
+    mass_ak_co = mass(ak, co_mask, ak_scale, pixel_pc)  # CO MASS, CO BOUNDARIES
+    radius_co = radius(co_mask, pixel_pc)
     sigma_co_co = sigma(mass_co_co, radius_co)
     sigma_ak_co = sigma(mass_ak_co, radius_co)
 
 
     columns = [
-        "mass_ak_ak",
-        "mass_co_ak",
-        "mass_co_xco_ak",
-        "mass_co_co",
-        "mass_ak_co",
-        "mass_co_xco",
-        "mass_co_noise_ak",
+        "mass_ak_r_ak",
+        "mass_co_r_co",
+        "mass_ak_r_co",
+        "mass_co_r_ak",
         "radius_co",
         "radius_ak",
-        "sigma_ak_ak",
-        "sigma_co_ak",
-        "sigma_co_co",
-        "sigma_ak_co",
-        "sigma_co_xco",
-        "sigma_co_xco_ak",
-        "xco",
-        "xco2",
-        "xcolog",
-        "Aperpix",
+        "sigma_m_ak_r_ak",
+        "sigma_m_co_r_co",
+        "sigma_m_co_r_ak",
+        "sigma_m_ak_r_co",
         "Area_ak",
         "Area_co",
         "distance",
+        'aco'
     ]
     if tmass is not None:
-        columns.insert(3,'mass_2m_ak')
-        columns.insert(7,'mass_2m_co')
-        mass_2m_ak = mass(tmass, akmask, ak_scale, pixel_pc)
-        mass_2m_co = mass(tmass, comask, ak_scale, pixel_pc)
+        columns.insert(7,'mass_2m_r_ak')
+        columns.insert(7,'mass_2m_r_co')
+        mass_2m_ak = mass(tmass, ak_mask, ak_scale, pixel_pc)
+        mass_2m_co = mass(tmass, co_mask, ak_scale, pixel_pc)
 
     row = [name]
     df = pd.DataFrame(index=row, columns=columns)
 
-    df.mass_ak_ak = mass_ak_ak
-    df.mass_co_ak = mass_co_ak
-    df.mass_co_co = mass_co_co
-    df.mass_ak_co = mass_ak_co
-    df.mass_co_noise_ak = mass_co_noise_ak
+    df.mass_ak_r_ak = mass_ak_ak
+    df.mass_co_r_ak = mass_co_ak
+    df.mass_co_r_co = mass_co_co
+    df.mass_ak_r_co = mass_ak_co
     df.radius_co = radius_co
     df.radius_ak = radius_ak
     df.Area_ak = np.pi * radius_ak ** 2
     df.Area_co = np.pi * radius_co ** 2
-    df.sigma_ak_ak = sigma_ak_ak
-    df.sigma_co_ak = sigma_co_ak
-    df.sigma_co_co = sigma_co_co
-    df.sigma_ak_co = sigma_ak_co
+    df.sigma_m_ak_r_ak = sigma_ak_ak
+    df.sigma_m_co_r_ak = sigma_co_ak
+    df.sigma_m_co_r_co = sigma_co_co
+    df.sigma_m_ak_r_co = sigma_ak_co
     df.distance = dist
 
     if tmass is not None:
-        df.mass_2m_ak = mass_2m_ak
-        df.mass_2m_co = mass_2m_co
+        df.mass_2m_r_ak = mass_2m_ak
+        df.mass_2m_r_co = mass_2m_co
 
     df.Aperpix = pixel_pc ** 2
     print(f"analysis:: Map total pixels: {np.sum(np.isfinite(boundary))}")
 
     # measure Xco
-    xco = (ak * ak_nh2) / wco
-    xco = xco
-    g = (noise_mask & boundary).astype(bool)
+    aco = mass_ak_co / mass_co_co #CO & dust mass using CO boundary
 
-    g = g & np.isfinite(xco)
-    mean_xco = np.nanmean(xco[g])
-    mean_xcolog = 10 ** np.nanmean(np.log10(xco[g]))
-    # print(np.isfinite(xco[g]).all())
-    if not np.isfinite(xco[g]).all():
-        print("bad")
-        global jox
-        jox = xco, g
-    xco2 = np.mean(ak[g] * ak_nh2) / np.mean(wco[g])
-
-    mass_co_xco = mass_co_co * mean_xco / 2e20  # scale to new mass
-    sigma_co_xco = sigma(mass_co_xco, radius_co)
-
-    mass_co_xco_ak = mass_co_ak * mean_xco / 2e20  # scale to new mass
-    sigma_co_xco_ak = sigma(mass_co_xco_ak, radius_ak)
-
-    df.xco = mean_xco
-    df.xco2 = xco2
-    df.xcolog = mean_xcolog
-    df.mass_co_xco = mass_co_xco
-    df.sigma_co_xco = sigma_co_xco
-    df.mass_co_xco_ak = mass_co_xco_ak
-    df.sigma_co_xco_ak = sigma_co_xco_ak
+    df.aco = aco
     print("\n")
-    return df, akmask, comask
+    return df, ak_mask, co_mask
 
 
 def get_bounds(l=None, b=None, obj=None):
@@ -370,7 +388,7 @@ def get_bounds(l=None, b=None, obj=None):
 
         Rose = (l >= 205) & (l <= 209) & (b >= -4) & (b <= 0)
 
-        Pol = (l >= 117) & (l <= 127) & (b >= 20) & (b <= 34)
+        Pol = (l >= 117) & (l <= 127) & (b >= 20) & (b <= 30)
         notPol = (b < 22) & (l > 123)
         Pol = Pol & ~notPol
 
@@ -404,12 +422,17 @@ def get_bounds(l=None, b=None, obj=None):
         return None
 
 
-def getlb(header, amap, origin=0):
+def getlb(header, amap=None, origin=0):
     """get GLAT, GLON coords. Origin=0 indicates
     indices are in numpy format. FITS is origin=1
     """
-    ys, xs = np.indices(amap.shape)
-    return WCS(header).all_pix2world(xs, ys, origin)
+    wcs = WCS(header)
+    if amap is None:
+        shape = wcs.array_shape
+    else:
+        shape = amap.shape
+    ys, xs = np.indices(shape)
+    return wcs.all_pix2world(xs, ys, origin)
 
 
 def getv(header3d, naxis=1):
@@ -444,6 +467,7 @@ def dame_int(a,i,j):
     #return sum(a_sub)/len(a_sub)
     cs = [i+1,j],[i,j+1],[i-1,j],[i,j-1]
     a_sub = [a[ii,jj] for ii,jj in cs if (0<=ii<ai) & (0<=jj<aj) ]
+
     return np.sum(a_sub,axis=0)/len(a_sub)
 
 
@@ -469,7 +493,7 @@ def iscontained(bound, labels, label_id, lim=1):
         return np.sum(bound[good]) >= lim * np.sum(good)
 
 
-def closed_contour(field, bound=None, steps=None, lim=1, min_size=0, nan_value=0):
+def closed_contour(field, bound=None, steps=None, lim=1, min_size=0, nan_value=0,deep=False):
     """lowest value where all contours are closed
 
     Parameters
@@ -494,9 +518,11 @@ def closed_contour(field, bound=None, steps=None, lim=1, min_size=0, nan_value=0
     """
     if bound is None:
         bound = np.full(field.shape, True, dtype=bool)
+    else:
+        bound = bound.copy()  # we don't want to change the bounday
 
     if steps is None:
-        steps = np.linspace(*np.percentile(field[bound],[2,98]),1000)
+        steps = np.linspace(*np.percentile(field[bound],[2,98]),100)
 
     # we need a external border for the contour
     min_frac = np.sum(bound) / field.size
@@ -519,7 +545,7 @@ def closed_contour(field, bound=None, steps=None, lim=1, min_size=0, nan_value=0
     # out_contour :: track largest contour so far
     out_good_labels = None
     out_contour = steps[0]
-    for i in steps:
+    for j,i in enumerate(steps):
         shed = field >= i
         label = skmorph.label(shed)
         good = np.unique(label[shed & bound])
@@ -540,6 +566,12 @@ def closed_contour(field, bound=None, steps=None, lim=1, min_size=0, nan_value=0
                 # out_good_labels = np.isin(label,good[good_contained])
                 out_label = label * 1
             break
+
+    if deep:
+        step = np.where([steps==out_contour])[0]
+        g = (field >= steps[step-1])  & (field <= steps[step+1]) & bound
+        new_steps = np.sort(field[g])[::-1]
+        out_good_labels, out_contour, out_label = closed_contour(field,bound=bound,steps=new_steps,lim=lim,min_size=min_size,nan_value=nan_value,deep=False)
 
     return out_good_labels, out_contour, out_label
 
@@ -684,4 +716,21 @@ def channel_maps(mmap,velmin=None,velmax=None,velskip=None,figsize=10,nrows=None
                 ax.contour(mmap.planck[sl[0],sl[1]],levels=overlay_dust,colors='k',linewidths=[1])
 
     return fig
+
+
+
+### LTE
+hok = 0.0479924  # K/GHz
+c = 2.99792458e10  # cm/s
+nu_12CO_10 = 115.2712
+
+def bkgnd(nu=nu_12CO_10, Tbkg = 2.73):
+    return  hok * nu / (np.exp(hok * (nu / Tbkg)) - 1.0)
+
+def tex(Tmb_p, nu=nu_12CO_10, Tbkg = 2.73):
+        """ calculate excitation temp """
+
+        g = hok * nu  # h*nu/k
+        texm = g / np.log(1.0 + g / (Tmb_p + bkgnd(nu,Tbkg)))
+        return texm
 
