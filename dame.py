@@ -32,6 +32,8 @@ from tqdm import tqdm
 
 import john_plot as jplot
 reload(jplot)
+import sphere as jsphere
+reload(jsphere)
 
 np.seterr(divide="ignore")
 
@@ -85,19 +87,22 @@ def mass(surfd, mask = None, scale = 1, pix_linear_scale = 1, err=None):
         mask = np.full_like(surfd,True)
 
     scale_factor = scale * (pix_linear_scale ** 2)
+    surf_d = surfd * scale_factor
     if err is None:
-        return np.sum(surfd[mask]) * scale_factor
+        return np.sum(surf_d[mask])
     else:
-        m = np.sum(surfd[mask]) * scale_factor
-        e = np.sqrt(np.sum((err[mask])**2))  * scale_factor
+        m = np.sum(surf_d[mask])
+        e = np.sqrt(np.sum((err * scale_factor)[mask]**2))
         return m, e
+    return None
 
 
 def radius(mask, pix_linear_scale=1):
     """find radius assuming circle (R = sqrt(Area/π))
     """
-    N = np.sum(mask)
-    return np.sqrt(N * (pix_linear_scale ** 2) / np.pi)
+    N = np.sum(mask * pix_linear_scale**2)
+    return np.sqrt(N / np.pi)
+
 
 # these functions lifted from astrodendro (roslowsky something)
 def mom0(arr,mas=None):
@@ -146,7 +151,7 @@ def radius2(arr, mask, pix_linear_scale=1):
     """find radius assuming circle (R = sqrt(Area/π))
     """
     Lr, Lc = mom2(arr,mask)
-    return np.sqrt(Lr * Lc) * pix_linear_scale
+    return np.sqrt(Lr * Lc) * np.mean(np.atleast_1d(pix_linear_scale))
 
 def virial_mass(sigma, radius):
     sigma_3d_sq = 3 * (sigma * u.km / u.s) ** 2

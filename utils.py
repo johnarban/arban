@@ -34,11 +34,13 @@ from matplotlib.patheffects import withStroke
 import john_plot as jplot
 import error_prop as jerr
 import sphere as sphere
+import background as background
 #from john_plot import annotate
 
 reload(jplot)
 reload(jerr)
 reload(sphere)
+reload(background)
 nd = ndimage
 
 
@@ -962,7 +964,7 @@ def weighted_generic_moment(x, k, w=None):
     return np.sum(x ** k * w) / np.sum(w)
 
 
-def weighted_mean(x, w):
+def weighted_mean(x, w=1.):
     return np.sum(x * w) / np.sum(w)
 
 
@@ -2989,6 +2991,7 @@ def errorbar_fill(
     ax=None,
     mid=True,
     color=None,
+    fill_color=None,
     alpha=1,
     lw=1,
     ls="-",
@@ -3007,7 +3010,9 @@ def errorbar_fill(
             alpha_fill = 1
     if color is None:
         color = ax.plot([],[])[0].get_color()
-    ax.fill_between(x, y - yerr, y + yerr, color=adjust_lightness(color,1.25), alpha=alpha,label=label,**kwargs)
+    if fill_color is None:
+        fill_color = adjust_lightness(color,1.5)
+    ax.fill_between(x, y - yerr, y + yerr, color=fill_color, alpha=alpha,label=label,**kwargs)
     if mid:
         ax.plot(x, y, color=color, alpha=alpha, lw=lw, ls=ls,**kwargs)
     #plt.sca(oldax)
