@@ -558,6 +558,7 @@ def lon_ptp(lons):
 
 
 
+
 def channel_maps(mmap,velmin=None,velmax=None,velskip=None,figsize=10,nrows=None,ncols=None,which='interp',line_color='k',ncols_max=np.inf,
                 overlay_dust=None,verbose=True,set_bad=0,interpolation='bicubic',colorbar=True,**kwargs):
     print('***********{n}***********'.format(n=mmap.name))
