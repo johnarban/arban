@@ -30,6 +30,8 @@ import john_plot as jplot
 reload(jplot)
 import sphere as jsphere
 reload(jsphere)
+import moment_masking as jmm
+reload(jmm)
 
 np.seterr(divide="ignore")
 
@@ -101,7 +103,7 @@ def radius(mask, pix_linear_scale=1):
 
 
 # these functions lifted from astrodendro (roslowsky something)
-def mom0(arr,mas=None):
+def mom0(arr,mask=None):
     """The sum of the values"""
     if mask is None:
         mask = np.full(arr.shape,True)
@@ -114,10 +116,10 @@ def mom1(arr, mask=None):
     if mask is None:
         mask = np.full(arr.shape,True)
 
-    mom0 = mom0(arr,mask)
-    r,c = np.indices(mask.shape)[mask]
+    mom_0 = mom0(arr,mask)
+    r,c = np.indices(mask.shape)[:,mask]
     values = arr[mask]
-    return np.array([np.nansum(i * values)/mom0 for i in [r,c]])
+    return np.array([np.nansum(i * values)/mom_0 for i in [r,c]])
 
 def mom2(arr,mask=None):
         """The intensity-weighted covariance matrix"""
@@ -125,16 +127,16 @@ def mom2(arr,mask=None):
         if mask is None:
             mask = np.full(arr.shape,True)
 
-        mom1 = mom1(arr,mask)
-        mom0 = mom0(arr,mask)
+        mom_1 = mom1(arr,mask)
+        mom_0 = mom0(arr,mask)
 
-        indices = np.indices(mask.shape)[mask]
+        indices = np.indices(mask.shape)[:,mask]
         values = arr[mask]
 
-        v = values / mom0
+        v = values / mom_0
 
         nd = len(indices)
-        zyx = tuple(i - m for i, m in zip(indices, mom1))
+        zyx = tuple(i - m for i, m in zip(indices, mom_1))
 
         result = np.zeros((nd, nd),dtype=float)
 
@@ -155,6 +157,8 @@ def virial_mass(sigma, radius):
     sigma_3d_sq = 3 * (sigma * u.km / u.s) ** 2
     r = radius * u.pc
     return (sigma_3d_sq * r / Ggrav).to("Msun")
+
+
 
 
 def mass_radius(surfd, mask, scale, pixscale, err=None):
@@ -300,7 +304,7 @@ def dame_bad(arr,header=None, unscaled=False):
     else:
         unscale=True
     if unscaled:
-        return (arr == blank) | (arr == zero)
+        return (arr == blank) , (arr == zero)
     else:
         return np.isnan(arr) #| (arr < 1e-4)
 
@@ -554,9 +558,9 @@ def lon_ptp(lons):
 
 
 
-def channel_maps(mmap,velmin=None,velmax=None,velskip=None,figsize=10,nrows=None,ncols=None,which='interp',
+def channel_maps(mmap,velmin=None,velmax=None,velskip=None,figsize=10,nrows=None,ncols=None,which='interp',line_color='k',ncols_max=np.inf,
                 overlay_dust=None,verbose=True,set_bad=0,interpolation='bicubic',colorbar=True,**kwargs):
-
+    print('***********{n}***********'.format(n=mmap.name))
     r,c = np.indices(mmap.shape)
 
     sl = slice(*ju.minmax(r[mmap.boundary])),slice(*ju.minmax(c[mmap.boundary]))
@@ -573,7 +577,7 @@ def channel_maps(mmap,velmin=None,velmax=None,velskip=None,figsize=10,nrows=None
     fig, axs = jplot.channel_maps(co[sl[0],sl[1],:],
                             v=mmap.v,dv=mmap.dv,spec_ax=-1,
                             wcs=mmap.wcs[sl[0],sl[1]],
-                            velmin=velmin,velmax=velmax,velskip=velskip,nrows=nrows,ncols=ncols,
+                            velmin=velmin,velmax=velmax,velskip=velskip,nrows=nrows,ncols=ncols,ncols_max=ncols_max,
                             figsize=figsize,verbose=verbose,set_bad=set_bad,interpolation=interpolation,colorbar=colorbar,**kwargs)
 
     axs = np.array(fig.axes).flat
@@ -582,7 +586,7 @@ def channel_maps(mmap,velmin=None,velmax=None,velskip=None,figsize=10,nrows=None
         for i in range(len(axs)-1): #the last axis is the colorbar
             ax = axs[i]
             if overlay_dust is not None:
-                ax.contour(mmap.planck[sl[0],sl[1]],levels=overlay_dust,colors='k',linewidths=[1])
+                ax.contour(mmap.planck[sl[0],sl[1]],levels=overlay_dust,colors=[line_color],linewidths=[.5])
 
     return fig
 
