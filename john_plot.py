@@ -42,7 +42,7 @@ def get_square(n,aspect=1.):
 
 def channel_maps(cube,v=None,dv=None,spec_ax=-1,wcs=None,
                 velmin=None,velmax=None,velskip=None,
-                figsize=10,verbose=True,nrows=None,ncols=None, set_bad = np.nan,colorbar=True, **kwargs):
+                figsize=10,verbose=True,nrows=None,ncols=None, set_bad = None,colorbar=True, fig=None,ax=None, **kwargs):
     """Create grid of channel maps
 
     Uses matplotlib sublplots to create nicely sized grids.
@@ -220,8 +220,9 @@ def channel_maps(cube,v=None,dv=None,spec_ax=-1,wcs=None,
             c_end = chans[i][1]+1 #make it inclusive
             sub = cube[:,:,c_start:c_end]
             img = np.nansum(sub,axis=-1) * dv
-            #img[np.isnan(sub).all(axis=-1)] = np.nan #nansum got rid of badvals->0, I want them back
-            #img[img==set_bad] = np.nan
+            img[np.isnan(sub).all(axis=-1)] = np.nan #nansum got rid of badvals->0, I want them back
+            if set_bad is not None:
+                img[(sub==set_bad).all(axis=-1)] = np.nan
             im = ax.imshow(img,**kwargs)
 
         vsub = v[c_start:c_end]
@@ -303,7 +304,7 @@ def channel_maps(cube,v=None,dv=None,spec_ax=-1,wcs=None,
 
 def renzogram(cube,v=None,dv=None,wcs=None,
                 velmin=None,velmax=None,velskip=None,
-                figsize=10,verbose=True,cmap='RdBu_r',smooth=0,levels=[1],lw=1, **kwargs):
+                figsize=10,verbose=True,cmap='RdBu_r',smooth=0,levels=[1],lw=1, ax=None,filled=False,alpha=1,**kwargs):
     """Create grid of channel maps
 
     Uses matplotlib sublplots to create nicely sized grids.
@@ -427,11 +428,16 @@ def renzogram(cube,v=None,dv=None,wcs=None,
     figsize *= np.array([nc*a,nr])
     figsize = figsize * ds / figsize[0]
 
-    subplot_kw={'projection':wcs}
-    fig, ax = plt.subplots(nr, nc, figsize=figsize,subplot_kw=subplot_kw)
-    fig.set_constrained_layout(False)
+    if ax is None:
+        subplot_kw={'projection':wcs}
+        fig, ax = plt.subplots(nr, nc, figsize=figsize,subplot_kw=subplot_kw)
+        fig.set_constrained_layout(False)
+    else:
+        fig = ax.figure
 
 
+    if filled:
+        levels = np.append(levels,np.inf)
 
     for i in range(nimage):
         color = get_cmap(cmap,nimage)(i/nimage)
@@ -449,8 +455,10 @@ def renzogram(cube,v=None,dv=None,wcs=None,
             #img[img==set_bad] = np.nan
             layer = img
 
-
-        cntr = ax.contour(nd.gaussian_filter(layer,smooth),levels=levels,linewidths=lw,colors=[color], **kwargs)
+        if filled:
+            cntr = ax.contourf(nd.gaussian_filter(layer,smooth),levels=levels,linewidths=lw,colors=[color], alpha=alpha,**kwargs)
+        else:
+            cntr = ax.contour(nd.gaussian_filter(layer,smooth),levels=levels,linewidths=lw,colors=[color], alpha=alpha,**kwargs)
 
 
     ax.set_aspect('equal')
