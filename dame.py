@@ -21,12 +21,8 @@ import utils as ju
 import sys
 
 import skimage.morphology as skmorph
-from fastkde import fastKDE as fk
 
-fastKDE = fk.fastKDE
 
-import plfit
-import powerlaw
 
 from tqdm import tqdm
 
@@ -114,6 +110,7 @@ def mom0(arr,mas=None):
 
 def mom1(arr, mask=None):
     """The intensity-weighted mean position"""
+    """ stolen & modded from astrodendro"""
     if mask is None:
         mask = np.full(arr.shape,True)
 
@@ -124,6 +121,7 @@ def mom1(arr, mask=None):
 
 def mom2(arr,mask=None):
         """The intensity-weighted covariance matrix"""
+        """ stolen abd modded from astrodendro"""
         if mask is None:
             mask = np.full(arr.shape,True)
 
@@ -177,163 +175,6 @@ def mass_radius(surfd, mask, scale, pixscale, err=None):
 def sigma(mass, radius):
     return mass / (np.pi * (radius ** 2))
 
-def get_mass_over_av(
-    akmap, wco, df=None, pixel_scale=0.125, dist=450, lim=0.1, scale=183, alpha_co=4.389
-):
-
-    above_lim = akmap >= lim
-    good = np.isfinite(akmap) & above_lim
-
-    N = np.sum(good)
-    pixel_pc = np.tan(pixel_scale * np.pi / 180) * dist
-
-    mass_ak = np.sum(akmap[good] * scale * (pixel_pc ** 2))
-    mass_co = np.sum(wco[good] * alpha_co * (pixel_pc ** 2))
-
-    radius = np.sqrt(N * (pixel_pc ** 2) / np.pi)
-
-    sigma_ak = mass_ak / (np.pi * radius ** 2)
-    sigma_co = mass_co / (np.pi * radius ** 2)
-    print(f"Map total pixels: {np.sum(np.isfinite(akmap))}")
-
-    # measure Xco
-    xco = (akmap * 83.5e20) / wco
-    mean_xco = np.nanmean(xco)
-    # mean_xco = 10**np.nanmean(np.log10(xco))
-    mass_cor = mass_co * mean_xco / 2e20  # scale to new mass
-    sigma_cor = mass_cor / (np.pi * radius ** 2)
-
-    print(f"Map pixels >{lim}: {N}")
-    print(f"Mass Ak: {mass_ak:3.3g} Msun")
-    print(f"Mass CO: {mass_co:3.3g} Msun")
-    print(f"Mass CO (corrected): {mass_cor:3.3g} Msun")
-    print(f"Xco: {mean_xco:3.3g} (cm^-2)/(K km/s)")
-    print(f"Radius: {radius:3.3g} pc")
-    print(f"Σ AK (Msun/pc^2): {sigma_ak:4.2f}")
-    print(f"Σ CO (Msun/pc^2): {sigma_co:4.2f}")
-    print(f"Σ CO cor (Msun/pc^2): {sigma_cor:4.2f}")
-
-    if df is not None:
-        df.mass = mass_ak
-        df.radius = radius
-        df.sigma = sigma_ak
-
-        df.mass_co = mass_co
-        df.radius_co = radius
-        df.sigma_co = sigma_co
-        df.mass_co_cor = mass_cor
-        df.xco = mean_xco
-        df.sigma_co_cor = sigma_cor
-    return 0
-
-
-
-
-def analysis(
-    ak,
-    wco,
-    boundary,
-    co_mask=None,
-    tmass=None,
-    df=None,
-    pixel_scale=0.125,
-    dist=1000,
-    lim=None,
-    ak_scale=183,
-    ak_nh2=83.5e20,
-    alpha_co=4.389,
-    name="Cloud",
-):
-    """
-
-    boundary: rectangular cloud boundary
-    noise_mask: CO noise mask
-    CO cloud boundary
-    """
-    # GET AK DEFINED MASSES
-    if lim is None:
-        lim = closed_contour(ak,bound=boundary,lim=.95)[1]
-    above_lim = ak > lim
-    ak_mask = above_lim & boundary
-    pixel_pc = pixel_scale**0.5 #np.tan(pixel_scale * np.pi / 180) * dist
-
-    if co_mask is None:
-        co_mask = (wco>0) & np.isfinite(ak + wco) & boundary
-    print(f"analysis:: {name}")
-    print(f"analysis:: Closed contour {lim:0.2f}")
-    print("analysis:: #(Ak): ", np.sum(ak_mask))
-    print("analysis:: #(CO): ", np.sum(co_mask))
-    print("analysis:: #(CO & Ak): ", np.sum(co_mask & ak_mask))
-    print("analysis:: alpha_co: ", alpha_co)
-    print("analysis:: ak_scale: ", ak_scale)
-
-    mass_ak_ak = mass(ak, ak_mask, ak_scale, pixel_pc)  # AK MASS, AK BOUNDARIES
-    # CO MASS, AK BOUNDARIES
-    mass_co_ak = mass(np.nan_to_num(wco), ak_mask, alpha_co, pixel_pc)
-    radius_ak = radius(ak_mask, pixel_pc)
-    sigma_ak_ak = sigma(mass_ak_ak, radius_ak)
-    sigma_co_ak = sigma(mass_co_ak, radius_ak)
-
-    # CO MASS, CO BOUNDARIES
-    mass_co_co = mass(np.nan_to_num(wco), co_mask, alpha_co, pixel_pc)
-    mass_ak_co = mass(ak, co_mask, ak_scale, pixel_pc)  # CO MASS, CO BOUNDARIES
-    radius_co = radius(co_mask, pixel_pc)
-    sigma_co_co = sigma(mass_co_co, radius_co)
-    sigma_ak_co = sigma(mass_ak_co, radius_co)
-
-
-    columns = [
-        "mass_ak_r_ak",
-        "mass_co_r_co",
-        "mass_ak_r_co",
-        "mass_co_r_ak",
-        "radius_co",
-        "radius_ak",
-        "sigma_m_ak_r_ak",
-        "sigma_m_co_r_co",
-        "sigma_m_co_r_ak",
-        "sigma_m_ak_r_co",
-        "Area_ak",
-        "Area_co",
-        "distance",
-        'aco'
-    ]
-    if tmass is not None:
-        columns.insert(7,'mass_2m_r_ak')
-        columns.insert(7,'mass_2m_r_co')
-        mass_2m_ak = mass(tmass, ak_mask, ak_scale, pixel_pc)
-        mass_2m_co = mass(tmass, co_mask, ak_scale, pixel_pc)
-
-    row = [name]
-    df = pd.DataFrame(index=row, columns=columns)
-
-    df.mass_ak_r_ak = mass_ak_ak
-    df.mass_co_r_ak = mass_co_ak
-    df.mass_co_r_co = mass_co_co
-    df.mass_ak_r_co = mass_ak_co
-    df.radius_co = radius_co
-    df.radius_ak = radius_ak
-    df.Area_ak = np.pi * radius_ak ** 2
-    df.Area_co = np.pi * radius_co ** 2
-    df.sigma_m_ak_r_ak = sigma_ak_ak
-    df.sigma_m_co_r_ak = sigma_co_ak
-    df.sigma_m_co_r_co = sigma_co_co
-    df.sigma_m_ak_r_co = sigma_ak_co
-    df.distance = dist
-
-    if tmass is not None:
-        df.mass_2m_r_ak = mass_2m_ak
-        df.mass_2m_r_co = mass_2m_co
-
-    df.Aperpix = np.mean(np.atleast_1d(pixel_pc) ** 2)
-    print(f"analysis:: Map total pixels: {np.sum(np.isfinite(boundary))}")
-
-    # measure Xco
-    aco = mass_ak_co / mass_co_co #CO & dust mass using CO boundary
-
-    df.aco = aco
-    print("\n")
-    return df, ak_mask, co_mask
 
 
 def get_bounds(l=None, b=None, obj=None):
@@ -712,37 +553,6 @@ def lon_ptp(lons):
     return np.ptp(s)
 
 
-
-def get_square(n,aspect=1.):
-    """
-    return rows, cols for grid of n items
-    n <= 3 returns single row
-
-    aspect = width/height (cols/rows)
-    """
-    def empty(n,rows,cols):
-        empty_spaces = (rows * cols) - n
-        empty_rows = floor(empty_spaces / cols)
-        return floor(empty_spaces / cols)
-    if n < 4:
-        return 1, n
-    if (sqrt(n) % 1)  > 0:
-        ceil = int(np.ceil(sqrt(n)))
-        rows = cols = ceil
-        if aspect == 1:
-            rows -= empty(n,rows,cols)
-        else:
-            rows, cols = round(rows * sqrt(aspect)), round(cols / sqrt(aspect))
-            rows -= empty(n,rows,cols)
-    else:
-        rows, cols = sqrt(n),sqrt(n)
-        if aspect != 1:
-            print(rows,cols)
-            rows, cols = round(rows * sqrt(aspect)), round(cols / sqrt(aspect))
-            print(rows,cols,)
-            rows -= empty(n,rows,cols)
-
-    return rows,cols
 
 def channel_maps(mmap,velmin=None,velmax=None,velskip=None,figsize=10,nrows=None,ncols=None,which='interp',
                 overlay_dust=None,verbose=True,set_bad=0,interpolation='bicubic',colorbar=True,**kwargs):
