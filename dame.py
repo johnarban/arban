@@ -254,11 +254,11 @@ def analysis(
     if lim is None:
         lim = closed_contour(ak,bound=boundary,lim=.95)[1]
     above_lim = ak > lim
-    ak_mask = np.isfinite(ak) & above_lim & boundary
-    pixel_pc = np.tan(pixel_scale * np.pi / 180) * dist
+    ak_mask = above_lim & boundary
+    pixel_pc = pixel_scale**0.5 #np.tan(pixel_scale * np.pi / 180) * dist
 
     if co_mask is None:
-        co_mask = wco>0 & np.isfinite(ak + wco) & boundary
+        co_mask = (wco>0) & np.isfinite(ak + wco) & boundary
     print(f"analysis:: {name}")
     print(f"analysis:: Closed contour {lim:0.2f}")
     print("analysis:: #(Ak): ", np.sum(ak_mask))
@@ -325,7 +325,7 @@ def analysis(
         df.mass_2m_r_ak = mass_2m_ak
         df.mass_2m_r_co = mass_2m_co
 
-    df.Aperpix = pixel_pc ** 2
+    df.Aperpix = np.mean(np.atleast_1d(pixel_pc) ** 2)
     print(f"analysis:: Map total pixels: {np.sum(np.isfinite(boundary))}")
 
     # measure Xco
@@ -449,11 +449,19 @@ def getv(header3d, naxis=1):
     return v
 
 
-def dame_bad(arr,unscaled=False):
-    if unscaled:
-        return (arr == -32768) #| (arr == -29248)
+def dame_bad(arr,header=None, unscaled=False):
+    """ Get the blank and 0 filled pixels
+    from a moment masked array
+    """
+    if header is not None:
+        blank = header['BLANK']
+        zero = dame_itemp(0,header=header)
     else:
-        return np.isnan(arr) #| (arr == 2**-18)
+        unscale=True
+    if unscaled:
+        return (arr == blank) | (arr == zero)
+    else:
+        return np.isnan(arr) #| (arr < 1e-4)
 
 def dame_near_zero(arr, unscaled=False):
     if unscaled:
@@ -475,11 +483,56 @@ def dame_int(a,i,j):
 
     return np.sum(a_sub,axis=0)/len(a_sub)
 
+def dame_nint(i,blank=-32768):
+    if hasattr(i, '__iter__'):
+        out = np.full_like(i,blank,dtype=int)
+        out[i<0] = (i[i<0] - 0.5).astype(int)
+        out[i>=0] = (i[i>=0] + 0.5).astype(int)
+        return out
+    else:
+        if i<0:
+            return int(i-0.5)
+        else:
+            return int(i+0.5)
+
+def dame_itemp(t,bscale=1,bzero=0,blank=-32768, header=None):
+    """
+    /* return FITS integer value corresponding to real value t */
+
+    """
+    if header is not None:
+        bscale = header['BSCALE']
+        bzero = header['BZERO']
+
+    return dame_nint((t - bzero) / bscale)
+
+
+def dame_temp(i,bscale=1,bzero=0,blank=-32768,header=None):
+    """
+    /* Return temperature corresponding to FITS integer value ival */
+    /* Return 1.e30 (undef) if pixel is blank */
+    """
+
+    if header is not None:
+        bscale = header['BSCALE']
+        bzero = header['BZERO']
+
+    if hasattr(i, '__iter__'):
+        t = (i * bscale + bzero).astype(float)
+        t[i==blank] = np.nan
+    else:
+        if i==blank:
+            return np.nan
+        else:
+            t = i * bscale + bzero
+
+    return t
+
 
 
 def mask_dame_wco(co, co_raw, noise=None, level=3):
     with np.errstate(all="ignore"):
-        bad = dame_bad(co)
+        bad = np.isnan(co)
         if noise is None:
             noise = np.nanstd(co_raw[bad])
         N = np.nansum(~bad, axis=-1)
@@ -541,6 +594,7 @@ def closed_contour(field, bound=None, steps=None, lim=1, min_size=0, nan_value=0
         lim = 1
 
     # get rid of nans (set to zero by default for positivily valued fields)
+    field = field.copy()
     field = np.nan_to_num(field, nan=nan_value)
 
     # want to search from highest to lowest
