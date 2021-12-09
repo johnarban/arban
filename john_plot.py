@@ -41,7 +41,7 @@ def get_square(n,aspect=1.):
 
 
 def channel_maps(cube,v=None,dv=None,spec_ax=-1,wcs=None,
-                velmin=None,velmax=None,velskip=None,
+                velmin=None,velmax=None,velskip=None,ncols_max=np.inf,debug=False,
                 figsize=10,verbose=True,nrows=None,ncols=None, set_bad = None,colorbar=True, fig=None,ax=None, **kwargs):
     """Create grid of channel maps
 
@@ -139,11 +139,14 @@ def channel_maps(cube,v=None,dv=None,spec_ax=-1,wcs=None,
 
 
     if iskip > 1:
+        # imagine imin = 0, imax = 10, iskip = 3
+        # then we want to get chan_end = [3,6,9]
+        # and chan_start = [0,3,6]
         chan_start = np.arange(imin,imax+iskip,iskip) # we might have to start integration at imax
         chan_end = np.arange(imin+iskip,imax + iskip,iskip)-1 # but we can end on imax.
 
         if chan_end[-1] > len(v):
-            chan_end[-1] = len(v)-1
+            chan_end[-1] = len(v)-1 # make sure we don't go past the end of the spectrum
         chans = list(zip(chan_start,chan_end))  ## ordered pairs [(chan_start[0], chan_end[0]),...]
         if (chan_end[-1] < imax):
             cstart = chan_end[-1] + 1
@@ -178,6 +181,9 @@ def channel_maps(cube,v=None,dv=None,spec_ax=-1,wcs=None,
     else:
         nr,nc = get_square(nimage,aspect=a)
 
+    if nc > ncols_max:
+        nc = ncols_max
+        nr = int(nimage / ncols_max + 1)
 
     if verbose:
         print(f'Rows: {nr}  Columns: {nc} Aspect: {a:0.2g}')
@@ -219,7 +225,7 @@ def channel_maps(cube,v=None,dv=None,spec_ax=-1,wcs=None,
             c_start = chans[i][0]
             c_end = chans[i][1]+1 #make it inclusive
             sub = cube[:,:,c_start:c_end]
-            img = np.nansum(sub,axis=-1) * dv
+            img = np.nansum(sub,axis=-1) * dv * 1.
             img[np.isnan(sub).all(axis=-1)] = np.nan #nansum got rid of badvals->0, I want them back
             if set_bad is not None:
                 img[(sub==set_bad).all(axis=-1)] = np.nan
@@ -455,10 +461,12 @@ def renzogram(cube,v=None,dv=None,wcs=None,
             #img[img==set_bad] = np.nan
             layer = img
 
+        if smooth>0:
+            layer = ju.nan_gaussian_filter(layer,smooth)
         if filled:
-            cntr = ax.contourf(nd.gaussian_filter(layer,smooth),levels=levels,linewidths=lw,colors=[color], alpha=alpha,**kwargs)
+            cntr = ax.contourf(layer,levels=levels,linewidths=lw,colors=[color], alpha=alpha,**kwargs)
         else:
-            cntr = ax.contour(nd.gaussian_filter(layer,smooth),levels=levels,linewidths=lw,colors=[color], alpha=alpha,**kwargs)
+            cntr = ax.contour(layer,levels=levels,linewidths=lw,colors=[color], alpha=alpha,**kwargs)
 
 
     ax.set_aspect('equal')
@@ -473,3 +481,74 @@ def renzogram(cube,v=None,dv=None,wcs=None,
 
 
     return fig,mpl.cm.get_cmap(cmap,nimage), mpl.colors.Normalize(vmin=vmin,vmax=vmax)
+
+
+
+
+
+# function to plot spectra over their position on a collapsed cube
+def overlay_spectra_plot(array, nrow=5,ncol=5,**kwargs):
+    """
+    Overlay spectra on a collapsed cube.
+
+        Parameters
+        ----------
+        array : 3D numpy array
+
+        nrow : int
+            Number of rows in the figure.
+        ncol : int
+            Number of columns in the figure.
+        **kwargs : dict
+            Keyword arguments passed to `ax.plot` for the spectra
+
+        Returns
+        -------
+        fig : matplotlib.figure.Figure
+            The figure object.
+        """
+
+
+    cube = np.nan_to_num(array)
+
+    fig,ax = plt.subplots(subplot_kw={'projection':mmap.wcs},figsize=(10,10))
+    fig.set_constrained_layout(False)
+
+    collapsed_cube = np.nanmean(cube,axis=2)
+
+    vmin,vmax = np.percentile(collapsed_cube[collapsed_cube>0], [0.1,99.9])
+    ax.imshow(collapsed_cube,cmap='Greys',norm=mpl.colors.LogNorm(vmin=vmin,vmax=vmin))
+
+
+    w = 1/ncol # in figure coords
+    h = 1/nrow # in figure coords
+
+
+    dr,dc = collapsed_cube.shape
+
+    # create grid of inset_axes on figure
+    for i in range(nrow):
+        for j in range(ncol):
+            b,l = i*h, j*w
+            #print(f'left:{l:0.1f} col: {j} bottom:{b:0.1f} row:{i}')
+            bl = [b,l]
+            ax2 = ax.inset_axes([l,b,w,h])
+            ax2.set_xticks([])
+            ax2.set_yticks([])
+            ax2.set_facecolor('none')
+            #ax.add_patch(mpl.patches.Rectangle([l,b],w,h,transform=ax.transAxes,color='r',alpha=0.5))
+            #ju.annotate(f'row:{i} col:{j}',l,b,ha='left',va='bottom',ax=ax,transform='axes')
+
+
+            #print(f'{int(b*dr)}:{int((b+h)*dr)},{int(l*dc)}:{int((l+w)*dc)}')
+            line = np.nanmean(mmap.co[sl][int(b*dr):int((b+h)*dr),int(l*dc):int((l+w)*dc),vsl],axis=(0,1))
+
+            ax2.plot(mmap.v[vsl],ju.scale_ptp(line),'r',lw=1,**kwargs)
+
+
+
+            ax2.set_ylim(ax2.get_ylim()[0],max(ax2.get_ylim()[1],.3))
+            #ax2.set_axis_off()
+
+            #ax.add_patch(mpl.patches.Rectangle([bl[0],bl[1]],w*dc,h*dr,transform=ax.transData,alpha=0.25))
+    return fig
