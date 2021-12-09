@@ -28,6 +28,8 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable, axes_size
 from scipy import integrate, interpolate, ndimage, signal, stats
 import scipy.special as special
 from weighted import quantile
+from bces.bces import bces
+
 
 from matplotlib.patheffects import withStroke
 
@@ -584,7 +586,7 @@ def wcsaxis(header, N=6, ax=None, fmt="%0.2f", use_axes=False,label=True):
     oldax = plt.gca()
     if ax is None:
         ax = plt.gca()
-    #plt.sca(ax)
+    plt.sca(ax)
     xlim = ax.axes.get_xlim()
     ylim = ax.axes.get_ylim()
 
@@ -646,7 +648,7 @@ def wcsaxis(header, N=6, ax=None, fmt="%0.2f", use_axes=False,label=True):
     ax.axes.set_xlim(xlim[0], xlim[1])
     ax.axes.set_ylim(ylim[0], ylim[1])
 
-    #plt.sca(oldax)
+    plt.sca(oldax)
     return ax
 
 
@@ -1025,6 +1027,10 @@ def mgeo(arr, n=2, axis=-1):
     """
     return stats.gmean(rolling_window(arr, n), axis=axis)
 
+def centroid(x, y):
+        # vertex of 2nd order polynomial fit
+        a, b, c = np.polyfit(x, y, 2)
+        return -b/(2*a), -b**2/(4*a) + c
 
 def bin_center(arr, n=2):
     """
@@ -1316,7 +1322,7 @@ def cdf(values, bins):
     return np.append(0, c), bins
 
 
-def cdf2(values, bins):
+def cdf2(values, bins, weights = None):
     """
     # # Exclusively for area_function which needs to be unnormalized
     (statistical) cumulative distribution function
@@ -1331,7 +1337,12 @@ def cdf2(values, bins):
     else:
         range = None
 
-    h, bins = np.histogram(values, bins=bins, range=range, density=False)
+    if weights is None:
+        h, bins = np.histogram(values, bins=bins, range=range, density=False)
+    else:
+        if len(np.atleast_1d(weights)) == 1:
+            weights = np.full_like(values,weights)
+        h, bins = np.histogram(values, bins=bins, weigths = weights ,range=range, density=False)
     c = np.cumsum(h).astype(float)
     return np.append(0.0, c), bins
 
@@ -1341,24 +1352,24 @@ def area_function(extmap, bins, scale=1):
     Complimentary CDF for cdf2 (not normalized to 1)
     Value at b is total amount above b.
     """
-    c, bins = cdf2(extmap, bins)
-    return scale * (c.max() - c), bins
+    c, bins = cdf2(extmap, bins, weights=scale)
+    return (c.max() - c), bins
 
 
 def diff_area_function(extmap, bins, scale=1):
     """
     See pdf2
     """
-    s, bins = area_function(extmap, bins)
+    s, bins = area_function(extmap, bins,weights=scale)
     dsdx = -np.diff(s) / np.diff(bins)
-    return dsdx * scale, bin_center(bins)
+    return dsdx, bin_center(bins)
 
 
-def log_diff_area_function(extmap, bins):
+def log_diff_area_function(extmap, bins,scale=1):
     """
     See pdf2
     """
-    s, bins = diff_area_function(extmap, bins)
+    s, bins = diff_area_function(extmap, bins,scale=scale)
     g = s > 0
     dlnsdlnx = np.diff(np.log(s[g])) / np.diff(np.log(bins[g]))
     return dlnsdlnx, bin_center(bins[g])
@@ -1373,8 +1384,8 @@ def mass_function(values, bins, scale=1, aktomassd=183):
     else:
         range = None
 
-    if scale != 1:
-        aktomassd = scale
+    # if scale != 1:
+    #     aktomassd = scale
 
     h, bins = np.histogram(
         values,
@@ -1395,8 +1406,8 @@ def mass_comp_function(values, bins, scale=1, aktomassd=183):
     else:
         range = None
 
-    if scale != 1:
-        aktomassd = scale
+    # if scale != 1:
+    #     aktomassd = scale
 
     h, bins = np.histogram(
         values,
@@ -1514,6 +1525,33 @@ def curve_fit_line(x, y, yerr=None):
     out = curve_fit(model, x, y, p0=p0, sigma=yerr)
     return out
 
+def LinearFit(x,y,ex=None,ey=None,covxy = None,log=False,use_bces=None):
+    if use_bces is None:
+        return PolyRegress(x,y,fit=True,log=log)
+    else:
+        if ex is None:
+            ex = .001  * x
+        if ey is None:
+            ey = 0.001 * y
+        if covxy is None:
+            covxy = 0 * x
+        out =  bces(x,ex,y,ey,covxy)
+
+        if use_bces.lower()=='all':
+            return out
+        elif use_bces.lower()[0]=='y':  # y / x
+            return [o[0] for o in out]
+        elif use_bces.lower()[0]=='x':  # x / y
+            return [o[1] for o in out]
+        elif use_bces.lower()[0]=='b': #bisector method
+            print('Selected bisector method. This is bad method. Use "ortho"')
+            return [o[2] for o in out]
+        elif use_bces.lower()[0]=='o': # orthogonal
+            return [o[3] for o in out]
+
+
+
+
 
 class PolyRegress(object):
     ###
@@ -1530,13 +1568,17 @@ class PolyRegress(object):
         fit=False,
         pass_through_origin=False,
         log=False,
+        ln=False,
         dtype=np.float64,
     ):
         if log:
             X, Y = np.log10(X).ravel(), np.log10(Y).ravel()
+        elif ln:
+            X, Y = np.log(X).ravel(), np.log(Y).ravel()
         else:
             X, Y = np.array(X).ravel(), np.array(Y).ravel()
         self.log = log
+        self.ln = ln
         g = np.isfinite(X + Y)
 
         self.X = X[g].astype(dtype)
@@ -1569,13 +1611,16 @@ class PolyRegress(object):
             s = self.scatter
             term = lambda i: f"({self.b[i]:0.3g}+/-{e[i]:0.3g}) * x^{i}"
             out1 = " + ".join([term(i) for i in range(self.P)])
-            if not self.log:
+            if (not self.log) or (not self.ln):
                 # out=f'm:{b[1]:0.3g}+/-{e[1]:0.3g}, b:{b[0]:0.3g}+/-{e[0]:0.3g}, scatter:{s:0.3g}'
                 out = out1 + f" , scatter:{s:0.3g}"
-            else:
+            elif self.log:
                 # out=f'm:{b[1]:0.3g}+/-{e[1]:0.3g}, b:{b[0]:0.3g}+/-{e[0]:0.3g}, scatter:{s:0.3g}'
                 out = out1 + f" , scatter:{s:0.3g}"
                 out = f"{out}\n+10^b:{10**b[0]:0.3g}"
+            elif self.ln:
+                out = out1 + f" , scatter:{s:0.3g}"
+                out = f"{out}\n+10^b:{np.exp(b[0]):0.3g}"
         else:
             out = "\nERROR::Has not been run. run model.fit() now\n"
         return "\n" + out + "\n"
@@ -1620,6 +1665,10 @@ class PolyRegress(object):
             self.percent_scatter = np.mean(
                 np.abs(10 ** self.y_hat - 10 ** self.Y) / 10 ** self.Y
             )
+        elif self.ln:
+            self.percent_scatter = np.mean(
+                np.abs(np.exp(self.y_hat) - np.exp(self.Y)) / np.exp(self.Y)
+            )
         else:
             self.percent_scatter = np.mean(self.residual / self.Y)
 
@@ -1629,6 +1678,8 @@ class PolyRegress(object):
         p = self.b[::-1]
         if self.log:
             return 10 ** np.polyval(p, np.log10(x))
+        elif self.ln:
+            return np.exp(np.polyval(p, np.log(x)))
         else:
             return np.polyval(p, x)
 
@@ -1644,6 +1695,7 @@ class PolyRegress(object):
         ms=5,
         mec="none",
         unlog=False,
+        unln = False,
         **kwargs,
     ):
         if ax is None:
@@ -1653,6 +1705,11 @@ class PolyRegress(object):
             x = 10 ** self.X
             y = 10 ** self.Y
             xx = np.logspace(self.X.min(), self.X.max(), 30)
+        elif self.ln or unln:
+            x = np.exp(self.X)
+            y = np.exp(self.Y)
+            xx = np.logspace(self.X.min(), self.X.max(), 30,base=np.e)
+
         else:
             x = self.X
             y = self.Y
@@ -1681,7 +1738,7 @@ class PolyRegress(object):
 
         ax.plot(xx, self.func(xx), "-", color=c_line, **kwargs)
 
-        if self.log:
+        if self.log or self.ln:
             ax.set_xscale("log")
             ax.set_yscale("log")
 
@@ -2184,23 +2241,26 @@ def plot_2dhist(
     return x, y, p, ax
 
 
-def data2rank(arr, clip=0, notadummy=True):
+def data2rank(arr, clip=0, notadummy=True,method='dense'):
     # stolen from scipy.stats.rankdata
     # so just just that dummy
 
     arr = np.array(arr, copy=True)
     if notadummy:
-        out = stats.rankdata(arr, method="dense")
-        return out.reshape(arr.shape) / out.max()
+        out = stats.rankdata(arr.ravel(), method=method).astype(float)
+        nans = np.isnan(arr.ravel())
+        out[nans]  = np.nan#out[np.logical_not(nans)].max() + 1
+        return out.reshape(arr.shape) / np.nanmax(out)
     else:
         shape = arr.shape
-        arr = arr.flatten()
-        sort = np.argsort(arr)  # smallest to largest
-        invsort = np.argsort(sort)  # get sorted array in to original order
-        sorted_arr = arr[sort]
-        uniqsort = np.r_[True, sorted_arr[1:] != sorted_arr[:-1]]
-        order = np.nancumsum(uniqsort)
-        return order[invsort].reshape(shape)
+        # arr = arr.flatten()
+        # sort = np.argsort(arr)  # smallest to largest
+        # invsort = np.argsort(sort)  # get sorted array in to original order
+        # sorted_arr = arr[sort]
+        # uniqsort = np.r_[True, sorted_arr[1:] != sorted_arr[:-1]]
+        # order = np.nancumsum(uniqsort)
+        # return order[invsort].reshape(shape)
+        sort = np.argsort(arr.ravel())
 
 
 def data2norm(H):
