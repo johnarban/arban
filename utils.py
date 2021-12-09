@@ -38,11 +38,14 @@ import error_prop as jerr
 import sphere as sphere
 import background as background
 #from john_plot import annotate
+import moment_masking as jmm
+
 
 reload(jplot)
 reload(jerr)
 reload(sphere)
 reload(background)
+reload(jmm)
 nd = ndimage
 
 
@@ -3510,3 +3513,24 @@ def figsize(arr, default=[6, 6], dpi=72):
 #         del sys.modules[pkg]  # remove sub modules and packages from import cache
 
 #     return importlib.import_module(name)
+
+
+def nan_gaussian_filter(T, fwhm, mode='constant', cval=0, preserve_nan=True, **kwargs):
+    """ default parameters mimic
+    convolve(x,kernels.Gaussian2DKernel(fwhm),preserve_nan=True,boundary='fill',fill_value=np.nan)
+    fill_value = np.nan basically continues the interpolation beyond the boundary
+    """
+    V = T.copy()
+    V[np.isnan(T)] = 0
+    VV  = nd.gaussian_filter(V, fwhm , mode=mode, cval=cval, **kwargs)
+
+    W = np.ones_like(T)
+    W[np.isnan(T)] = 0
+    WW  = nd.gaussian_filter(W, fwhm , mode=mode, cval=cval, **kwargs)
+
+    Z = VV / WW
+
+    if preserve_nan:
+        Z[np.isnan(T)] = np.nan
+
+    return Z
