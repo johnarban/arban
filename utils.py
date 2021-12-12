@@ -29,7 +29,7 @@ from scipy import integrate, interpolate, ndimage, signal, stats
 import scipy.special as special
 from weighted import quantile
 from bces.bces import bces
-
+from astropy.stats import mad_std
 
 from matplotlib.patheffects import withStroke
 
@@ -342,7 +342,7 @@ def _normalize_location_orientation(location, orientation):
     return loc_settings
 
 
-def get_cax(ax=None, position=None, frac=0.03, pad=0.05):
+def get_cax(ax=None, position=None, frac=0.03, pad=0.02):
     """get a colorbar axes of the same height as current axes
     position: "left" "right" ( vertical | )
               "top"  "bottom"  (horizontal --- )
@@ -359,7 +359,23 @@ def get_cax(ax=None, position=None, frac=0.03, pad=0.05):
 
     if position is 'bottom':
         pad += 0.15
-    cax = divider.append_axes(position, size=size, pad=pad)
+
+    if position is 'right':
+        left = 1 + pad
+        width = frac
+        bottom = 0.0
+        height = 1.0
+    elif position is 'bottom':
+        left = 0.0
+        width = 1.0
+        bottom = 0 - pad
+        height = frac*2
+    else:
+        raise ValueError(f"position {position} not supported")
+
+    p = [left, bottom, width, height]
+    cax = ax.inset_axes(p, transform=ax.transAxes)
+
     plt.sca(ax)
     return cax
 
@@ -1760,10 +1776,14 @@ def plot_astropy_fit_covariances(fit, fitter):
 
 
 def mad(X, stddev=True, axis=None):
-    if stddev:
-        return 1.4826 * np.nanmedian(np.abs(X - np.nanmedian(X, axis=axis)), axis=axis)
+    if  stddev:
+        return mad_std(X,axis=axis,ignore_nan=True)
     else:
-        return np.nanmedian(np.abs(X - np.nanmedian(X, axis=axis)), axis=axis)
+        return mad_std(X,axis=axis,ignore_nan=True) / 1.482602218505602
+    # if stddev:
+    #     return 1.482602218505602 * np.nanmedian(np.abs(X - np.nanmedian(X, axis=axis)), axis=axis)
+    # else:
+    #     return np.nanmedian(np.abs(X - np.nanmedian(X, axis=axis)), axis=axis)
 
 
 def mean_mad(X, stddev=True, axis=None):
