@@ -154,9 +154,12 @@ def channel_maps(cube,v=None,dv=None,spec_ax=-1,wcs=None,
             chans.append([cstart,cend])
     else:
         # if we're not integrating, we will just be taking each channel
-        chans = np.arange(imin,imax+iskip,iskip)
+        if imin!=imax:
+            chans = np.arange(imin,imax+iskip,iskip)
+        else:
+            chans = [imin]
         if chans[-1] >= len(v):
-            chans[-1]=len(v)-1
+                chans[-1]=len(v)-1
     #print(chans)
     nchans = len(chans)
     nimage = nchans
@@ -203,7 +206,8 @@ def channel_maps(cube,v=None,dv=None,spec_ax=-1,wcs=None,
     subplot_kw={'projection':wcs}
     fig = plt.figure(figsize=figsize)
     gs = plt.GridSpec(nrows=nr,ncols=nc,figure=fig,**gridspec_kw)
-    axs = gs.subplots(subplot_kw=subplot_kw,sharex=True,sharey=True,).ravel()
+    axs = gs.subplots(subplot_kw=subplot_kw,sharex=True,sharey=True,)
+    axs = np.atleast_1d(axs).ravel()
     fig.set_constrained_layout(False)
 
     # fig,axs = plt.subplots(nrows=nr,ncols=nc,figsize=figsize,sharex=True,sharey=True,constrained_layout=False,
@@ -230,6 +234,11 @@ def channel_maps(cube,v=None,dv=None,spec_ax=-1,wcs=None,
             if set_bad is not None:
                 img[(sub==set_bad).all(axis=-1)] = np.nan
             im = ax.imshow(img,**kwargs)
+        elif abs(iskip) == 0:
+            c_start = chans[i]
+            c_end = c_start + 1
+            im = ax.imshow(cube[:,:,c_start]*dv,**kwargs)
+
 
         vsub = v[c_start:c_end]
         v_min, v_max = vsub.min(),vsub.max()
