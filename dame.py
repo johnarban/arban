@@ -271,6 +271,110 @@ def get_bounds(l=None, b=None, obj=None):
     else:
         return None
 
+def analysis(
+    ak,
+    wco,
+    boundary,
+    co_mask=None,
+    tmass=None,
+    df=None,
+    pixel_scale=0.125,
+    dist=1000,
+    lim=None,
+    ak_scale=183,
+    ak_nh2=83.5e20,
+    alpha_co=4.389,
+    name="Cloud",
+):
+    """
+    boundary: rectangular cloud boundary
+    noise_mask: CO noise mask
+    CO cloud boundary
+    """
+    # GET AK DEFINED MASSES
+    if lim is None:
+        lim = closed_contour(ak,bound=boundary,lim=.95)[1]
+    above_lim = ak > lim
+    ak_mask = above_lim & boundary
+    pixel_pc = pixel_scale**0.5 #np.tan(pixel_scale * np.pi / 180) * dist
+
+    if co_mask is None:
+        co_mask = (wco>0) & np.isfinite(ak + wco) & boundary
+    print(f"analysis:: {name}")
+    print(f"analysis:: Closed contour {lim:0.2f}")
+    print("analysis:: #(Ak): ", np.sum(ak_mask))
+    print("analysis:: #(CO): ", np.sum(co_mask))
+    print("analysis:: #(CO & Ak): ", np.sum(co_mask & ak_mask))
+    print("analysis:: alpha_co: ", alpha_co)
+    print("analysis:: ak_scale: ", ak_scale)
+
+    mass_ak_ak = mass(ak, ak_mask, ak_scale, pixel_pc)  # AK MASS, AK BOUNDARIES
+    # CO MASS, AK BOUNDARIES
+    mass_co_ak = mass(np.nan_to_num(wco), ak_mask, alpha_co, pixel_pc)
+    radius_ak = radius(ak_mask, pixel_pc)
+    sigma_ak_ak = sigma(mass_ak_ak, radius_ak)
+    sigma_co_ak = sigma(mass_co_ak, radius_ak)
+
+    # CO MASS, CO BOUNDARIES
+    mass_co_co = mass(np.nan_to_num(wco), co_mask, alpha_co, pixel_pc)
+    mass_ak_co = mass(ak, co_mask, ak_scale, pixel_pc)  # CO MASS, CO BOUNDARIES
+    radius_co = radius(co_mask, pixel_pc)
+    sigma_co_co = sigma(mass_co_co, radius_co)
+    sigma_ak_co = sigma(mass_ak_co, radius_co)
+
+
+    columns = [
+        "mass_ak_r_ak",
+        "mass_co_r_co",
+        "mass_ak_r_co",
+        "mass_co_r_ak",
+        "radius_co",
+        "radius_ak",
+        "sigma_m_ak_r_ak",
+        "sigma_m_co_r_co",
+        "sigma_m_co_r_ak",
+        "sigma_m_ak_r_co",
+        "Area_ak",
+        "Area_co",
+        "distance",
+        'aco'
+    ]
+    if tmass is not None:
+        columns.insert(7,'mass_2m_r_ak')
+        columns.insert(7,'mass_2m_r_co')
+        mass_2m_ak = mass(tmass, ak_mask, ak_scale, pixel_pc)
+        mass_2m_co = mass(tmass, co_mask, ak_scale, pixel_pc)
+
+    row = [name]
+    df = pd.DataFrame(index=row, columns=columns)
+
+    df.mass_ak_r_ak = mass_ak_ak
+    df.mass_co_r_ak = mass_co_ak
+    df.mass_co_r_co = mass_co_co
+    df.mass_ak_r_co = mass_ak_co
+    df.radius_co = radius_co
+    df.radius_ak = radius_ak
+    df.Area_ak = np.pi * radius_ak ** 2
+    df.Area_co = np.pi * radius_co ** 2
+    df.sigma_m_ak_r_ak = sigma_ak_ak
+    df.sigma_m_co_r_ak = sigma_co_ak
+    df.sigma_m_co_r_co = sigma_co_co
+    df.sigma_m_ak_r_co = sigma_ak_co
+    df.distance = dist
+
+    if tmass is not None:
+        df.mass_2m_r_ak = mass_2m_ak
+        df.mass_2m_r_co = mass_2m_co
+
+    df.Aperpix = np.mean(np.atleast_1d(pixel_pc) ** 2)
+    print(f"analysis:: Map total pixels: {np.sum(np.isfinite(boundary))}")
+
+    # measure Xco
+    aco = mass_ak_co / mass_co_co #CO & dust mass using CO boundary
+
+    df.aco = aco
+    print("\n")
+    return df, ak_mask, co_mask
 
 def getlb(header, amap=None, origin=0):
     """get GLAT, GLON coords. Origin=0 indicates
