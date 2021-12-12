@@ -1,14 +1,58 @@
-from scipy.ndimage import distance_transform_edt, gaussian_filter,binary_opening
-from scipy.stats import sigmaclip
+from scipy.ndimage import distance_transform_edt, gaussian_filter,binary_opening,binary_dilation
+from scipy.stats import sigmaclip, norm
+from astropy.stats import sigma_clipped_stats, mad_std
 import numpy as np
-
+import matplotlib.pyplot as plt
 
 # import numpy as np
+def interp_cube(arr):
+    def dame_int(a,i,j):
+        ai,aj = a.shape[0],a.shape[1]
+        im = i-1
+        ip = i+1
+        jm = j-1
+        jp = j+1
+        #a_sub = [a[ii,jj] for ii in [im,i,ip] if 0<=ii<ai for jj in [jm,j,jp] if 0<=jj<aj]
+        #return sum(a_sub)/len(a_sub)
+        cs = [i+1,j],[i,j+1],[i-1,j],[i,j-1]
+        a_sub = [a[ii,jj] for ii,jj in cs if (0<=ii<ai) & (0<=jj<aj) ]
+
+        return np.sum(a_sub,axis=0)/len(a_sub)
+
+    T = arr.copy()
+
+    bad = np.isnan(T).all(axis=2) # bad pixels
+    contiguous_bad  = binary_opening(bad) # contiguous bad
+    contiguous_good = binary_opening(~bad) # contiguous good
+
+    g = bad & (~contiguous_bad) & (~contiguous_good) # bad, but not contigous bad, and not contiguous good
+    i,j = np.where(g)
+
+    # good but not contiguous
+    T[(~bad) & (~contiguous_good)] = np.nan
+
+    for i,j in zip(i,j):
+        T[i,j,:] = dame_int(arr,i,j)
+
+    return T
 
 
-def find_emission_free_region_rms(T, low=4, high=4):
-    emission_free_T, lower, upper = sigmaclip(T[np.isfinite(T)], low=low, high=high)
-    return emission_free_T.std()
+def find_emission_free_region_rms(T, low=4, high=4, axis=None, cenfunc='mean',stdfunc='std'):
+    if axis is None:
+        #emission_free_T, lower, upper = sigmaclip(T[np.isfinite(T)], low=low, high=high)
+        # sigma_clipped_stats returns mean, median, stddev
+        _,_,emission_free_T = sigma_clipped_stats(T[np.isfinite(T)],sigma_lower = low, sigma_upper=high,cenfunc=cenfunc,stdfunc=stdfunc)
+        return emission_free_T
+    else:
+        shape = list(T.shape)
+        shape.pop(axis)
+        emission_free_T = np.zeros(shape)
+        func = lambda x: find_emission_free_region_rms(x,low=low, high=high, cenfunc=cenfunc, stdfunc=stdfunc)
+        # for i in range(shape[0]):
+        #     for j in range(shape[1]):
+                # use recursion to fill emission free region
+        emission_free_T = np.array([[func(T[i,j]) for j in range(shape[1])] for i in range(shape[0])])
+        return emission_free_T
 
 
 def nan_gaussian_filter(T, fwhm, mode="constant", cval=0, preserve_nan=True, **kwargs):
@@ -31,20 +75,183 @@ def nan_gaussian_filter(T, fwhm, mode="constant", cval=0, preserve_nan=True, **k
 
     return Z
 
+def mask_with_nan(arr,mask):
+    """ mask array with nan values"""
+    masked_arr = np.copy(arr)
+    masked_arr[mask] = np.nan
+    return masked_arr
 
-def dame_moment_masking(
-    T,
-    ds=1 / 8,
-    dv=0.65,
-    noise=0.26,
-    fwhm_s=1 / 4,
-    fwhm_v=2.5,
-    clip_n=5,
-    truncate=2.5,
-    sigma_clip_high=None,
-    nneigh=None,
-    verbose=True,
-):
+
+def chauvenet(data,max_step_percent = .05, nbad_divisor=5,verbose=False, debug=False, return_mask=True,return_median=False,return_steps=False,return_mean=False):
+    ## assume noise is centered on zero
+    finite = np.isfinite(data)
+    if not np.any(finite):
+        return np.nan,np.nan,np.nan
+    srt = np.argsort(data[finite])
+    f_data = data[finite][srt]
+
+
+
+    N = len(f_data)
+    if debug:
+        print(f'Originally we have {N} pixels')
+
+    bad, i = [True], 0
+    ii = 0
+    steps = 0
+    nsingles = 0
+    ii_steps = []
+    while (i<(N-1)) & np.any(bad):
+        steps += 1
+        i+=ii
+        if debug:
+            print(i,N-i,f_data.shape,type(N-i))
+        median = np.median(f_data[:N-i])
+        stddev = mad_std(f_data[:N-i]-median)
+
+        if debug:
+            print(f'std:{stddev:0.3g}  med: {median:0.3g}  i: {i}  ii: {ii}')
+
+
+        P = 1/(2*(N-i))
+
+        bad = norm.sf(f_data[:N-i]-median,scale=stddev) < P
+
+        ii = int(np.sum(bad))
+        # ii = int(max(1,np.sum(bad)/nbad_divisor) + 0.5)
+        if  ii / (N-i) > max_step_percent:
+            # print('warning: small steps')
+            ii = int(max_step_percent * (N-i) / nbad_divisor + 0.5)
+            nsingles += 1
+        ii_steps.append(ii)
+
+
+    # stddev = mad_std(f_data[:N-i]-median)
+    if verbose:
+        print(f'chauvenet rejected {i} out of {len(f_data)} after {steps} steps ({nsingles} single steps)')
+        print(f'Initial stddev: {np.std(f_data):10.3g}   Final stddev: {stddev:10.3g}')
+
+
+    out = (stddev,)
+
+    if return_mask:
+        mask = np.zeros(data.shape)
+        iy,ix,iz = np.indices(data.shape)
+        iy = iy[finite][srt[:N-i]]
+        ix = ix[finite][srt[:N-i]]
+        iz = iz[finite][srt[:N-i]]
+        mask[iy,ix,iz] = 1
+
+        out = out + (mask.astype(bool),)
+
+    if return_median:
+        out = out + (median,)
+
+    if return_steps:
+        out = out + (ii_steps,)
+
+    if return_mean:
+        out = np.mean(f_data[:N-i])
+
+    return out
+
+
+
+
+def find_robust_rms(Ts, axis=None, sigma_clip = None, clip_n = 5, max_iter = 50, robust_clip = None ,max_step_percent=0.05, nbad_divisor=5, debug=False):
+    """
+    find robust rms of a array of Ts
+
+    Parameters
+    ----------
+    Ts : array_like
+
+    clip_n : int
+        number of sigma to clip
+
+    axis : int
+        axis to compute rms
+
+    max_step_percent : float
+        maximum percentage of data to reject
+
+    nbad_divisor : int
+        number of times to divide the number of bad pixels
+
+    debug : bool
+        print debug info
+
+    Returns
+    -------
+    rms : float
+        robust rms of Ts
+
+
+
+    """
+    use_chauvenet = False
+
+    if sigma_clip is not None:
+        if not sigma_clip:
+            use_chauvenet = True
+    elif robust_clip is not None:
+        if robust_clip:
+            use_chauvenet = True
+
+    if debug:
+        print('*** find_robust_rms ***')
+        print('use chauv.',use_chauvenet)
+
+    if use_chauvenet:
+        new_rms, mask = chauvenet(Ts,max_step_percent=max_step_percent,nbad_divisor=nbad_divisor,verbose=debug,debug=debug,return_mask=True)
+        if debug:
+            print('RMS(c):',new_rms)
+        return new_rms, mask
+    else:
+        i = 0
+        new_rms = np.nanstd(Ts)
+        old_rms = 0
+        while (old_rms != new_rms) & (i < max_iter):
+            old_rms = new_rms
+            new_rms = np.sqrt(np.nanmean((Ts[Ts < (clip_n * new_rms)] ** 2)))
+            if debug:
+                print('RMS:',new_rms)
+        return new_rms, Ts < (clip_n * new_rms)
+
+def dilated_mask(mask, ni,nj,nk, test=False):
+
+    mask = mask.astype(bool)
+
+    dilated = np.zeros(mask.shape)
+
+    # s = np.ones((2*ni+1,1,1))
+    # dilated = np.logical_or(dilated, binary_dilation(mask,s))
+
+    # s = np.ones((1,2*nj+1,1))
+    # dilated = np.logical_or(dilated, binary_dilation(mask,s))
+
+    # s = np.ones((1,1,2*nk+1))
+    # dilated = np.logical_or(dilated, binary_dilation(mask,s))
+
+    s = np.ones((ni, nj, nk))
+    dilated = np.logical_or(dilated, binary_dilation(mask,s))
+
+    if test:
+        dilated = dilated.astype(int)
+        dilated[mask] = 2
+
+    return dilated
+
+
+
+
+
+
+
+def dame_moment_masking(T, ds=1 / 8, dv=0.65, fwhm_s=1 / 4, fwhm_v=2.5, \
+                        nneigh=None, clip_n=5, truncate=4, follow_dame = True, rms_map = True, \
+                        specax = 2, verbose=True,debug=False,clean_mask=False, robust_rms = True,\
+                        mode = "constant"):
     """
     dame_moment_masking python implementation of Dame (2011) moment masking method
 
@@ -72,47 +279,87 @@ def dame_moment_masking(
         number if pixels to add, optional, by default None
     verbose : bool, optional
         print out useful output, by default True
+    debug : bool, optional
+        print out debug info, by default False
+    clean_mask : bool, optional
+        clean mask, by default False
+    follow_dame : bool, optional
+        Follow the prescription of Dame (2011), by default True
+        Note this overrides all other parameters and is the default
+        but is not the best. The best options (imo) are the default
+        inputs when follow_dame=False is set.
 
     Returns
     -------
-    Tm, Ts, Mx, Tc
+    Tm, Ts, Mx, Tc, rms
         Tm is the masked array
         Ts is the smoothed array
         Mx is mask (dialated)
         Tc is the clipping level
+        rms is the rms or rms map of the input array
     """
+
+    if follow_dame:
+        # do what dame 2011 does
+        if verbose:
+            print('following dame 2011 prescription')
+            print('\tSetting default values [overrides user input]')
+            print('\tfwhm_s = 2 * ds')
+            print('\tfwhm_v = 2.5 km/s')
+            print('\tclip_n = 5')
+            print('\tnneigh = (3,3,3)')
+        nneigh = (3,3,3)
+        rms_map = False
+        truncate = 2.5
+        fwhm_s = 2 * ds
+        fwhm_v = 2.5
+        clean_mask = False
+        clip_n = 5
+        robust_rms = False
+
+
+    if np.nanmedian(T)==0:
+        T = mask_with_nan(T, T==0)
+
     # define fwhm vector
     fwhm = (fwhm_s / ds, fwhm_s / ds, fwhm_v / dv)
     if verbose:
-        print(
-            f"FWHM vector: dy: {fwhm[0]:5.2f}  dx: {fwhm[1]:5.2f}  dv: {fwhm[2]:5.2f}"
-        )
+        print(f"FWHM vector: dy: {fwhm[0]:5.2f}  dx: {fwhm[1]:5.2f}  dv: {fwhm[2]:5.2f}")
 
-    # define sigma for gaussian filter
-    sigma = np.divide(fwhm, 2.3548)
-    Ts = nan_gaussian_filter(T, sigma, preserve_nan=True, truncate=truncate)
+
+
+    # Generate smoothed array
+    Ts = nan_gaussian_filter(T, np.divide(fwhm, 2.3548), preserve_nan=True, truncate=truncate)
+
+    if debug:
+        print('T len(nan) ',np.sum(np.isnan(T)))
+        print('Ts len(nan)',np.sum(np.isnan(Ts)))
 
     # find robust noise
-    new_rms = np.nanstd(Ts)
-    old_rms = 0
-    i = 0
-    while (old_rms != new_rms) & (i < 20):
-        old_rms = new_rms
-        new_rms = np.sqrt(np.mean((Ts[Ts < (clip_n * new_rms)] ** 2)))
-        # i+=1
-    # if i==20:
-    #     new_rms = np.nanstd(stats.sigmaclip(Ts)[0])
+    smooth_rms, mask = find_robust_rms(Ts, clip_n=clip_n, robust_clip = robust_rms, debug=debug)
+    if verbose:
+            print('RMS(Ts):',smooth_rms)
+    if follow_dame:
+        if verbose:
+            print('with follow_dame=True, we dont generate a rms map')
+        smooth_rms = np.sqrt(np.nanmean(mask_with_nan(Ts, ~mask)**2))
+    else:
+        if rms_map:
+            smooth_rms = mad_std(mask_with_nan(Ts, ~mask),ignore_nan=True,axis=specax)
+        else:
+            smooth_rms = mad_std(mask_with_nan(Ts, ~mask),ignore_nan=True)
 
-    Tc = clip_n * new_rms
+
+    #  Tc can always be 3D
+    Tc = np.atleast_3d(clip_n * smooth_rms)
 
     # Make Mask
-    M = np.full_like(T, False, dtype=bool)
-    M[Ts > Tc] = True
+    M = Ts > Tc
 
     if verbose:
-        print(f"Clipping RMS: {new_rms:0.5f}")
+        print(f"Clipping (smooth) RMS: {np.nanmean(np.atleast_1d(smooth_rms)):0.5f}")
 
-    # get size of clipping area (automatically)
+    # get size of clipping area (automatically, if not set)
     if nneigh is None:
         size = lambda y: tuple(map(lambda x: 2 * int(x / 2 + 0.5) + 1, y))
         nneigh = size(fwhm)
@@ -125,20 +372,47 @@ def dame_moment_masking(
 
     # expand
 
-    # ~nd.binary_opening(M)
-    edt, inds = distance_transform_edt(~binary_opening(M), return_indices=True)
-    # iy, ix, iv = np.indices(T.shape)
-    # add one cuz distance needs to be plus 1
-    dy, dx, dv = (np.abs(np.indices(T.shape) - inds) + 1).astype(int)
-    dspace = np.sqrt(dy ** 2 + dx ** 2)
-    # dv = np.abs(iv - inds[2])
-    expand = (dspace < np.sqrt(nneigh[0] ** 2 + nneigh[1] ** 2)) & (dv < nneigh[2])
-    # expand = (dy < nneigh[0]) & (dx < nneigh[1]) & (dv <nneigh[2])
-    # expand = edt <= np.mean(np.array(nneigh)**2)**.5 #
+    if follow_dame:
+        M = dilated_mask(M, *nneigh)
+    else:
+        if clean_mask:
+            # clean mask using a binary erosion and dilation
+            if verbose:
+                print('cleaning mask')
+            Mc = binary_opening(M, iterations=1)
+        else:
+            Mc = M
+        ### this method is imprecise
+        edt, inds = distance_transform_edt(Mc, return_indices=True)
+        # # add one cuz distance needs to be plus 1
+        # dy, dx, dv = (np.abs(np.indices(T.shape) - inds) + 1+0.5).astype(int)
+        # dspace = np.sqrt(dy ** 2 + dx ** 2)
 
-    M[expand] = True
+        # # expand = (dy < nneigh[0]) & (dx < nneigh[1]) & (dv <nneigh[2])
+        # expand = (dspace < np.sqrt(nneigh[0] ** 2 + nneigh[1] ** 2)) & (dv < nneigh[2])
+
+        # M[expand & (~np.isnan(T))] = True
+        M = dilated_mask(Mc, *nneigh)
+        M[np.isnan(T)] = False
+
+
+    if rms_map:
+        new_rms = mad_std(mask_with_nan(T, M),ignore_nan=True,axis=specax)
+    else:
+        new_rms = mad_std(mask_with_nan(T, M),ignore_nan=True)
+
+    if verbose:
+        print(f"Clipping (T) RMS: {np.nanmean(np.atleast_1d(new_rms)):0.5f}")
+
+    # return masked array
+    Tm = mask_with_nan(T, ~M)
+
+    return Tm, Ts, M, Tc, new_rms
 
     Tm = T * M
-    Tm[np.logical_not(M)] = np.nan
+    # Tm[np.logical_not(M)] = np.nan
 
-    return Tm, Ts, M, Tc
+
+
+    return Tm, Ts, M, Tc, new_rms
+
