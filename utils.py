@@ -591,8 +591,8 @@ def nsigma(dim=1, n=1,return_interval=False):
     return special.gammainc(dim/2,n**2 /2)
 
 def sort_bool(g, srt):
-    isrt = np.argsort(srt)
-    return srt[g[srt[isrt]]]
+    " get only the elements of sort that are true in the original array order"
+    return srt[g[srt]]
 
 def scale_ptp(arr):
     g = np.isfinite(arr)
@@ -1151,6 +1151,17 @@ def color_hue_shift(c, shift=1):
     return mpl.colors.to_hex(mpl.colors.hsv_to_rgb((h, s, v)))
 
 
+def adjust_lightness(color, amount=0.5):
+    # brighter : amount > 1
+    # https://stackoverflow.com/a/49601444
+    try:
+        c = mc.cnames[color]
+    except Exception:
+        c = color
+    c = rgb_to_hls(*mc.to_rgb(c))
+    return hls_to_rgb(c[0], max(0, min(1, amount * c[1])), c[2])
+
+
 # def llspace(xmin, xmax, n=None, log=False, dx=None, dex=None):
 #     """
 #     llspace(xmin, xmax, n = None, log = False, dx = None, dex = None)
@@ -1361,7 +1372,7 @@ def cdf2(values, bins, weights = None):
     else:
         if len(np.atleast_1d(weights)) == 1:
             weights = np.full_like(values,weights)
-        h, bins = np.histogram(values, bins=bins, weigths = weights ,range=range, density=False)
+        h, bins = np.histogram(values, bins=bins, weights = weights ,range=range, density=False)
     c = np.cumsum(h).astype(float)
     return np.append(0.0, c), bins
 
