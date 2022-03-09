@@ -251,7 +251,7 @@ def dilated_mask(mask, ni,nj,nk, test=False):
 def dame_moment_masking(T, ds=1 / 8, dv=0.65, fwhm_s=1 / 4, fwhm_v=2.5, \
                         nneigh=None, clip_n=5, truncate=4, follow_dame = True, rms_map = True, \
                         specax = 2, verbose=True,debug=False,clean_mask=False, robust_rms = True,\
-                        mode = "constant"):
+                        mode = "constant", expand_mode = 'dilate'):
     """
     dame_moment_masking python implementation of Dame (2011) moment masking method
 
@@ -288,6 +288,16 @@ def dame_moment_masking(T, ds=1 / 8, dv=0.65, fwhm_s=1 / 4, fwhm_v=2.5, \
         Note this overrides all other parameters and is the default
         but is not the best. The best options (imo) are the default
         inputs when follow_dame=False is set.
+    rms_map : bool, optional
+        return a rms map, by default True
+    specax : int, optional
+        spectral axis, by default 2
+    mode : str, optional
+        mode for interpolation, by default "constant"
+    expand_mode : str, optional
+        mode for expanding the mask, by default 'dilate'
+        'dilate' : expand the mask by dilating the mask
+        'ellipse' : expand mask using the distance transform
 
     Returns
     -------
@@ -316,6 +326,7 @@ def dame_moment_masking(T, ds=1 / 8, dv=0.65, fwhm_s=1 / 4, fwhm_v=2.5, \
         clean_mask = False
         clip_n = 5
         robust_rms = False
+        expand_mode='dilate'
 
 
     if np.nanmedian(T)==0:
@@ -361,39 +372,48 @@ def dame_moment_masking(T, ds=1 / 8, dv=0.65, fwhm_s=1 / 4, fwhm_v=2.5, \
 
     # get size of clipping area (automatically, if not set)
     if nneigh is None:
-        size = lambda y: tuple(map(lambda x: 2 * int(x / 2 + 0.5) + 1, y))
+        size = lambda y: np.asarray(tuple(map(lambda x: 2 * int(x / 2 + 0.5) + 1, y)))
         nneigh = size(fwhm)
     else:
         if not hasattr(nneigh, "__iter__"):
-            nneigh = (nneigh, nneigh, nneigh)
+            nneigh = np.asarray((nneigh, nneigh, nneigh))
 
     if verbose:
         print("Neighbors", nneigh)
 
     # expand
-
-    if follow_dame:
-        M = dilated_mask(M, *nneigh)
+    if clean_mask:
+        # clean mask using a binary erosion and dilation
+        if verbose:
+            print('cleaning mask')
+        Mc = binary_opening(M, iterations=1)
     else:
-        if clean_mask:
-            # clean mask using a binary erosion and dilation
-            if verbose:
-                print('cleaning mask')
-            Mc = binary_opening(M, iterations=1)
-        else:
-            Mc = M
-        ### this method is imprecise
-        edt, inds = distance_transform_edt(Mc, return_indices=True)
+        Mc = M.copy()
+
+    if expand_mode[0].lower() == 'd':
+        M = dilated_mask(Mc, *nneigh)
+        M[np.isnan(T)] = False
+
+    else: # expand_mode[0].lower() == 'e':
+
+        ### get distances to nearest True element and element location
+        ### sampling keyword is set so that nneigh pixels = 1
+        npix = np.array(fwhm)/2
+        if verbose:
+            print('npix',npix)
+        edt, inds = distance_transform_edt(~Mc, sampling=1/npix, return_indices=True)
+        expand = edt <= 1
         # # add one cuz distance needs to be plus 1
         # dy, dx, dv = (np.abs(np.indices(T.shape) - inds) + 1+0.5).astype(int)
-        # dspace = np.sqrt(dy ** 2 + dx ** 2)
+        # expand = (dy**2 / nneigh[0]**2 + dx**2 / nneigh[1]**2 + dv**2 / nneigh[2]**2) < 1
 
+        # dspace = np.sqrt(dy ** 2 + dx ** 2)
         # # expand = (dy < nneigh[0]) & (dx < nneigh[1]) & (dv <nneigh[2])
         # expand = (dspace < np.sqrt(nneigh[0] ** 2 + nneigh[1] ** 2)) & (dv < nneigh[2])
 
-        # M[expand & (~np.isnan(T))] = True
-        M = dilated_mask(Mc, *nneigh)
-        M[np.isnan(T)] = False
+        M[expand & (~np.isnan(T))] = True
+
+
 
 
     if rms_map:
@@ -404,6 +424,9 @@ def dame_moment_masking(T, ds=1 / 8, dv=0.65, fwhm_s=1 / 4, fwhm_v=2.5, \
     if verbose:
         print(f"Clipping (T) RMS: {np.nanmean(np.atleast_1d(new_rms)):0.5f}")
 
+    if np.isnan(np.nanmean(np.atleast_1d(new_rms))):
+        print('WARNING: nan in rms map')
+        import pdb; pdb.set_trace()
     # return masked array
     Tm = mask_with_nan(T, ~M)
 
@@ -415,4 +438,88 @@ def dame_moment_masking(T, ds=1 / 8, dv=0.65, fwhm_s=1 / 4, fwhm_v=2.5, \
 
 
     return Tm, Ts, M, Tc, new_rms
+
+
+
+class MaskedCube(object):
+    """
+    Class to perform moment masking on a cube.
+    """
+    def __init__(self, data, ds=1 / 8, dv=0.65, specax = None,):
+        """
+        Initialize the masked cube.
+
+        Parameters
+        ----------
+        data : array_like
+            The data cube to be masked.
+        """
+        self._data = data
+        self._mask = None
+        self._rms = None
+        self._ds = ds
+        self._dv = dv
+        self._specax = specax
+
+        self.set_defaults()
+
+    def set_defaults(self, **kwargs):
+        """
+        #truncate = 5, fwhm_s = 2*ds, fwhm_v = 2.5,
+                    #  clip_n = 5, robust_rms = True, rms_map = True,
+                    #  clean_mask = False, follow_dame = False,
+                    #  nneigh = None, verbose = False, debug = False)
+        """
+
+        self._truncate = kwargs.get('truncate', 5)
+        self._fwhm_s = kwargs.get('fwhm_s', 2. * self._ds)
+        self._fwhm_v = kwargs.get('fwhm_v', 2.5)
+        self._clip_n = kwargs.get('clip_n', 5)
+        self._robust_rms = kwargs.get('robust_rms', True)
+        self._rms_map = kwargs.get('rms_map', False)
+        self._clean_mask = kwargs.get('clean_mask', False)
+        self._expand_mode = kwargs.get('expand_mode', 'd')
+        self._follow_dame = kwargs.get('follow_dame', False)
+        self._nneigh = kwargs.get('nneigh', None) # determine from fwhm_s/ds and fwhm_v/dv
+        self._verbose = kwargs.get('verbose', False)
+        self._debug = kwargs.get('debug', False)
+
+        if self._follow_dame:
+            self.set_dame(self._follow_dame)
+
+    def set_dame(self, dame=True, **kwargs):
+        """
+        Set the DAME flag.
+
+        Parameters
+        ----------
+        dame : bool
+            If True, use DAME masking.
+        """
+        self._follow_dame = dame
+        if dame:
+            self._truncate = kwargs.get('truncate', 2.5)
+            self._clip_n = kwargs.get('clip_n', 5)
+            self._robust_rms = kwargs.get('robust_rms', False)
+            self._rms_map = kwargs.get('rms_map', False)
+            self._expand_mode = kwargs.get('expand_mode', 'd')
+            self._nneigh = kwargs.get('nneigh', (3,3,3))
+            self._fwhm_s = kwargs.get('fwhm_s', 2 * self._ds)
+            self._fwhm_v = kwargs.get('fwhm_v', 2.5)
+
+    def set_mask_params(self,
+                        fwhm_s = None,
+                        fwhm_v = None,
+                        n_ds = None,
+                        n_dv = None,):
+
+        if fwhm_s is not None:
+            self._fwhm_s = fwhm_s
+        elif n_ds is not None:
+            self._fwhm_s = n_ds * self._ds
+
+        if fwhm_v is not None:
+            self._fwhm_v = fwhm_v
+        elif n_dv is not None:
+            self._fwhm_v = n_dv * self._dv
 
