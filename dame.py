@@ -103,20 +103,20 @@ def radius(mask, pix_linear_scale=1):
 
 
 # these functions lifted from astrodendro (roslowsky something)
-def mom0(arr,mask=None):
+def spatial_mom0(arr,mask=None):
     """The sum of the values"""
     if mask is None:
         mask = np.full(arr.shape,True)
     values = arr[mask]
     return np.nansum(values)
 
-def mom1(arr, mask=None):
+def spatial_mom1(arr, mask=None):
     """The intensity-weighted mean position"""
     """ stolen & modded from astrodendro"""
     if mask is None:
         mask = np.full(arr.shape,True)
 
-    mom_0 = mom0(arr,mask)
+    mom_0 = spatial_mom0(arr,mask)
     r,c = np.indices(mask.shape)[:,mask]
     values = arr[mask]
     return np.array([np.nansum(i * values)/mom_0 for i in [r,c]])
@@ -127,8 +127,8 @@ def mom2(arr,mask=None):
         if mask is None:
             mask = np.full(arr.shape,True)
 
-        mom_1 = mom1(arr,mask)
-        mom_0 = mom0(arr,mask)
+        mom_1 = spatial_mom1(arr,mask)
+        mom_0 = spatial_mom0(arr,mask)
 
         indices = np.indices(mask.shape)[:,mask]
         values = arr[mask]
@@ -150,7 +150,7 @@ def mom2(arr,mask=None):
 def radius2(arr, mask, pix_linear_scale=1):
     """find radius assuming circle (R = sqrt(Area/π))
     """
-    Lr, Lc = mom2(arr,mask)
+    Lr, Lc = spatial_mom2(arr,mask)
     return np.sqrt(Lr * Lc) * np.mean(np.atleast_1d(pix_linear_scale))
 
 def virial_mass(sigma, radius):
@@ -228,13 +228,15 @@ def get_bounds(l=None, b=None, obj=None):
         Oph = ((l >= 350) | (l <= 11)) & (b >= 12) & (b <= 25)
         Herc = (l >= 41.25) & (l <= 48) & (b >= 7.0) & (b <= 10.75)
 
-        OriA = (l >= 203) & (l <= 217) & (b >= -21) & (b <= -17)
+        split_a_b = -17 #A and B overlap
+        OriA = (l >= 203) & (l <= 217) & (b >= -21) & (b <= split_a_b)
         OriB = (l >= 204) & (l <= 208) & (b >= -18) & (b <= -10)
         if obj == "OriB":
-            OriB = (ju.rot_mask(OriB, angle=30)) & (b >= -17)
+            OriB = (ju.rot_mask(OriB, angle=30)) & (b >= split_a_b)
         MonR2 = (l >= 210) & (l <= 218) & (b >= -14.5) & (b <= -10)
 
         RCrA = np.full_like(l, True).astype(bool)
+        RCrA = ((l > 357.875) | (l < 4.125)) & ((b>-24.125) & (b<-15.875))
 
         Rose = (l >= 205) & (l <= 209) & (b >= -4) & (b <= 0)
 
@@ -300,6 +302,8 @@ def analysis(
 
     if co_mask is None:
         co_mask = (wco>0) & np.isfinite(ak + wco) & boundary
+    else:
+        co_mask = co_mask & boundary
     print(f"analysis:: {name}")
     print(f"analysis:: Closed contour {lim:0.2f}")
     print("analysis:: #(Ak): ", np.sum(ak_mask))
@@ -577,6 +581,7 @@ def closed_contour(field, bound=None, steps=None, lim=1, min_size=0, nan_value=0
 
     if deep:
         step = np.where([steps==out_contour])[0]
+
         g = (field >= steps[step-1])  & (field <= steps[step+1]) & bound
         new_steps = np.sort(field[g])[::-1]
         out_good_labels, out_contour, out_label = closed_contour(field,bound=bound,steps=new_steps,lim=lim,min_size=min_size,nan_value=nan_value,deep=False)
@@ -663,12 +668,15 @@ def lon_ptp(lons):
 
 
 
-def channel_maps(mmap,velmin=None,velmax=None,velskip=None,figsize=10,nrows=None,ncols=None,which='interp',line_color='k',ncols_max=np.inf,
+def channel_maps(mmap,survey=False,velmin=None,velmax=None,velskip=None,figsize=10,nrows=None,ncols=None,which='interp',line_color='k',ncols_max=np.inf,
                 overlay_dust=None,verbose=True,set_bad=0,interpolation='bicubic',colorbar=True,**kwargs):
     print('***********{n}***********'.format(n=mmap.name))
     r,c = np.indices(mmap.shape)
 
-    sl = slice(*ju.minmax(r[mmap.boundary])),slice(*ju.minmax(c[mmap.boundary]))
+    if not survey:
+        sl = slice(*ju.minmax(r[mmap.boundary])),slice(*ju.minmax(c[mmap.boundary]))
+    else:
+        sl = slice(None,None),slice(None,None)
 
     zero = (~mmap.bad).astype(int)
     if which[0].lower() == 'r':
