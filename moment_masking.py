@@ -60,13 +60,14 @@ def nan_gaussian_filter(T, fwhm, mode="constant", cval=0, preserve_nan=True, **k
     convolve(x,kernels.Gaussian2DKernel(fwhm),preserve_nan=True,boundary='fill',fill_value=np.nan)
     fill_value = np.nan basically continues the interpolation beyond the boundary
     """
+    sig = fwhm / (2 * np.sqrt(2 * np.log(2)))
     V = T.copy()
     V[np.isnan(T)] = 0
-    VV = gaussian_filter(V, fwhm, mode=mode, cval=cval, **kwargs)
+    VV = gaussian_filter(V, sig, mode=mode, cval=cval, **kwargs)
 
     W = np.ones_like(T)
     W[np.isnan(T)] = 0
-    WW = gaussian_filter(W, fwhm, mode=mode, cval=cval, **kwargs)
+    WW = gaussian_filter(W, sig, mode=mode, cval=cval, **kwargs)
 
     Z = VV / WW
 
@@ -135,14 +136,18 @@ def chauvenet(data,max_step_percent = .05, nbad_divisor=5,verbose=False, debug=F
     out = (stddev,)
 
     if return_mask:
-        mask = np.zeros(data.shape)
-        iy,ix,iz = np.indices(data.shape)
-        iy = iy[finite][srt[:N-i]]
-        ix = ix[finite][srt[:N-i]]
-        iz = iz[finite][srt[:N-i]]
-        mask[iy,ix,iz] = 1
+        if data.ndim == 3:
+            mask = np.zeros(data.shape)
+            iy,ix,iz = np.indices(data.shape)
+            iy = iy[finite][srt[:N-i]]
+            ix = ix[finite][srt[:N-i]]
+            iz = iz[finite][srt[:N-i]]
+            mask[iy,ix,iz] = 1
 
-        out = out + (mask.astype(bool),)
+            out = out + (mask.astype(bool),)
+        else:
+            print('ERROR::: Can only handle masks for 3D data')
+            out = out + (None,)
 
     if return_median:
         out = out + (median,)
@@ -151,7 +156,8 @@ def chauvenet(data,max_step_percent = .05, nbad_divisor=5,verbose=False, debug=F
         out = out + (ii_steps,)
 
     if return_mean:
-        out = np.mean(f_data[:N-i])
+        mean = np.mean(f_data[:N-i])
+        out = out + (mean,)
 
     return out
 
@@ -335,6 +341,7 @@ def dame_moment_masking(T, ds=1 / 8, dv=0.65, fwhm_s=1 / 4, fwhm_v=2.5, \
     # define fwhm vector
     fwhm = (fwhm_s / ds, fwhm_s / ds, fwhm_v / dv)
     if verbose:
+        print('=== Smoothing array ===')
         print(f"FWHM vector: dy: {fwhm[0]:5.2f}  dx: {fwhm[1]:5.2f}  dv: {fwhm[2]:5.2f}")
 
 
@@ -347,6 +354,8 @@ def dame_moment_masking(T, ds=1 / 8, dv=0.65, fwhm_s=1 / 4, fwhm_v=2.5, \
         print('Ts len(nan)',np.sum(np.isnan(Ts)))
 
     # find robust noise
+    if verbose:
+        print('=== Measure RMS on smoothed map ===')
     smooth_rms, mask = find_robust_rms(Ts, clip_n=clip_n, robust_clip = robust_rms, debug=debug)
     if verbose:
             print('RMS(Ts):',smooth_rms)
@@ -391,11 +400,14 @@ def dame_moment_masking(T, ds=1 / 8, dv=0.65, fwhm_s=1 / 4, fwhm_v=2.5, \
         Mc = M.copy()
 
     if expand_mode[0].lower() == 'd':
+        if verbose:
+            print('== Dilating mask ==')
         M = dilated_mask(Mc, *nneigh)
         M[np.isnan(T)] = False
 
     else: # expand_mode[0].lower() == 'e':
-
+        if verbose:
+            print('== Expanding mask ==')
         ### get distances to nearest True element and element location
         ### sampling keyword is set so that nneigh pixels = 1
         npix = np.array(fwhm)/2
