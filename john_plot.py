@@ -5,7 +5,7 @@ import utils as ju
 from  math import floor,sqrt,ceil
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from matplotlib.cm import get_cmap
-
+import numpy as np
 
 def get_square(n,aspect=1.):
     """
