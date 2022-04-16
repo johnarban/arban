@@ -60,4 +60,7 @@ docs/_build/
 target/
 
 #Vscode config
-.vscode/ 
+.vscode/
+
+#
+.DS_Store
