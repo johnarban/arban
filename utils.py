@@ -39,6 +39,7 @@ import sphere as sphere
 import background as background
 #from john_plot import annotate
 import moment_masking as jmm
+import alma_helpers as ah
 
 
 reload(jplot)
@@ -46,6 +47,7 @@ reload(jerr)
 reload(sphere)
 reload(background)
 reload(jmm)
+reload(ah)
 nd = ndimage
 
 
@@ -2102,12 +2104,43 @@ def custom_cmap(colormaps, lower, upper, log=(0, 0)):
     return colors.LinearSegmentedColormap("my_cmap", cdict)
 
 
+
+def combine_cmap(cmaps=['viridis','turbo'],split_fracs=0.5):
+    """
+    split a colormap at a certain location
+
+    split - where along the colormap will be our split point
+            by default this split point is put in the middle
+            of the values
+    vmin  value for colorbar to start at: should max vim in
+            plotting command
+    vmaxs  (splitvalue,vmax) - where to start the second segment
+            of the color map. cmap(split) will be located
+            at valeu=splitvalue
+    vplit = instead of giving vmin,vmax,a you can split it at a
+            value between 0,1.
+    log     doesn't do what anyone would think, don't recommend using
+
+    """
+
+
+
+    ncolors  = 1024
+
+    cols1 = mpl.cm.get_cmap(cmaps[0])(np.linspace(0, 1, int(ncolors * split_fracs)))
+    cols2 = mpl.cm.get_cmap(cmaps[1])(np.linspace(0, 1, int(ncolors * (1 - split_fracs))))
+
+    # Combine them and build a new colormap:
+    return mpl.colors.ListedColormap(np.vstack( (cols1,cols2) ))
+
+
+
 def cmap_split(*args, **kwargs):
     """alias for split_cmap"""
     return split_cmap(*args, **kwargs)
 
 def split_cmap(cmapn='viridis',split=0.5,vmin=0, vmaxs=(.5,1),vstep=None,
-               vsplit=None,log=False):
+               vsplit=None,log=False,return_norm=False):
     """
     split a colormap at a certain location
 
@@ -2161,7 +2194,11 @@ def split_cmap(cmapn='viridis',split=0.5,vmin=0, vmaxs=(.5,1),vstep=None,
 
     # Combine them and build a new colormap:
     allcols2 = np.vstack( (cols1,cols2) )
-    return mpl.colors.LinearSegmentedColormap.from_list('piecewise2', allcols2)
+    cmap = mpl.colors.LinearSegmentedColormap.from_list('piecewise2', allcols2)
+    if return_norm:
+        return cmap,mpl.colors.Normalize(vmin=vmin,vmax=vmaxs[1])
+
+    return cmap
 
 def plot_2dhist(
     X,
@@ -3565,3 +3602,73 @@ def nan_gaussian_filter(T, fwhm, mode='constant', cval=0, preserve_nan=True, **k
         Z[np.isnan(T)] = np.nan
 
     return Z
+
+
+
+def minimal_slice(mask):
+    """take the slice closest matchest the extent of a mask
+    """
+    if mask.dtype is not bool:
+        mask = mask.astype(bool)
+    r,c = np.indices(mask.shape)
+    r = r[mask].min(),r[mask].max()
+    c = c[mask].min(),c[mask].max()
+    return slice(r[0],r[1]),slice(c[0],c[1])
+
+
+
+# Get header value from a FITS file
+def get_header_card_value(line):
+    if b'/' in line:
+        # only stuff after the last / is comment
+        *card_value, comment = line.split(b'/')
+        card_value = b'/'.join(card_value)
+    else:
+        card_value = line.split(b'/')[0].strip()
+        comment = b''
+
+    # history items may have equal signs in them
+    if (b'=' in line) & (line[:7]!=b'HISTORY') & (line[:7]!=b'COMMENT'):
+        card,value = card_value.split(b'=')
+    else:
+        card,value = card_value[:7],card_value[7:]
+
+    card = card.strip().decode()
+    value = value = value.strip().decode().replace("'", "")
+    comment = comment.strip().decode()
+    return card,value,comment
+
+def getheader_val_fast(fname, card_name):
+    """
+    Pure python function to get header values
+    from a fits file
+
+    """
+    with open(fname, 'rb') as f:
+        history = ''
+        line = ''
+        while line.strip() != b'END':
+            line = f.read(80)
+            card, value, comment = get_header_card_value(line)
+            if (card=='HISTORY') | (card=='COMMENT'):
+                if card == card_name:
+                    history += '\n'+value
+            elif card == card_name:
+                try:
+                    return float(value)
+                except ValueError:
+                    return value
+
+        return history
+
+
+# get header value from a FITS file
+def getheader_val(filename,card):
+    """
+    Pure python function to get header values
+    from a fits file
+
+    """
+    with fits.open(filename) as hdul:
+        header = hdul[0].header
+        return header[card]
