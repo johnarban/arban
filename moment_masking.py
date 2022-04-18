@@ -54,6 +54,12 @@ def find_emission_free_region_rms(T, low=4, high=4, axis=None, cenfunc='mean',st
         emission_free_T = np.array([[func(T[i,j]) for j in range(shape[1])] for i in range(shape[0])])
         return emission_free_T
 
+def mask_with_nan(arr,mask):
+    """ mask array with nan values"""
+    masked_arr = np.copy(arr)
+    masked_arr[mask] = np.nan
+    return masked_arr
+
 
 def nan_gaussian_filter(T, fwhm, mode="constant", cval=0, preserve_nan=True, **kwargs):
     """default parameters mimic
@@ -76,12 +82,6 @@ def nan_gaussian_filter(T, fwhm, mode="constant", cval=0, preserve_nan=True, **k
 
     return Z
 
-def mask_with_nan(arr,mask):
-    """ mask array with nan values"""
-    masked_arr = np.copy(arr)
-    masked_arr[mask] = np.nan
-    return masked_arr
-
 
 def chauvenet(data,max_step_percent = .05, nbad_divisor=5,verbose=False, debug=False, return_mask=True,return_median=False,return_steps=False,return_mean=False):
     ## assume noise is centered on zero
@@ -90,8 +90,6 @@ def chauvenet(data,max_step_percent = .05, nbad_divisor=5,verbose=False, debug=F
         return np.nan,np.nan,np.nan
     srt = np.argsort(data[finite])
     f_data = data[finite][srt]
-
-
 
     N = len(f_data)
     if debug:
