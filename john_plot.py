@@ -1,11 +1,105 @@
-
 from utils import *
 import utils as ju
 
 from  math import floor,sqrt,ceil
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from matplotlib.cm import get_cmap
+
 import numpy as np
+
+import matplotlib as mpl
+from matplotlib.patheffects import withStroke, AbstractPathEffect
+from matplotlib.cm import get_cmap
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+
+def annotate(text, x, y, ax=None, horizontalalignment="center", verticalalignment="center",
+    ha=None, va=None, transform="axes",fontsize=9,color="k",
+    facecolor="w", edgecolor='0.75', alpha=0.75, text_alpha=1,
+    bbox=dict(), stroke = None, **kwargs,
+):
+    """wrapper for Axes.text
+
+    Parameters
+    ----------
+    text : str
+        text
+    x : number
+        x coordinate
+    y : number
+        x coordinate
+    ax : axes, optional
+        [description], by default None
+    horizontalalignment : str, optional
+        by default "center"
+    verticalalignment : str, optional
+         by default "center"
+    ha : alias for horizontalalignment
+    va : alias for verticalalignment
+    transform : str, optional
+        use 'axes' (ax.transAxes) or 'data' (ax.transData) to interpret x,y
+    fontsize : int, optional
+         by default 9
+    color : str, optional
+        text color, by default "k"
+    facecolor : str, optional
+        color of frame area, by default "w"
+    edgecolor : str, optional
+        color of frame edge, by default '0.75'
+    alpha : float, optional
+        transparency of frame area, by default 0.75
+    text_alpha : int, optional
+        transparency of text, by default 1
+    bbox : [type], optional
+        dictionary defining the bounding box or frame, by default dict()
+    stroke : (list, mpl.patheffects,dict), optional
+        most often should be dict with {'foregroud':"w", linewidth:3}
+        if using stroke, use should set bbox=None
+
+    Returns
+    -------
+    text
+       the annotation
+    """
+    
+    # get current axis if none is set
+    if ax is None:
+        ax = plt.gca()
+	
+    horizontalalignment = ha or horizontalalignment
+    verticalalignment = va or verticalalignment
+
+    if transform == "axes":
+        transform = ax.transAxes
+    elif transform == "data":
+        transform = ax.transData
+    
+    
+    if bbox is None:
+        bbox1 = dict(facecolor='none', alpha=0,edgecolor='none')
+    else:
+        bbox1 = dict(facecolor=facecolor, alpha=alpha,edgecolor=edgecolor)
+        bbox1.update(bbox)
+        
+    text = ax.text(
+        x,
+        y,
+        text,
+        horizontalalignment=horizontalalignment,
+        verticalalignment=verticalalignment,
+        transform=transform,
+        color=color,
+        fontsize=fontsize,
+        bbox=bbox1,
+        **kwargs,
+    )
+
+    if stroke is not None:
+        if type(stroke) == dict:
+            text.set_path_effects([withStroke(**stroke)])
+        elif isinstance(stroke,(list,tuple)):
+            text.set_path_effects([*stroke])
+        elif isinstnace(stroke,AbstractPathEffect):
+            text.set_path_effects([stroke])
+    return text
+
 
 def get_square(n,aspect=1.):
     """

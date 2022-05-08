@@ -104,56 +104,6 @@ def color_array(arr, alpha=1):
 
 
 
-def arr_to_rgb(arr, rgb=(0, 0, 0), alpha=1, invert=False, ax=None):
-    """
-    arr to be made a mask
-    rgb:assumed using floats (0..1,0..1,0..1) or string
-
-    """
-    #check if boolean or single value
-    is_bool = ((arr==0) | (arr==1)).all() or (arr.dtype is np.dtype(bool))
-
-    # arr should be scaled to 1
-    img = np.asarray(arr, dtype=np.float64)
-
-    if not is_bool:
-        img = img - np.nanmin(img)
-        img = img / np.nanmax(img)
-
-    im2 = np.zeros(img.shape + (4,))
-
-    if isinstance(rgb, str):
-        rgb = mpl.colors.to_rgb(rgb)
-
-    if invert:
-        img = 1 - img
-    im2[:, :, 3] = img * alpha
-    
-    im2[:, :, 0] = rgb[0]
-    im2[:, :, 1] = rgb[1]
-    im2[:, :, 2] = rgb[2]
-
-    return im2
-
-
-def invert_color(ml, mode = 'rgb'):
-	rgb = mpl.colors.to_rgb(ml)
-	if mode == 'hsv':
-    	hsv = mpl.colors.rgb_to_hsv(rgb)
-	    h, s, v = hsv
-	    h = 1 - h
-	    s = 1 - s
-	    v = 1 - v
-	    return mpl.colors.to_hex(mpl.colors.hsv_to_rgb((h, s, v)))
-	 else:
-    	return mpl.colors.to_hex([1 - i for i in rgb])
-    
-
-
-def icol(*args, **kwargs):
-    return invert_color(*args, **kwargs)
-
-
 def to64(arr):
     # Convert numpy to 64-bit precision
     if hasattr(arr, "astype"):
@@ -163,250 +113,6 @@ def to64(arr):
             if isinstance(arr[0], u.quantity.Quantity):
                 return u.quantity.Quantity(arr, dtype=np.float64)
         return np.float64(arr)
-
-
-def get_xylim(ax=None):
-    if ax is None:
-        ax = plt.gca()
-    xlim, ylim = ax.get_xlim(), ax.get_ylim()
-    return xlim, ylim
-
-
-def set_xylim(xlim=None, ylim=None, ax=None, origin=None):
-    """set xylims with tuples
-    xlim: tuple of x axis limits
-    ylim: tuple of y axis limits
-    origin: sometimes you just want to change the origin
-            so you can keep the axis limits the same
-            but just change origin
-
-
-    """
-    if ax is None:
-        ax = plt.gca()
-
-    if xlim is None:
-        xlim = ax.get_xlim()
-    if ylim is None:
-        ylim = ax.get_ylim()
-
-    if isinstance(xlim, tuple):
-        xlim = list(xlim)
-    if isinstance(ylim, tuple):
-        ylim = list(ylim)
-    if origin is not None:
-        if origin is True:
-            if ax.get_xaxis().get_scale()[:3] != "log":
-                xlim[0] = 0
-            if ax.get_yaxis().get_scale()[:3] != "log":
-                ylim[0] = 0
-        else:
-            xlim[0] = origin[0]
-            ylim[0] = origin[1]
-    ax.set_xlim(xlim)
-    ax.set_ylim(ylim)
-    return tuple(xlim), tuple(ylim)
-
-
-def _normalize_location_orientation(location, orientation):
-    loc_settings = {
-        "left": {
-            "location": "left",
-            "orientation": "vertical",
-            "anchor": (1.0, 0.5),
-            "panchor": (0.0, 0.5),
-            "pad": 0.10,
-        },
-        "right": {
-            "location": "right",
-            "orientation": "vertical",
-            "anchor": (0.0, 0.5),
-            "panchor": (1.0, 0.5),
-            "pad": 0.05,
-        },
-        "top": {
-            "location": "top",
-            "orientation": "horizontal",
-            "anchor": (0.5, 0.0),
-            "panchor": (0.5, 1.0),
-            "pad": 0.05,
-        },
-        "bottom": {
-            "location": "bottom",
-            "orientation": "horizontal",
-            "anchor": (0.5, 1.0),
-            "panchor": (0.5, 0.0),
-            "pad": 0.15,
-        },
-    }
-
-    return loc_settings
-
-
-def get_cax(ax=None, position=None, frac=0.03, pad=0.02):
-    """get a colorbar axes of the same height as current axes
-    position: "left" "right" ( vertical | )
-              "top"  "bottom"  (horizontal --- )
-
-    """
-    if ax is None:
-        ax = plt.gca()
-
-    size = f"{frac*100}%"
-    divider = make_axes_locatable(ax)
-
-    if position is None:
-        position = 'right'
-
-    if position is 'bottom':
-        pad += 0.15
-
-    if position is 'right':
-        left = 1 + pad
-        width = frac
-        bottom = 0.0
-        height = 1.0
-    elif position is 'bottom':
-        left = 0.0
-        width = 1.0
-        bottom = 0 - pad
-        height = frac*2
-    else:
-        raise ValueError(f"position {position} not supported")
-
-    p = [left, bottom, width, height]
-    cax = ax.inset_axes(p, transform=ax.transAxes)
-
-    plt.sca(ax)
-    return cax
-
-
-def colorbar(mappable=None, cax=None, ax=None, size=0.03, pad=0.05, position=None, orientation='vertical', **kw):
-    """wrapper for pyplot.colorbar.
-
-    """
-    if ax is None:
-        ax = plt.gca()
-    if orientation[0].lower()=='h':
-        pos = 'bottom'
-    elif orientation[0].lower()=='v':
-        pos = 'right'
-
-    if cax is None:
-        cax = get_cax(ax=ax, frac=size, pad=pad, position=position)
-    elif (cax == 'inset') & (orientation[0].lower()=='h'):
-        cax = ax.inset_axes([0.2,.1,0.6,0.05])
-    elif (cax == 'inset') & (orientation[0].lower()=='v'):
-        cax = ax.inset_axes([0.85,.1,0.05,0.8])
-
-    ret = plt.colorbar(mappable, cax=cax, ax=ax, **kw)
-    return ret
-
-
-# Plot the KDE for a set of x,y values. No weighting code modified from
-# http://stackoverflow.com/questions/30145957/plotting-2d-kernel-density-estimation-with-python
-def kdeplot(xp, yp, filled=False, ax=None, grid=None, bw=None, *args, **kwargs):
-    if ax is None:
-        ax = plt.gca()
-    rvs = np.append(xp.reshape((xp.shape[0], 1)), yp.reshape((yp.shape[0], 1)), axis=1)
-
-    kde = stats.kde.gaussian_kde(rvs.T)
-    # kde.covariance_factor = lambda: 0.3
-    # kde._compute_covariance()
-    kde.set_bandwidth(bw)
-
-    # Regular grid to evaluate kde upon
-    if grid is None:
-        x_flat = np.r_[rvs[:, 0].min() : rvs[:, 0].max() : 256j]
-        y_flat = np.r_[rvs[:, 1].min() : rvs[:, 1].max() : 256j]
-    else:
-        x_flat = np.r_[0 : grid[0] : complex(0, grid[0])]
-        y_flat = np.r_[0 : grid[1] : complex(0, grid[1])]
-    x, y = np.meshgrid(x_flat, y_flat)
-    grid_coords = np.append(x.reshape(-1, 1), y.reshape(-1, 1), axis=1)
-
-    z = kde(grid_coords.T)
-    z = z.reshape(x.shape[0], x.shape[1])
-    if filled:
-        cont = ax.contourf
-    else:
-        cont = ax.contour
-    cs = cont(x_flat, y_flat, z, *args, **kwargs)
-    return cs
-
-
-AtomicMass = {"H2": 2, "12CO": 12 + 16, "13CO": 13 + 16, "C18O": 12 + 18, "ISM": 2.33}
-
-def thermal_v(T, mu=None, mol=None):
-    """thermal_v(T,mu)
-    get thermal velocity for a temperature & molecular mass mu
-
-    Arguments:
-        T {[float]} -- [temperature in kelvin]
-
-    Keyword Arguments:
-        mu {int} -- [description] (default: {1})
-                ISM: 2.33
-                12CO, 13CO,C18O = 18,19,20
-
-    Returns:
-        [type] -- [description]
-    """
-    if mu is None:
-        if mol in AtomicMass.keys():
-            mu = AtomicMass[mol]
-        else:
-            mu = 1
-
-    return np.sqrt(constants.k_B * T * u.Kelvin / (mu * constants.m_p)).to("km/s").value
-
-
-def virial(sig, mass, r):
-    s = 1.33 * (sig * (u.km / u.s)) ** 2
-    r = r * u.pc
-    m = constants.G * (mass * u.Msun)
-    return (s * r / m).si.value
-
-
-def numdens(mass, radius):
-    """number density from mass/radius
-    assuming spherical symmetry
-
-    Parameters
-    ----------
-    mass : float
-        in solar masses
-    radius : float
-        in parsecs
-
-    Returns
-    -------
-    float
-        in cm^-3
-    """
-    mass = mass * u.solMass
-    radius = radius * u.pc
-    volume = (4 / 3) * np.pi * (radius ** 3)
-    dens = (mass / volume) / (2.33 * constants.m_p)
-    return dens.to(u.cm ** -3).value
-
-
-def jeansmass(temp, numdens, mu=2.33):  # 12.03388 msun T=n=1
-    """
-    temp in K
-    numdens in cm^-3
-    mu is mean molecular weight [default: 2.33, ISM w/ Helium corr]
-    returns Mjeans in solar masses
-    .5 * (5 * kb / G)^3 * (3/4π) * (1/2.33 mp)^4 * T^3 / n
-    """
-    mj = (5 * constants.k_B / (constants.G)) ** 3
-    mj *= 3 / (4 * np.pi)
-    mj *= (1 / (mu * constants.m_p)) ** 4
-    mj = mj * (temp * u.K) ** 3
-    mj = mj * (u.cm ** 3 / numdens)
-    mj = mj ** 0.5
-    return mj.to(u.solMass).value
-
 
 #############################
 #############################
@@ -436,61 +142,6 @@ def freq_grid(t, fmin=None, fmax=None, pmin=None, pmax=None, oversamp=10.0, ):
     Nf = 1 + int(np.round((fmax - fmin) / df))
     return fmin + df * np.arange(Nf)
 
-
-def sigconf1d(n):
-    """
-    calculate the percentile corresponding to n*sigma
-    for a 1D gaussian
-    """
-    cdf = (1 / 2.0) * (1 + special.erf(n / np.sqrt(2)))
-    return (1 - cdf) * 100, 100 * cdf  # , 100 * special.erf(n / np.sqrt(2))
-
-def nsigma(dim=1, n=1,return_interval=False):
-    """Generalized n-sigma relation
-
-    Parameters
-    ----------
-    dim : float, optional
-        dimensionality, by default 1
-    n : float, optional
-        N-sigma, by default 1
-
-    Returns
-    -------
-    float
-        the percential/100 corresponding the given sigma
-
-    References:
-        https://math.stackexchange.com/a/3668447
-        https://mathworld.wolfram.com/RegularizedGammaFunction.html
-
-    The generalized N-sigma relation for M dimensions is given
-    by the Regularized Lower Incomplete Gamma Function -
-        P(a,z) = γ(a,z)/Γ(a), where γ(a,z) is the lower incomplete gamma function
-    The Incomplete Gamma Function is defined
-        $\Gamma(a,z0,z1) = \int_z0^z1 t^{a-1} e^{-t} dt$
-
-    For 1D: $Erf(n/sqrt(2)) = \Gamma(1,0,n^2/2)/\Gamma(1)$ gives the Percentile for n-sigma
-    For 2D: 1 - exp(-m^2 /2) gives the Percentile for n-sigma
-    P(m/2,n^2 / 2) generalizes this to m dimensions
-    We need the regularized lower incomplete gamma, which is Gamma(a,z0,z1)/Gamma(a,0,inf)
-    this is the incomp. reg. gamma func P(a,z) in
-
-    If we want to think about this in terms of Mahalanobis distance
-    Then, well, the Mahalanobis distance is distributed like
-    a chi2-distribution with k = m degrees of freedom (assuming the
-    eigenvectors are of the covariance matrix are all independent)
-    So this covariance is also written as the
-    SurvivalFunction(χ^2(k=m),x=n**2) where n = mahalanobis distance
-    this would be written stats.chi2(m).cdf(n**2), but this is half
-    the speed of using special.gammainc
-    @astrojthe3
-    """
-    if return_interval:
-        p = special.gammainc(dim/2,n**2 /2)/2
-        return (1 - p)/2, (1 + p)/2
-    return special.gammainc(dim/2,n**2 /2)
-
 def sort_bool(g, srt):
     " get only the elements of sort that are true in the original array order"
     return srt[g[srt]]
@@ -502,74 +153,7 @@ def scale_ptp(arr):
     else:
         return arr
 
-def wcsaxis(header, N=6, ax=None, fmt="%0.2f", use_axes=False,label=True):
-    oldax = plt.gca()
-    if ax is None:
-        ax = plt.gca()
-    plt.sca(ax)
-    xlim = ax.axes.get_xlim()
-    ylim = ax.axes.get_ylim()
 
-    if isinstance(header,WCS):
-        wcs = header
-    else:
-        wcs = WCS(header)
-
-    # naxis = header["NAXIS"]  # naxis
-    naxis = wcs.wcs.naxis
-    # naxis1 = header["NAXIS1"]  # naxis1
-    # naxis2 = header["NAXIS2"]  # naxis2
-    # crpix1 = hdr['CRPIX1']
-    # crpix2 = hdr['CRPIX2']
-    # crval1 = hdr['CRVAL1']
-    # crval2 = hdr['CRVAL2']
-    # try:
-    #    cdelt1 = wcs['CDELT1']
-    #    cdelt2 = wcs['CDELT2']
-    # except BaseException:
-    #    cdelt1 = wcs['CD1_1']
-    #    cdelt2 = wcs['CD2_2']
-
-    if not use_axes:
-        xoffset = ((xlim[1] - xlim[0]) / N) / 5
-        x = np.linspace(xlim[0] + xoffset, xlim[1] - xoffset, N)
-        if naxis >= 2:
-            yoffset = ((ylim[1] - ylim[0]) / N) / 5
-            y = np.linspace(ylim[0] + yoffset, ylim[1] - yoffset, N)
-    else:
-        x = ax.get_xticks()
-        if naxis >= 2:
-            y = ax.get_yticks()
-
-    if naxis == 1:
-        x_tick = wcs.all_pix2world(x, 0)
-    elif naxis == 2:
-        coord = list(zip(x, y))
-        x_tick, y_tick = wcs.all_pix2world(coord, 0).T
-    elif naxis > 2:
-        c = [x, y]
-        for i in range(naxis - 2):
-            c.append([0] * N)
-        coord = list(zip(*c))
-        ticks = wcs.all_pix2world(coord, 0)
-        x_tick, y_tick = np.asarray(ticks)[:, :2].T
-
-    plt.xticks(x, [fmt % i for i in x_tick],rotation=45)
-    plt.yticks(y, [fmt % i for i in y_tick])
-
-    if label:
-        if wcs.wcs.ctype[0][0].lower() == "g":
-            ax.set_xlabel("Galactic Longitude (l)")
-            ax.set_ylabel("Galactic Latitude (b)")
-        else:
-            ax.set_xlabel("Right Ascension (J2000)")
-            ax.set_ylabel("Declination (J2000)")
-
-    ax.axes.set_xlim(xlim[0], xlim[1])
-    ax.axes.set_ylim(ylim[0], ylim[1])
-
-    plt.sca(oldax)
-    return ax
 
 
 # In[ writefits]
@@ -867,62 +451,6 @@ def comp(arr):
         return arr
 
 
-def mavg(arr, n=2, axis=-1):
-    """
-    returns the moving average of an array.
-    returned array is shorter by (n-1)
-    applied along last axis by default
-    """
-    return np.mean(rolling_window(arr, n), axis=axis)
-
-
-def weighted_generic_moment(x, k, w=None):
-    x = np.asarray(x, dtype=np.float64)
-    if w is not None:
-        w = np.asarray(w, dtype=np.float64)
-    else:
-        w = np.ones_like(x)
-
-    return np.sum(x ** k * w) / np.sum(w)
-
-
-def weighted_mean(x, w=1.):
-    return np.sum(x * w) / np.sum(w)
-
-
-def weighted_std(x, w):
-    x = np.asarray(x, dtype=np.float64)
-    w = np.asarray(w, dtype=np.float64)
-    SS = np.sum(w * (x - weighted_mean(x, w)) ** 2) / np.sum(w)
-    # quantile(x, w, 0.5)
-    return np.sqrt(SS)
-
-
-def weighted_percentile(x, w, percentile, p=0):
-    k = np.isfinite(x + w)
-    clean_x = np.asarray(x[k], dtype=np.float64)
-    clean_w = np.asarray(w[k], dtype=np.float64)
-    srt = np.argsort(clean_x)
-    sorted_w = clean_w[srt]
-    sorted_x = clean_x[srt]
-    Sn = np.cumsum(sorted_w)
-    Pn = (Sn - 0.5 * sorted_w) / Sn[-1]
-    return np.interp(np.asarray(percentile) / 100.0, Pn, sorted_x)
-
-
-def weighted_median(x, w):
-    return weighted_percentile(x, w, 50)
-
-
-def weighted_mad(x, w, stddev=True):
-    x = np.asarray(x, dtype=np.float64)
-    w = np.asarray(w, dtype=np.float64)
-
-    if stddev:
-        return 1.4826 * weighted_median(np.abs(x - weighted_median(x, w)), w)
-    else:
-        return weighted_median(np.abs(x - weighted_median(x, w)), w)
-
 
 def sigmoid(x, a, a0, k, b):
     """
@@ -931,23 +459,8 @@ def sigmoid(x, a, a0, k, b):
     # a, a0, k, b = p
     return a * ((1 + np.exp(-k * (x - a0))) ** -1 - b)
 
-
-def mgeo(arr, n=2, axis=-1):
-    """rolling geometric mean
-
-    Arguments:
-        arr {no.array} -- array
-
-    Keyword Arguments:
-        n {int} -- window size (default: {2})
-        axis {int} -- axis to roll over (default: {-1})
-
-    Returns:
-        [type] -- [description]
-    """
-    return stats.gmean(rolling_window(arr, n), axis=axis)
-
-def centroid(x, y):
+# formerly called centroid
+def parabola_vertex(x, y):
         # vertex of 2nd order polynomial fit
         a, b, c = np.polyfit(x, y, 2)
         return -b/(2*a), -b**2/(4*a) + c
@@ -966,42 +479,55 @@ def bin_center(arr, n=2):
         # return mgeo(arr, n=n) # equivalent methods, only easier
 
 
-def shift_bins(arr, phase=0, nonneg=False):
-    # assume original bins are nonneg
-    if phase != 0:
-        diff = np.diff(arr)
-        if np.allclose(diff, diff[::-1]):
-            diff = diff[0]
-            arr = arr + phase * diff
-            # pre = arr[0] + phase*diff
-            return arr
-        else:
-            arr = np.log10(arr)
-            diff = np.diff(arr)[0]
-            arr = arr + phase * diff
-            return np.power(10.0, arr)
-    else:
-        return arr
+# def shift_bins(arr, phase=0, nonneg=False):
+#     # assume original bins are nonneg
+#     if phase != 0:
+#         diff = np.diff(arr)
+#         if np.allclose(diff, diff[::-1]):
+#             diff = diff[0]
+#             arr = arr + phase * diff
+#             # pre = arr[0] + phase*diff
+#             return arr
+#         else:
+#             arr = np.log10(arr)
+#             diff = np.diff(arr)[0]
+#             arr = arr + phase * diff
+#             return np.power(10.0, arr)
+#     else:
+#         return arr
 
+def shift_bins(arr, phase = 0):
+	""" shift bins by a fraction of the bin spacing
+		
+		if you have non-linear bins, convert to a 
+		linear  form
+		
+		phase = [0,1]
+	"""
+	if (phase == 1) or (phase == 0):
+		return arr
+
+	return arr + phase * np.abs(arr[0] - arr[1])
 
 def get_bin_edges(x, log=False):
-    diff = np.diff(x)
+  	"""
+  	Get bin edges
+  	"""
+  	if not isinstance(x,np.ndarray):
+  		x = np.asarray(x)
+  	
     if not log:
-        dx = diff[0]
+        dx = np.abs(x[0] - x[1])
         return np.r_[x - dx / 2, x[-1] + dx / 2]
     else:
-        dx = np.diff(np.log(x))[0]
-        return np.exp(np.r_[np.log(x) - dx / 2, x[-1] + dx / 2])
+    	x = np.log(x)
+        dx = np.abs(x[0] - x[1])
+        return np.exp(np.r_[x - dx / 2, x[-1] + dx / 2])
+    	
 
 
 def get_bin_widths(x):
     return np.diff(get_bin_edges(x))
-
-
-def err_div(x, y, ex, ey):
-    Q = x / y
-    dQ = np.abs(Q) * np.sqrt((ex / x) ** 2 + (ey / y) ** 2)
-    return Q, dQ
 
 
 def nside2resol(nside,):
@@ -1044,23 +570,6 @@ def lin_from_log(p, x, log10=False):
     else:
         return np.exp(p[0] * np.log(x) + p[1])
 
-
-def color_hue_shift(c, shift=1):
-    c = mpl.colors.to_rgb(c)
-    h, s, v = mpl.colors.rgb_to_hsv(c)
-    h = h + shift % 1
-    return mpl.colors.to_hex(mpl.colors.hsv_to_rgb((h, s, v)))
-
-
-def adjust_lightness(color, amount=0.5):
-    # brighter : amount > 1
-    # https://stackoverflow.com/a/49601444
-    try:
-        c = mc.cnames[color]
-    except Exception:
-        c = color
-    c = rgb_to_hls(*mc.to_rgb(c))
-    return hls_to_rgb(c[0], max(0, min(1, amount * c[1])), c[2])
 
 
 # def llspace(xmin, xmax, n=None, log=False, dx=None, dex=None):
@@ -1192,13 +701,13 @@ def pdf(values, bins=None, range=None):
     if hasattr(bins, "__getitem__") and (range is None):
         range = (np.nanmin(bins), np.nanmax(bins))
     else:
-        range = None
+        range = (np.nanmin(values),np.nanmax(values))
 
-    h, x = np.histogram(values, bins=bins, range=range, density=False)
+    h, x = np.histogram(values, bins=bins, range=range, density=True)
     # From the definition of Pr(x) = dF(x)/dx this
     # is the correct form. It returns the correct
     # probabilities when tested
-    pdf = h / (np.sum(h, dtype=float) * np.diff(x))
+    # pdf = h.astype(float) / (np.sum(h, dtype=float) * np.diff(x))
     return pdf, bin_center(x)
 
 
@@ -1217,7 +726,7 @@ def pdf2(values, bins=None, range=None):
     if hasattr(bins, "__getitem__") and (range is None):
         range = (np.nanmin(bins), np.nanmax(bins))
     else:
-        range = None
+        range = (np.nanmin(values),np.nanmax(values))
 
     pdf, x = np.histogram(values, bins=bins, range=range, density=False)
     pdf = pdf.astype(float) / np.diff(x)
@@ -1441,7 +950,7 @@ def ortho_dist(x, y, m, b):
     get the orthogonal distance
     from a point to a line
     """
-    ortho_dist = (y - m * x - b) / np.sqrt(1 + m ** 2)
+    ortho_dist = np.abs(y - m * x - b) / np.sqrt(1 + m ** 2)
     return ortho_dist
 
 
@@ -1491,18 +1000,16 @@ class PolyRegress(object):
     # but did not use their weird definition for "R^2"
     # reference for R^2: https://en.wikipedia.org/wiki/Coefficient_of_determination
     ###
-    def __init__(
-        self,
-        X,
-        Y,
-        P=1,
-        fit=False,
-        pass_through_origin=False,
-        log=False,
-        ln=False,
-        dtype=np.float64,
-    ):
+    def __init__(self,X,Y,P=1,fit=False,pass_through_origin=False,log=False,ln=False,
+        dtype=np.float64,):
+        
         if log:
+        	# if np.nanmin(X) <= 0:
+        	# 	print('Offsetting X = 1 + (Y - min(Y))')
+        	# 	X = 1 + (X - np.nanmin(X))
+        	# if np.nanmin(Y) <= 0:
+        	# 	print('Offsetting X = 1 + (Y - min(Y))')
+        	# 	Y = 1 + (Y - np.nanmin(Y)) 
             X, Y = np.log10(X).ravel(), np.log10(Y).ravel()
         elif ln:
             X, Y = np.log(X).ravel(), np.log(Y).ravel()
@@ -1531,6 +1038,11 @@ class PolyRegress(object):
         self.norm_resid = None
         self.y_hat = None
         self.R2, self.R2_a = None, None
+        
+        if self.log:
+        	self.b_log = None
+        if self.ln:
+        	self.b_ln = None
 
         if fit:
             self.fit()
@@ -1688,14 +1200,15 @@ def plot_astropy_fit_covariances(fit, fitter):
 
 
 def mad(X, stddev=True, axis=None):
-    if  stddev:
-        return mad_std(X,axis=axis,ignore_nan=True)
+    #if  stddev:
+    #    return mad_std(X,axis=axis,ignore_nan=True)
+    #else:
+    #    return mad_std(X,axis=axis,ignore_nan=True) / 1.482602218505602
+    # just as fast as astropy and removes a dependency
+    if stddev:
+        return 1.482602218505602 * np.nanmedian(np.abs(X - np.nanmedian(X, axis=axis)), axis=axis)
     else:
-        return mad_std(X,axis=axis,ignore_nan=True) / 1.482602218505602
-    # if stddev:
-    #     return 1.482602218505602 * np.nanmedian(np.abs(X - np.nanmedian(X, axis=axis)), axis=axis)
-    # else:
-    #     return np.nanmedian(np.abs(X - np.nanmedian(X, axis=axis)), axis=axis)
+        return np.nanmedian(np.abs(X - np.nanmedian(X, axis=axis)), axis=axis)
 
 
 def mean_mad(X, stddev=True, axis=None):
@@ -1893,211 +1406,6 @@ def plot_walkers(sampler, limits=None, bad=None):
 
 
 # TODO
-
-# Make it scale properly
-# How does matplotlib
-# scaling work
-def combine_cmap(cmaps, lower, upper, log = False,name="custom", N=None, register=True, norm=False):
-    """
-    colormaps : a list of N matplotlib colormap classes
-    lower : the lower limits for each colormap: array or tuple
-    upper : the upper limits for each colormap: array or tuple
-    log   : Do you want to plot logscale. This will create
-            a color map that is usable with LogNorm()
-    """
-    if log:
-        upper = [np.log10(i / lower[0]) for i in upper]
-        lower = [np.log10(i / lower[0]) for i in lower]
-        norm = upper[-1:][0]
-    else:
-        lower = lower
-        upper = upper
-        norm = upper[-1:][0]
-
-    n = len(cmaps)
-
-    for ic, c in enumerate(cmaps):
-        if isinstance(c, str):
-            cmaps[ic] = mpl.cm.get_cmap(c)
-
-    if N is None:
-        N = [256] * n
-
-    values = np.array([])
-    colors = np.empty((0, 4))
-
-    for i in range(n):
-        step = (upper[i] - lower[i]) / N[i]
-        xcols = np.arange(lower[i], upper[i], step)
-        values = np.append(values, xcols)
-        xcols -= xcols.min()
-        xcols /= xcols.max()
-        cols = cmaps[i](xcols)
-        colors = np.vstack([colors, cols])
-    values -= values.min()
-    values /= values.max()
-
-    arr = list(zip(values, colors))
-    cmap = mpl.colors.LinearSegmentedColormap.from_list(name, arr)
-
-    if (name != "custom") & register:
-        mpl.cm.register_cmap(name=name, cmap=cmap)
-
-    if norm:
-        if log:
-            norm = mpl.colors.LogNorm(vmin=min(lower), vmax=max(upper))
-        else:
-            norm = mpl.colors.Normalize(vmin=min(lower), vmax=max(upper))
-        return cmap, norm
-
-    return cmap
-
-
-
-def custom_cmap(colormaps, lower, upper, log=(0, 0)):
-    """
-    colormaps : a list of N matplotlib colormap classes
-    lower : the lower limits for each colormap: array or tuple
-    upper : the upper limits for each colormap: array or tuple
-    log   : Do you want to plot logscale. This will create
-            a color map that is usable with LogNorm()
-    """
-    if isinstance(log, tuple):
-        for lg in log:
-            if lg:
-                upper = [np.log10(i / lower[0]) for i in upper]
-                lower = [np.log10(i / lower[0]) for i in lower]
-                norm = upper[-1:][0]
-            else:
-                lower = lower
-                upper = upper
-                norm = upper[-1:][0]
-    elif log:
-        upper = [np.log10(i / lower[0]) for i in upper]
-        lower = [np.log10(i / lower[0]) for i in lower]
-        norm = upper[-1:][0]
-    else:
-        lower = lower
-        upper = upper
-        norm = upper[-1:][0]
-
-    for ic, c in enumerate(colormaps):
-        if isinstance(c, str):
-            colormaps[ic] = mpl.cm.get_cmap(c)
-
-    cdict = {"red": [], "green": [], "blue": []}
-
-    for color in ["red", "green", "blue"]:
-        for j, col in enumerate(colormaps):
-            # print j,col.name,color
-            x = [i[0] for i in col._segmentdata[color]]
-            y1 = [i[1] for i in col._segmentdata[color]]
-            y0 = [i[2] for i in col._segmentdata[color]]
-            x = [(i - min(x)) / (max(x) - min(x)) for i in x]
-            x = [((i * (upper[j] - lower[j])) + lower[j]) / norm for i in x]
-            if (j == 0) & (x[0] != 0):
-                x[:0], y1[:0], y0[:0] = [0], [y1[0]], [y0[0]]
-            for i in range(len(x)):  # first x needs to be zero
-                cdict[color].append((x[i], y1[i], y0[i]))
-
-    return colors.LinearSegmentedColormap("my_cmap", cdict)
-
-
-
-def combine_cmap(cmaps=['viridis','turbo'],split_fracs=0.5):
-    """
-    split a colormap at a certain location
-
-    split - where along the colormap will be our split point
-            by default this split point is put in the middle
-            of the values
-    vmin  value for colorbar to start at: should max vim in
-            plotting command
-    vmaxs  (splitvalue,vmax) - where to start the second segment
-            of the color map. cmap(split) will be located
-            at valeu=splitvalue
-    vplit = instead of giving vmin,vmax,a you can split it at a
-            value between 0,1.
-    log     doesn't do what anyone would think, don't recommend using
-
-    """
-
-
-
-    ncolors  = 1024
-
-    cols1 = mpl.cm.get_cmap(cmaps[0])(np.linspace(0, 1, int(ncolors * split_fracs)))
-    cols2 = mpl.cm.get_cmap(cmaps[1])(np.linspace(0, 1, int(ncolors * (1 - split_fracs))))
-
-    # Combine them and build a new colormap:
-    return mpl.colors.ListedColormap(np.vstack( (cols1,cols2) ))
-
-
-
-def cmap_split(*args, **kwargs):
-    """alias for split_cmap"""
-    return split_cmap(*args, **kwargs)
-
-def split_cmap(cmapn='viridis',split=0.5,vmin=0, vmaxs=(.5,1),vstep=None,
-               vsplit=None,log=False,return_norm=False):
-    """
-    split a colormap at a certain location
-
-    split - where along the colormap will be our split point
-            by default this split point is put in the middle
-            of the values
-    vmin  value for colorbar to start at: should max vim in
-            plotting command
-    vmaxs  (splitvalue,vmax) - where to start the second segment
-            of the color map. cmap(split) will be located
-            at valeu=splitvalue
-    vplit = instead of giving vmin,vmax,a you can split it at a
-            value between 0,1.
-    log     doesn't do what anyone would think, don't recommend using
-
-
-
-    """
-    if vsplit is not None:
-        vmin=0
-        vmaxs=(vsplit,1)
-    vmin1 = vmin
-    vmax1 =  vmaxs[0]
-    vmin2 = vmax1
-    vmax2 =  vmaxs[1]
-    if vstep is None:
-        vstep=   (vmax2 - vmin1)/1024
-    levels1 = np.arange(vmin1, vmax1+vstep, vstep)
-    levels2 = np.arange(vmin2, vmax2+vstep, vstep)
-
-    ncols1 = len(levels1)-1
-    #ncols1 = int((vmax1-vmin1)//vstep)
-    ncols2 = len(levels2)-1
-#     ncols1 = int((vmax1-vmin1)//vstep)+1
-#     ncols2 = int((vmax2-vmin2)//vstep)+1
-    # ncols = ncols1 + ncols2
-    split = split
-    # Sample the right number of colours
-    # from the right bits (between 0 &amp; 1) of the colormaps we want.
-    cmap2 = mpl.cm.get_cmap(cmapn)
-    if log:
-        cmap1 = mpl.cm.get_cmap(cmapn+'_r')
-        cols1 = cmap1(np.logspace(np.log10(1-split),0, ncols1))[::-1]
-        cols2 = cmap2(np.logspace(np.log10(split), 0, ncols2))
-    else:
-        cols1 = cmap2(np.linspace(0.0, split, ncols1))
-        cols2 = cmap2(np.linspace(split, 1, ncols2))
-
-
-    #cols2 = cmap2(np.logspace(np.log10(split), 0, ncols2))
-
-    # Combine them and build a new colormap:
-    allcols2 = np.vstack( (cols1,cols2) )
-    cmap = mpl.colors.LinearSegmentedColormap.from_list('piecewise2', allcols2)
-    if return_norm:
-        return cmap,mpl.colors.Normalize(vmin=vmin,vmax=vmaxs[1])
-
-    return cmap
 
 def plot_2dhist(
     X,
@@ -2351,57 +1659,7 @@ def hist2d(
         return sm.T, X1, Y1
 
 
-def clean_color(color, reverse=False):
-    if isinstance(color, str):
-        if color[-2:] == "_r":
-            return color[:-2], True
-        elif reverse is True:
-            return color, True
-        else:
-            return color, False
-    else:
-        return color, reverse
 
-
-def color_cmap(c, alpha=1, to_white=True, reverse=False):
-    if to_white:
-        end = (1, 1, 1, alpha)
-    else:
-        end = (0, 0, 0, alpha)
-
-    color, reverse = clean_color(c, reverse=reverse)
-
-    cmap = mpl.colors.LinearSegmentedColormap.from_list("density_cmap", [color, end])
-    if reverse:
-        return cmap.reversed()
-    else:
-        return cmap
-
-
-def contour_level_colors(cmap, levels, vmin=None, vmax=None, center=True):
-    """get colors corresponding to those produced by contourf
-
-    Arguments:
-        cmap {string or cmap} -- colormap
-        levels {list or array} -- desired levels
-
-    Keyword Arguments:
-        vmin {number} -- min value (default: {0})
-        vmax {number} -- max value (default: {max(levels)})
-        center {True} -- contourf uses center=True values.
-                         False will produce a border effect (default: {True})
-
-    Returns:
-        [ndarray] -- [list of colors]
-    """
-    vmin = vmin or 0
-    vmax = vmax or max(levels)
-    norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
-    # offset = np.diff(levels)[0] * .5
-    # colors = mpl.cm.get_cmap(cmap)(norm(levels-offset))
-    levels = np.r_[0, levels]
-    center_levels = 0.5 * (levels[1:] + levels[:-1])
-    return mpl.cm.get_cmap(cmap)(norm(center_levels))
 
 
 def stat_plot1d(x, ax=None, bins="auto", histtype="step", lw=2, **plot_kwargs):
@@ -2834,56 +2092,7 @@ def corner(pos, names=None, smooth=1, bins=20, figsize=None, **kwargs):
     return fig, axs
 
 
-def standardize(X, remove_mean=True, remove_std=True):
-    if remove_mean:
-        mean = np.nanmean(X)
-    else:
-        mean = 0
-    if remove_std:
-        std = np.nanstd(X)
-    else:
-        std = 1
 
-    return (X - mean) / std
-
-
-def plotoneone(
-    color="k",
-    lw=2,
-    scale=1,
-    offset=0,
-    p=None,
-    invert=False,
-    n=50,
-    start=None,
-    end=None,
-    ax=None,
-    **kwargs,
-):
-    if ax is None:
-        ax = plt.gca()
-    xlim, ylim = ax.get_xlim(), ax.get_ylim()
-
-    if start is None:
-        start = np.min([xlim[0], ylim[0]])
-    if end is None:
-        end = np.max([xlim[1], ylim[1]])
-    axscale = ax.get_xscale()
-    if axscale == "log":
-        xs = np.logspace(np.log10(start), np.log10(end), n)
-    else:
-        xs = np.linspace(start, end, n)
-
-    if p is not None:
-        scale, offset = p
-    ys = scale * xs + offset
-    if invert:
-        ax.plot(ys, xs, color=color, lw=lw, **kwargs)
-    else:
-        ax.plot(xs, ys, color=color, lw=lw, **kwargs)
-
-    ax.set_xlim(*xlim)
-    ax.set_ylim(*ylim)
 
 
 def oplot_hist(
@@ -3000,18 +2209,6 @@ def multi_colored_line_plot(
     # fig.colorbar(line, ax=axs[0])
     return line
 
-import matplotlib.colors as mc
-from colorsys import rgb_to_hls,hls_to_rgb #builtin
-def adjust_lightness(color, amount=0.5):
-    # brighter : amount > 1
-    #https://stackoverflow.com/a/49601444
-
-    try:
-        c = mc.cnames[color]
-    except:
-        c = color
-    c = rgb_to_hls(*mc.to_rgb(c))
-    return hls_to_rgb(c[0], max(0, min(1, amount * c[1])), c[2])
 
 def errorbar_fill(
     x=None,
@@ -3106,14 +2303,7 @@ def detrend_iter_single_mod(t, f, p=1, low=3, high=3, cutboth=False):
     return t, c_trend, outmask, m
 
 
-def plot_to_origin(ax=None):
-    if ax is None:
-        ax = plt.gca()
 
-    ax.set_xlim(0, ax.get_xlim()[1])
-    ax.set_ylim(0, ax.get_ylim()[1])
-
-    return None
 
 
 def jconvolve(h1, h2, x1, x2=None, mode="math", normed=None):
@@ -3202,61 +2392,6 @@ def jconvolve_funcs(
     return ht, outx
 
 
-def pdf_pareto(t, a, k, xmax=None):
-    """PDF of Pareto distribution
-
-    Parameters
-    ----------
-    t : input
-        array
-    a : power-law power (a = alpha-1 from real Pareto)
-        array
-    k : minimum value for power law
-        array
-    xmax : max value for, optional, by default None
-
-    Returns
-    -------
-    PDF(t|a,k,xmax)
-        numpy array
-    """
-    if xmax is None:
-        out = ((a - 1) / k) * (t / k) ** (-a)
-        out[(t < k)] = 0
-        return out
-    else:
-        out = ((a - 1) / (k ** (1 - a) - xmax ** (1 - a))) * t ** (-a)
-        out[(t <= k) | (t > xmax)] = 0
-        return out
-
-
-def cdf_pareto(t, a, k, xmax=None):
-    """CDF of Pareto distribution
-
-    Parameters
-    ----------
-    t : input
-        array
-    a : power-law power (a = alpha-1 from real Pareto)
-        array
-    k : minimum value for power law
-        array
-    xmax : max value for, optional, by default None
-
-    Returns
-    -------
-    CDF(t|a,k,xmax)
-        numpy array
-    """
-    if xmax is None:
-        out = 1 - (k / t) ** (a - 1)
-        out[t < k] = 0
-        return out
-    else:
-        out = (1 - (t / k) ** (1 - a)) / (1 - (xmax / k) ** (1 - a))
-        out[t <= k] = 0
-        out[t > xmax] = 1
-        return out
 
 from scipy.spatial.distance import cdist
 def mahalanobis(X,X2=None):
@@ -3304,8 +2439,6 @@ def mahalanobis(X,X2=None):
         wX = (X2-mu) @ np.linalg.inv(T.T)
         md = np.linalg.norm(wX, axis=1)** 2
         return md
-
-
 
 
 
@@ -3564,7 +2697,7 @@ def getheader_val_fast(fname, card_name):
 # get header value from a FITS file
 def getheader_val(filename,card):
     """
-    Pure python function to get header values
+    get header values
     from a fits file
 
     """
