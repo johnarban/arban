@@ -6,18 +6,26 @@ from astropy.io import fits
 
 square_beam = 1/np.sqrt(np.pi / (4 * np.log(2)))
 
-def beam_area(BMAJ, BMIN=None):
+def beam_area(BMAJ, BMIN=None, square = False):
+    """
+    Calculate the beam area in square arcsec
+    assuming a gausian beam, unless square is set to True
+    """
     if not isinstance(BMAJ,u.Quantity):
         BMAJ = BMAJ * u.arcsec
     if (BMIN is not None) and (not isinstance(BMIN,u.Quantity)):
         BMIN = BMIN * u.arcsec
 
-    if BMIN is None:
-        θ = BMAJ
-        Ω = np.pi * θ**2 / (4 * np.log(2))
-    else:
-        θsq = BMAJ * BMIN
-        Ω = np.pi * θsq / (4 * np.log(2))
+    BMAJ = BMAJ.to(u.arcsec)
+    BMIN = BMIN.to(u.arcsec) if BMIN is not None else BMAJ
+
+
+    θsq = BMAJ * BMIN
+    if square:
+        return θsq
+
+    Ω = np.pi * θsq / (4 * np.log(2))
+
     return Ω
 
 def RJ_temp(S,freq):
@@ -25,26 +33,42 @@ def RJ_temp(S,freq):
     S : source flux in Jy
     freq : frequency in GHz
     """
-    ν = freq * u.GHz
-    λ = (const.c / ν).si
+
+    if not isinstance(S,u.Quantity):
+        S = S * u.Jy
+
+    if not isinstance(freq,u.Quantity):
+        freq = freq * u.GHz
+
+    λ = (const.c / freq).si
     coeff = 2 * const.k_B / λ**2
     return (S / coeff).to(u.K)
 
 def RJ(T,freq):
     """
-    S : source flux in Jy
+    T : source brightness in K
     freq : frequency in GHz
     """
-    ν = freq * u.GHz
-    λ = (const.c / ν).si
+
+    if not isinstance(T,u.Quantity):
+        T = T * u.K
+
+    if not isinstance(freq,u.Quantity):
+        freq = freq * u.GHz
+
+    λ = (const.c / freq).si
     coeff = 2 * const.k_B / λ**2
     return (T * coeff).to(u.Jy)
 
-def convert_K_to_Jy(Tb, res_arcsec, freq_GHz,unit='mJy',manual=False):
 
-    Ω = beam_area(res_arcsec)
-    ν = freq_GHz * u.GHz
 
+def convert_K_to_Jy(Tb, res_arcsec, freq_GHz,unit='mJy',manual=False, square=False):
+    """
+    Convert brightness temperature (K) to flux density (Jy/beam or Jy/pixel)
+    """
+
+    Ω = beam_area(res_arcsec,square=square)
+    ν = freq_GHz * u.GHz if not isinstance(freq_GHz,u.Quantity) else freq_GHz
     if not isinstance(Tb,u.Quantity):
         Tb = Tb * u.K
 
@@ -56,9 +80,13 @@ def convert_K_to_Jy(Tb, res_arcsec, freq_GHz,unit='mJy',manual=False):
         equiv = u.brightness_temperature(ν,Ω)
         return Tb.to(unit,equivalencies=equiv)
 
-def convert_Jy_to_K(Snu, res_arcsec, freq_GHz,unit='K',manual=False):
-    Ω = Ω = beam_area(res_arcsec)
-    ν = freq_GHz * u.GHz
+def convert_Jy_to_K(Snu, res_arcsec, freq_GHz,unit='K',manual=False,square=False):
+    """
+    Convert flux density (Jy/beam or Jy/pixel) to brightness temperature (K)
+    """
+    Ω = beam_area(res_arcsec,square=square)
+    ν = freq_GHz * u.GHz if not isinstance(freq_GHz,u.Quantity) else freq_GHz
+
 
     if not isinstance(Snu,u.Quantity):
         Snu = Snu * u.Jy
@@ -90,7 +118,7 @@ def convert_JyBeam_to_JyPixel(S_Jy_per_beam, BMAJ, BMIN, arcsec_per_pix):
 
 def convert_JyPixel_to_JyBeam(S_Jy_per_pixel, BMAJ, BMIN, arcsec_per_pix):
     """
-    S_Jy_per_beam : source flux in Jy/beam
+    S_Jy_per_pixel : source flux in Jy/pixel
     BMAJ, BMIN = beam major/minor axis in arcsec
     arcsec_per_pixel = pixel scale in arcsec
     """
@@ -161,3 +189,14 @@ def get_beam(filen):
     BPA = header['BPA']
     hdul.close()
     return BMAJ, BMIN, BPA
+
+
+
+
+
+def mad(X, astropy=True, axis=None):
+    if  astropy:
+        return mad_std(X,axis=axis,ignore_nan=True)
+    else:
+        return 1.482602218505602 * np.nanmedian(np.abs(X - np.nanmedian(X, axis=axis)), axis=axis)
+
