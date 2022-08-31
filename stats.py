@@ -1,10 +1,16 @@
+import numpy as np
+
 
 def minmax(arr, axis=None):
     return np.nanmin(arr, axis=axis), np.nanmax(arr, axis=axis)
 
 
-
+ 
 def weighted_generic_moment(x, k, w=None):
+    """
+    weighted_generic_moment
+    take the weighted kth moment of x
+    """
     x = np.asarray(x, dtype=np.float64)
     if w is not None:
         w = np.asarray(w, dtype=np.float64)
@@ -15,13 +21,22 @@ def weighted_generic_moment(x, k, w=None):
 
 
 def weighted_mean(x, w):
-    return np.sum(x * w) / np.sum(w)
+    """ weighted mean of x
+    """
+    
+    if np.isnan(x).all():
+        return np.nan
+    elif np.isnan(w).all():
+        print("Weights are all nan")
+        return np.nan 
+    else: 
+        return np.nansum(x * w) / np.sum(w)
 
 
 def weighted_std(x, w):
     x = np.asarray(x, dtype=np.float64)
     w = np.asarray(w, dtype=np.float64)
-    SS = np.sum(w * (x - weighted_mean(x, w)) ** 2) / np.sum(w)
+    SS = weighted_mean((x - weighted_mean(x, w)) ** 2, w)
     # quantile(x, w, 0.5)
     return np.sqrt(SS)
 
