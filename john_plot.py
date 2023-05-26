@@ -7,37 +7,7 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from matplotlib.cm import get_cmap
 import numpy as np
 
-def get_square(n,aspect=1.):
-    """
-    return rows, cols for grid of n items
-    n <= 3 returns single row
 
-    aspect = width/height (cols/rows)
-    """
-    def empty(n,rows,cols):
-        empty_spaces = (rows * cols) - n
-        empty_rows = floor(empty_spaces / cols)
-        return floor(empty_spaces / cols)
-    if n < 4:
-        return 1, n
-    if aspect < 2:
-        aspect = 1.
-    if (sqrt(n) % 1)  > 0:
-        ceil = int(np.ceil(sqrt(n)))
-        rows = cols = ceil
-        if aspect == 1:
-            rows -= empty(n,rows,cols)
-        else:
-            rows, cols = round(rows * sqrt(aspect)), round(cols / sqrt(aspect))
-            rows -= empty(n,rows,cols)
-    else:
-        rows, cols = sqrt(n),sqrt(n)
-        if aspect != 1:
-            print(rows,cols)
-            rows, cols = round(rows * sqrt(aspect)), round(cols / sqrt(aspect))
-            print(rows,cols,)
-            rows -= empty(n,rows,cols)
-    return int(rows), int(cols)
 
 
 def channel_maps(cube,v=None,dv=None,spec_ax=-1,wcs=None,
@@ -561,3 +531,73 @@ def overlay_spectra_plot(array, nrow=5,ncol=5,**kwargs):
 
             #ax.add_patch(mpl.patches.Rectangle([bl[0],bl[1]],w*dc,h*dr,transform=ax.transData,alpha=0.25))
     return fig
+
+
+# Plot the KDE for a set of x,y values. No weighting code modified from
+# http://stackoverflow.com/questions/30145957/plotting-2d-kernel-density-estimation-with-python
+def kdeplot(xp, yp, filled=False, ax=None, grid=None, bw=None, *args, **kwargs):
+    if ax is None:
+        ax = plt.gca()
+    rvs = np.append(xp.reshape((xp.shape[0], 1)), yp.reshape((yp.shape[0], 1)), axis=1)
+
+    kde = stats.kde.gaussian_kde(rvs.T)
+    # kde.covariance_factor = lambda: 0.3
+    # kde._compute_covariance()
+    kde.set_bandwidth(bw)
+
+    # Regular grid to evaluate kde upon
+    if grid is None:
+        x_flat = np.r_[rvs[:, 0].min() : rvs[:, 0].max() : 256j]
+        y_flat = np.r_[rvs[:, 1].min() : rvs[:, 1].max() : 256j]
+    else:
+        x_flat = np.r_[0 : grid[0] : complex(0, grid[0])]
+        y_flat = np.r_[0 : grid[1] : complex(0, grid[1])]
+    x, y = np.meshgrid(x_flat, y_flat)
+    grid_coords = np.append(x.reshape(-1, 1), y.reshape(-1, 1), axis=1)
+
+    z = kde(grid_coords.T)
+    z = z.reshape(x.shape[0], x.shape[1])
+    if filled:
+        cont = ax.contourf
+    else:
+        cont = ax.contour
+    cs = cont(x_flat, y_flat, z, *args, **kwargs)
+    return cs
+
+
+
+
+def errorbar_fill(
+    x=None,
+    y=None,
+    yerr=None,
+    *args,
+    ax=None,
+    mid=True,
+    color=None,
+    fill_color=None,
+    alpha=1,
+    lw=1,
+    ls="-",
+    fmt=None,
+    label=None,
+    **kwargs,
+):
+    oldax = plt.gca()
+    if ax is None:
+        ax = oldax
+    #plt.sca(ax)
+
+    if mid:
+        alpha_fill = alpha * 2
+        if alpha_fill >= 1:
+            alpha_fill = 1
+    if color is None:
+        color = ax.plot([],[])[0].get_color()
+    if fill_color is None:
+        fill_color = adjust_lightness(color,1.5)
+    ax.fill_between(x, y - yerr, y + yerr, color=fill_color, alpha=alpha,label=label,**kwargs)
+    if mid:
+        ax.plot(x, y, color=color, alpha=alpha, lw=lw, ls=ls,**kwargs)
+    #plt.sca(oldax)
+    return None
