@@ -1,3 +1,4 @@
+from ast import Mod
 import time
 istart = time.time()
 print(f'Standard imports')
@@ -51,8 +52,11 @@ from astropy.utils.exceptions import AstropyWarning
 from mpl_toolkits.mplot3d import Axes3D
 from scipy.ndimage import morphology
 
-print('load custom utils (ju)')
-import utils as ju
+try:
+    print('load custom utils (ju)')
+    import utils as ju
+except ModuleNotFoundError as e:
+    print(f'No custom utils found: {e}')
 
 # from IPython.display import set_matplotlib_formats
 # set_matplotlib_formats('retina')
