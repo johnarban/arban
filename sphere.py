@@ -8,7 +8,7 @@
 import numpy as np
 
 
-def Square_Patch(lat, lon, delta_lat, delta_lon, r=1.,indeg=False):
+def Square_Patch(lat, lon, delta_lat, delta_lon, r=1.,indeg=True):
     """Find the area of a square patch on a sphere
 
     Parameters

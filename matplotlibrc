@@ -1,0 +1,97 @@
+
+
+#figure.dpi          : 75 # default
+figure.figsize   : 6.4, 4.8   ## figure size in inches
+figure.dpi       : 100        ## figure dots per inch
+figure.autolayout: False
+figure.facecolor: white
+figure.edgecolor: white
+figure.constrained_layout.use: True
+
+
+
+savefig.dpi         : 227 # when displayed figure will display at
+#                         # real physical size (screen dpi = 227)
+savefig.transparent: False
+
+patch.linewidth: 0.5
+patch.facecolor: 348ABD  # blue
+patch.edgecolor: EEEEEE
+patch.antialiased: True
+
+axes.facecolor: white
+axes.edgecolor: 555555
+axes.linewidth: 0.8
+axes.grid: False
+axes.titlesize: large
+axes.labelsize: medium
+axes.formatter.use_mathtext: True
+axes.labelcolor: 000000 #555555
+#axes.labelpad: 3
+axes.axisbelow: True       # grid/ticks are below elements (e.g., lines, text)
+axes.formatter.min_exponent: 2
+axes.formatter.limits: -3, 3
+#axes.axisbelow      : line    ## draw axis gridlines and ticks below
+                               ## patches (True); above patches but below
+                               ## lines ('line'); or above all (False)
+
+# keep default color cycle and add ggplot colors to it
+axes.prop_cycle: cycler('color',['1f77b4', 'ff7f0e', '2ca02c', 'd62728', '9467bd','A1CAF1', 'F3C300','8DB600','E68FAC', 'C2B280', '17becf','7f7f7f','654522'])
+
+
+
+xtick.color: 000000 #555555
+# xtick.labelcolor: 000000
+xtick.direction: in
+xtick.minor.visible : false
+xtick.major.size : 6
+xtick.minor.size : 3
+
+
+ytick.color: 000000 #555555
+# ytick.labelcolor: 000000
+ytick.direction: in
+ytick.minor.visible : false
+ytick.major.size : 6
+ytick.minor.size : 3
+
+grid.color: 333333
+grid.linestyle: -    # solid line
+
+legend.fancybox : True           ## if True, use a rounded box for the
+                                 ## legend background, else a rectangle
+legend.columnspacing: 1.0
+
+
+mathtext.default: rm
+mathtext.fontset: cm
+
+#### IMAGES
+image.origin : lower             ## lower | upper
+#image.composite_image : True     ## When True, all the images on a set of axes are
+                                  ## combined into a single composite image before
+                                  ## saving a figure as a vector graphics file,
+                                  ## such as a PDF.
+image.interpolation : none
+
+
+
+
+#### ERRORBAR PLOTS
+#errorbar.capsize : 0             ## length of end cap on error bars in pixels
+
+#### HISTOGRAM PLOTS
+#hist.bins : auto                  ## The default number of histogram bins.
+                                  ## If Numpy 1.11 or later is
+                                  ## installed, may also be `auto`
+
+
+#### FONTS
+font.family: serif
+font.size: 12.0
+
+font.serif:              TeX Gyre Schola, TeX Gyre Bonum, TeX Gyre Termes, TeX Gyre Pagella, DejaVu Serif, Bitstream Vera Serif, Computer Modern Roman, Bookman, Century Schoolbook L, Charter, ITC Bookman, New Century Schoolbook, Nimbus Roman No9 L, Palatino, Times New Roman, Times, Utopia, serif
+font.sans-serif:         TeX Gyre Heros, DejaVu Sans, Bitstream Vera Sans, Computer Modern Sans Serif, Arial, Avenir, Fira Math, Frutiger, Geneva, Gill Sans, Helvetica, Lucid, Lucida Grande, Myriad Pro, Noto Sans, Roboto, Source Sans Pro, Tahoma, Trebuchet MS, Ubuntu, Univers, Verdana, sans-serif
+font.monospace:          TeX Gyre Cursor, DejaVu Sans Mono, Bitstream Vera Sans Mono, Computer Modern Typewriter, Andale Mono, Courier New, Courier, Fixed, Nimbus Mono L, Terminal, monospace
+font.cursive:            TeX Gyre Chorus, Apple Chancery, Felipa, Sand, Script MT, Textile, Zapf Chancery, cursive
+font.fantasy:            TeX Gyre Adventor, Avant Garde, Charcoal, Chicago, Comic Sans MS, Futura, Humor Sans, Impact, Optima, Western, xkcd, fantasy
